@@ -112,9 +112,8 @@ export default async function SessionDetailPage({ params }: Props) {
       /> */}
 
       <BookButton 
-  session={session} 
-  creditsRequired={1}
-/>
+       session={session} 
+      />
     </div>
   );
 }

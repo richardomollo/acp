@@ -9,14 +9,21 @@ type Session = {
   id: string;
   name: string;
   description?: string;
-  time?: string;
-  category?: string;
+  time: string;
+  date?: string;
+  category: string;
   image_url?: string;
+  instructor?: string;
+  duration_minutes?: number;
+  credits_required?: number;
+  spots_left?: number;
+  gym_id?: string;
+
   gyms?: {
     name: string;
     location: string;
     type: string;
-  };
+  }[];
 };
 
 /* ---------------- Utilities ---------------- */
@@ -98,8 +105,15 @@ export default function SessionsPage() {
   }, [sessions]);
 
   const locations = useMemo(() => {
-    return ["All", ...new Set(sessions.map(s => s.gyms?.location).filter(Boolean))];
-  }, [sessions]);
+  return [
+    "All",
+    ...new Set(
+      sessions
+        .map(s => s.gyms?.[0]?.location)
+        .filter(Boolean)
+    ),
+  ];
+}, [sessions]);
 
   const filteredSessions = useMemo(() => {
     return sessions.filter((s) => {
@@ -111,7 +125,7 @@ export default function SessionsPage() {
         catParam === "All" || s.category === catParam;
 
       const matchesLocation =
-        locParam === "All" || s.gyms?.location === locParam;
+      locParam === "All" || s.gyms?.[0]?.location === locParam;
 
       return matchesSearch && matchesCategory && matchesLocation;
     });
