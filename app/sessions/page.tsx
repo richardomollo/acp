@@ -226,11 +226,11 @@ export default function SessionsPage() {
                 <h2 className="font-semibold">{s.name}</h2>
                 <p className="text-sm text-gray-500">{s.category}</p>
                 <p className="text-sm text-gray-500">{s.time}</p>
-                {s.gyms && (
+                {/* {s.gyms && (
                   <p className="text-sm text-gray-500">
                     {s.gyms.name} · {s.gyms.location}
                   </p>
-                )}
+                )} */}
                 {/* <Link
                   href={`/sessions/${s.id}`}
                   className="block mt-3 text-sm font-medium text-center rounded-md bg-black text-white py-2 hover:bg-gray-800"

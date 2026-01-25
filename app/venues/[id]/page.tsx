@@ -152,11 +152,11 @@ if (sessionsError) {
             </div>
             <div className="flex flex-col p-6">
               <h2 className="text-m font-semibold">{session.name} - {session.category}, {session.duration_minutes} min</h2>
-              {session.description && (
+              {/* {session.description && (
                 <p className="text-sm">
                   {session.description}
                 </p>
-              )}
+              )} */}
               <p className="text-sm text-gray-600">{session.instructor}</p>
               <p className="text-sm text-gray-600">{session.duration_minutes} min</p>
               <p className="text-sm text-gray-600 mb-2">Capacity {session.max_capacity}</p>
