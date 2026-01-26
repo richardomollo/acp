@@ -1,7 +1,9 @@
 import Image from "next/image";
 import { supabase } from "../../lib/supabase";
 import { notFound } from "next/navigation";
+import GymGallery from "@/app/components/GymGallery";
 import Link from "next/link";
+
 
 
 type Props = {
@@ -76,55 +78,20 @@ if (sessionsError) {
       <p className="text-sm text-slate-500 mb-2 mx-auto">{gym.type}</p>
       <p className="text-sm text-slate-500 mb-2 mx-auto">📍{gym.location}</p>
 <div className="flex flex-row gap-6">
-  <div className="w-2/3">
+  <div className="">
 
-    <div className="w-full mb-4">
-      {gym.image_url ? (
-      <img
-      id="main-image"
-      src={gym.image_url}
-      alt={gym.name}
-      className="w-full rounded-lg" />
-                
-      ) : (
-      <div className="h-48 bg-gray-100 flex items-center justify-center text-gray-400">
-         No image
-      </div>
-        )}
-    </div>
-
-     <div className="grid grid-cols-4 max-w-3xl gap-4 " id="thumbnail-container">
-              <img src="https://raw.githubusercontent.com/prebuiltui/prebuiltui/main/assets/gallery/slide1.png" className="thumb rounded-lg md:h-24 h-14 object-cover cursor-pointer hover:opacity-80" alt="Thumb 1" />
-              <img src="https://raw.githubusercontent.com/prebuiltui/prebuiltui/main/assets/gallery/slide2.png" className="thumb rounded-lg md:h-24 h-14 object-cover cursor-pointer hover:opacity-80" alt="Thumb 2" />
-              <img src="https://raw.githubusercontent.com/prebuiltui/prebuiltui/main/assets/gallery/slide3.png" className="thumb rounded-lg md:h-24 h-14 object-cover cursor-pointer hover:opacity-80" alt="Thumb 3" />
-              <img src="https://raw.githubusercontent.com/prebuiltui/prebuiltui/main/assets/gallery/slide4.png" className="thumb rounded-lg md:h-24 h-14 object-cover cursor-pointer hover:opacity-80" alt="Thumb 4" />
-            </div>
-
-            <script>
-              {`
-                const container = document.getElementById('thumbnail-container');
-                if (container) {
-                  container.addEventListener('click', function (e) {
-                    if (e.target.classList.contains('thumb')) {
-                      const mainImage = document.getElementById('main-image');
-                      if (mainImage) {
-                        mainImage.src = e.target.src;
-                      }
-                    }
-                  });
-                }
-              `}
-            </script> 
   
+  <GymGallery
+    name={gym.name}
+    images={[
+      gym.image_url,
+      "https://raw.githubusercontent.com/prebuiltui/prebuiltui/main/assets/gallery/slide1.png",
+      "https://raw.githubusercontent.com/prebuiltui/prebuiltui/main/assets/gallery/slide2.png",
+      "https://raw.githubusercontent.com/prebuiltui/prebuiltui/main/assets/gallery/slide3.png",
+    ].filter(Boolean)}
+  />
   </div>
-  <div className="w-1/3">
-      <h1 className="text-3xl font-semibold mx-auto">{gym.name}</h1>
-      <p className="text-sm text-slate-500 mb-2 mx-auto">{gym.area}</p>
-      <p className="text-sm text-slate-500 mb-2 mx-auto">📍{gym.location}</p>
-      <p className="text-sm text-slate-500 mb-2 mx-auto">📍{gym.contact_email}</p>
-      <p className="text-sm text-slate-500 mb-2 mx-auto">📍{gym.contact_phone}</p>
-      
-  </div>
+ 
 </div>
       
       <p className="mt-6 text-sm text-gray-600 leading-relaxed">{gym.description}</p>
