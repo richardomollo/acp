@@ -78,7 +78,7 @@ export default function Header() {
             </div>
           ) : (
             <Link href="/login">
-              <button type="button" className="bg-white text-gray-600 border border-gray-300 md:inline hidden text-sm hover:bg-gray-50 active:scale-95 transition-all w-40 h-11 rounded-full">
+              <button type="button" className="bg-black text-white md:inline hidden text-sm hover:bg-gray-900 active:scale-95 transition-all w-40 h-11 rounded-full">
                 Get started for free!
               </button>
             </Link>
@@ -148,7 +148,7 @@ export default function Header() {
           ) : (
             <div className="mt-6 space-y-3">
               <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
-                <button type="button" className="w-full bg-white text-gray-600 border border-gray-300 text-sm hover:bg-gray-50 active:scale-95 transition-all h-11 rounded-full">
+                <button type="button" className="w-full bg-black text-white text-sm hover:bg-gray-700 active:scale-95 transition-all h-11 rounded-full">
                   Get started
                 </button>
               </Link>
