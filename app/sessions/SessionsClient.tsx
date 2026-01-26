@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "../lib/supabase";
 
+// Type for sessions with gym data
 type Session = {
   id: string;
   name: string;
@@ -18,12 +19,11 @@ type Session = {
   credits_required?: number;
   spots_left?: number;
   gym_id?: string;
-
   gyms?: {
     name: string;
     location: string;
     type: string;
-  }[];
+  } | null;
 };
 
 /* ---------------- Utilities ---------------- */
@@ -55,32 +55,44 @@ export default function SessionsPage() {
 
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   /* ---------------- Fetch ---------------- */
 
   useEffect(() => {
     const fetchSessions = async () => {
       setLoading(true);
+      setError(null);
 
-      const { data } = await supabase
-        .from("sessions")
-        .select(`
-          id,
-          name,
-          description,
-          time,
-          category,
-          image_url,
-          gyms (
-            name,
-            location,
-            type
-          )
-        `)
-        .order("time", { ascending: true });
+      try {
+        const { data, error: fetchError } = await supabase
+          .from("sessions")
+          .select(`
+            *,
+            gyms!gym_id (
+              name,
+              location,
+              type
+            )
+          `)
+          .order("time", { ascending: true });
 
-      setSessions(data ?? []);
-      setLoading(false);
+        if (fetchError) {
+          console.error("Supabase error:", fetchError);
+          setError("Failed to load sessions");
+          setSessions([]);
+        } else {
+          console.log("Raw Supabase data:", data);
+          console.log("First session gyms:", data?.[0]?.gyms);
+          setSessions(data ?? []);
+        }
+      } catch (err) {
+        console.error("Fetch error:", err);
+        setError("An unexpected error occurred");
+        setSessions([]);
+      } finally {
+        setLoading(false);
+      }
     };
 
     fetchSessions();
@@ -95,37 +107,40 @@ export default function SessionsPage() {
     if (catParam !== "All") params.set("cat", catParam);
     if (locParam !== "All") params.set("loc", locParam);
 
-    router.replace(`?${params.toString()}`, { scroll: false });
+    const queryString = params.toString();
+    router.replace(queryString ? `?${queryString}` : "/sessions", { 
+      scroll: false 
+    });
   }, [debouncedSearch, catParam, locParam, router]);
 
   /* ---------------- Filters ---------------- */
 
   const categories = useMemo(() => {
-    return ["All", ...new Set(sessions.map(s => s.category).filter(Boolean))];
+    const cats = sessions
+      .map(s => s.category)
+      .filter(Boolean);
+    return ["All", ...new Set(cats)];
   }, [sessions]);
 
   const locations = useMemo(() => {
-  return [
-    "All",
-    ...new Set(
-      sessions
-        .map(s => s.gyms?.[0]?.location)
-        .filter(Boolean)
-    ),
-  ];
-}, [sessions]);
+    const locs = sessions
+      .map(s => s.gyms?.location)
+      .filter(Boolean);
+    return ["All", ...new Set(locs)];
+  }, [sessions]);
 
   const filteredSessions = useMemo(() => {
     return sessions.filter((s) => {
       const matchesSearch =
         !debouncedSearch ||
-        s.name.toLowerCase().includes(debouncedSearch.toLowerCase());
+        s.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        s.description?.toLowerCase().includes(debouncedSearch.toLowerCase());
 
       const matchesCategory =
         catParam === "All" || s.category === catParam;
 
       const matchesLocation =
-      locParam === "All" || s.gyms?.[0]?.location === locParam;
+        locParam === "All" || s.gyms?.location === locParam;
 
       return matchesSearch && matchesCategory && matchesLocation;
     });
@@ -138,38 +153,72 @@ export default function SessionsPage() {
     router.replace("/sessions");
   };
 
+  /* ---------------- Handlers ---------------- */
+
+  const handleCategoryChange = (value: string) => {
+    const params = new URLSearchParams();
+    if (debouncedSearch) params.set("q", debouncedSearch);
+    params.set("cat", value);
+    if (locParam !== "All") params.set("loc", locParam);
+    router.replace(`?${params.toString()}`, { scroll: false });
+  };
+
+  const handleLocationChange = (value: string) => {
+    const params = new URLSearchParams();
+    if (debouncedSearch) params.set("q", debouncedSearch);
+    if (catParam !== "All") params.set("cat", catParam);
+    params.set("loc", value);
+    router.replace(`?${params.toString()}`, { scroll: false });
+  };
+
   /* ---------------- UI ---------------- */
 
   if (loading) {
-    return <p className="p-8 text-gray-500">Loading classes…</p>;
+    return (
+      <div className="max-w-7xl mx-auto px-6 py-12">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <p className="text-gray-500">Loading classes…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-7xl mx-auto px-6 py-12">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <p className="text-red-500">{error}</p>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="max-w-7h-[70px] w-full px-6 md:px-16 lg:px-24 xl:px-32  items-center= z-20  mx-auto px-6 py-12">
-      <h1 className="text-xl font-bold mb-6">All Activities, claases and wellness sessions</h1>
+    <div className="max-w-7xl mx-auto px-6 md:px-16 lg:px-24 xl:px-32 py-12">
+      <h1 className="text-3xl font-bold mb-8">
+        All Activities, Classes and Wellness Sessions
+      </h1>
 
       {/* Filters */}
-      <div className="grid gap-4 mb-8 sm:grid-cols-2 lg:grid-cols-6">
+      <div className="grid gap-4 mb-8 sm:grid-cols-2 lg:grid-cols-4">
         {/* Search */}
         <input
           type="text"
-          placeholder="Search classes "
+          placeholder="Search classes..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="rounded-md border px-3 border border-gray-200 py-2 text-sm"
+          className="rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
 
         {/* Category */}
         <select
           value={catParam}
-          onChange={(e) =>
-            router.replace(`?q=${debouncedSearch}&cat=${e.target.value}&loc=${locParam}`)
-          }
-          className="rounded-md border px-3 py-2 border border-gray-200 text-sm"
+          onChange={(e) => handleCategoryChange(e.target.value)}
+          className="rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           {categories.map((c) => (
             <option key={c} value={c}>
-              {c}
+              {c === "All" ? "All Categories" : c}
             </option>
           ))}
         </select>
@@ -177,14 +226,12 @@ export default function SessionsPage() {
         {/* Location */}
         <select
           value={locParam}
-          onChange={(e) =>
-            router.replace(`?q=${debouncedSearch}&cat=${catParam}&loc=${e.target.value}`)
-          }
-          className="rounded-md border px-3 py-2 border border-gray-200 text-sm"
+          onChange={(e) => handleLocationChange(e.target.value)}
+          className="rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           {locations.map((l) => (
             <option key={l} value={l}>
-              {l}
+              {l === "All" ? "All Locations" : l}
             </option>
           ))}
         </select>
@@ -192,51 +239,146 @@ export default function SessionsPage() {
         {/* Clear */}
         <button
           onClick={clearFilters}
-          className="rounded-md border text-sm  border border-gray-200 font-medium hover:bg-gray-50"
+          className="rounded-md border border-gray-200 text-sm font-medium hover:bg-gray-50 transition-colors"
         >
-          Clear filters
+          Clear Filters
         </button>
       </div>
 
+      {/* Results Count */}
+      <p className="text-sm text-gray-600 mb-4">
+        Showing {filteredSessions.length} of {sessions.length} classes
+      </p>
+
       {/* Results */}
       {filteredSessions.length === 0 ? (
-        <p className="text-gray-500">No classes match your filters.</p>
+        <div className="text-center py-12">
+          <p className="text-gray-500 text-lg mb-4">
+            No classes match your filters.
+          </p>
+          <button
+            onClick={clearFilters}
+            className="text-blue-600 hover:text-blue-700 font-medium text-sm"
+          >
+            Clear all filters
+          </button>
+        </div>
       ) : (
-        <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
+        <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filteredSessions.map((s) => (
             <li
               key={s.id}
-              className="rounded-xl border border-gray-200 bg-white overflow-hidden hover:shadow-s transition"
+              className="rounded-xl border border-gray-200 bg-white overflow-hidden hover:shadow-lg transition-shadow"
             >
               <Link href={`/sessions/${s.id}`}>
                 {s.image_url ? (
                   <img
                     src={s.image_url}
                     alt={s.name}
-                    className="h-40 w-full object-cover"
+                    className="h-48 w-full object-cover"
                   />
                 ) : (
-                  <div className="h-40 bg-gray-100 flex items-center justify-center text-gray-400">
-                    No image
+                  <div className="h-48 bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400">
+                    <svg
+                      className="w-16 h-16"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                      />
+                    </svg>
                   </div>
                 )}
               </Link>
 
-              <div className="p-4 space-y-1">
-                <h2 className="font-semibold">{s.name}</h2>
-                <p className="text-sm text-gray-500">{s.category}</p>
-                <p className="text-sm text-gray-500">{s.time}</p>
-                {s.gyms?.[0] && (
+              <div className="p-4 space-y-2">
+                <Link href={`/sessions/${s.id}`}>
+                  <h2 className="font-semibold text-lg hover:text-blue-600 transition-colors">
+                    {s.name}
+                  </h2>
+                </Link>
+                
+                <p className="text-sm text-gray-600">{s.category}</p>
+                
+                <div className="flex items-center text-sm text-gray-500">
+                  <svg
+                    className="w-4 h-4 mr-1"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                  {s.time}
+                </div>
+
+                {s.gyms && (
+                  <div className="flex items-start text-sm text-gray-500">
+                    <svg
+                      className="w-4 h-4 mr-1 mt-0.5 flex-shrink-0"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                      />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                      />
+                    </svg>
+                    <span>
+                      {s.gyms.name} · {s.gyms.location}
+                    </span>
+                  </div>
+                )}
+
+                {s.instructor && (
                   <p className="text-sm text-gray-500">
-                    {s.gyms[0].name} · {s.gyms[0].location}
+                    Instructor: {s.instructor}
                   </p>
                 )}
-                {/* <Link
+
+                {s.duration_minutes && (
+                  <p className="text-sm text-gray-500">
+                    {s.duration_minutes} minutes
+                  </p>
+                )}
+
+                {s.spots_left !== undefined && (
+                  <p className="text-sm font-medium text-gray-700">
+                    {s.spots_left > 0 ? (
+                      <span className="text-green-600">
+                        {s.spots_left} spots left
+                      </span>
+                    ) : (
+                      <span className="text-red-600">Fully booked</span>
+                    )}
+                  </p>
+                )}
+
+                <Link
                   href={`/sessions/${s.id}`}
-                  className="block mt-3 text-sm font-medium text-center rounded-md bg-black text-white py-2 hover:bg-gray-800"
+                  className="block mt-4 text-sm font-medium text-center rounded-md bg-black text-white py-2 hover:bg-gray-800 transition-colors"
                 >
-                  View class
-                </Link> */}
+                  View Details
+                </Link>
               </div>
             </li>
           ))}
