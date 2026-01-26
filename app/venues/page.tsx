@@ -37,10 +37,11 @@ export default async function GymsPage() {
                 No image
               </div>
             )}
-            <div className="flex flex-col p-6">
+            <div className="flex flex-col px-5 py-3">
               <h2 className="text-m font-semibold">{gym.name}</h2>
-              <p className="text-sm text-gray-600">{gym.type}</p>
-              <p className="text-sm text-gray-500">
+              <p className="text-sm mb-1">{gym.type}</p>
+              <p className="text-sm text-gray-500 mb-1">{gym.description}</p>
+              <p className="text-sm">
                 {gym.location}, {gym.area}
               </p>
             </div>
