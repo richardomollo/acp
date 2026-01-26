@@ -55,7 +55,8 @@ const { data: sessions, error: sessionsError } = await supabase
     instructor,
     spots_left,
     max_capacity,
-    image_url
+    image_url,
+    credits_required
   `)
   .eq("gym_id", id)
   .order("date", { ascending: true })
@@ -126,10 +127,11 @@ if (sessionsError) {
               )} */}
               <p className="text-sm text-gray-600">{session.instructor}</p>
               <p className="text-sm text-gray-600">{session.duration_minutes} min</p>
-              <p className="text-sm text-gray-600 mb-2">Capacity {session.max_capacity}</p>
+              <p className="text-sm text-gray-600 mb-2"> {session.spots_left} spots left out of {session.max_capacity}</p>
               <p className="text-sm text-gray-700">
                📅 {new Date(session.date).toLocaleDateString()} · 🕒 {session.time}
               </p>
+              <p className="text-sm text-gray"> Credits required to book: {session.credits_required}</p>
             </div>
           </div>
       ))}
