@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "Fitpass",
-  description: "Access fitness, your way",
+  title: "Active CityPass Nairobi – Sports, Fitness & Wellness for Everyone",
+  description: "Access fitness, your wayFrom solo workouts to family fun, Active CityPass unlocks 50+ sports and wellness activities across Nairobi — anytime, anywhere",
 };
 
 export default function RootLayout({

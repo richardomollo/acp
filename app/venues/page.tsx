@@ -14,7 +14,7 @@ export default async function GymsPage() {
   }
 
   return (
-    <div className="max-w-7h-[70px]  w-full px-6 md:px-16 lg:px-24 xl:px-32  items-center= z-20  mx-auto px-6 py-12">
+    <div className="max-w-7h-[70px]  w-full px-6 md:px-16 lg:px-24 xl:px-32  items-center= z-20  mx-auto px-6 py-12 ">
       <h1 className="text-3xl font-bold mb-8">Discover our venues in Nairobi</h1>
       <div className="grid gap-6 md:grid-cols-4 w-full lg:grid-cols-5">
         {gyms?.map((gym) => (
