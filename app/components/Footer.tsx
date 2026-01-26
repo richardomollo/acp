@@ -3,7 +3,7 @@ export default function Footer() {
     <footer className="px-6 md:px-16 lg:px-24 xl:px-32 pt-8 w-full text-gray-500">
         <div className="flex flex-col md:flex-row justify-between w-full gap-10 border-b border-gray-500/30 pb-6">
             <div className="md:max-w-96">
-                <h1 className="text-2xl font-semibold text-gray-800">FitPass</h1>
+                <h1 className="text-2xl font-semibold text-gray-800">Active CityPass</h1>
                 <p className="mt-6 text-sm">
                     The most flexible sports and wellness membership in Nairobi. Access 50+ activities for individuals, partners, kids, and families — train, play, and unwind anytime, anywhere.
                 </p>
@@ -21,13 +21,13 @@ export default function Footer() {
                 <div>
                     <h2 className="font-semibold mb-5 text-gray-800">Get in touch</h2>
                     <div className="text-sm space-y-2">
-                        <p>info@fitpass.com</p>
+                        <p>info@activecitypass.com</p>
                     </div>
                 </div>
             </div>
         </div>
         <p className="pt-4 text-center text-xs md:text-sm pb-5">
-            Copyright 2024 © <a href="#">FitPass</a>. All Right Reserved.
+            Copyright 2025 © <a href="#">Active CityPass</a>. All Right Reserved.
         </p>
     </footer>
   );

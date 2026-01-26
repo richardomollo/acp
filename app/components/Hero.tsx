@@ -19,7 +19,7 @@ export default function Hero() {
       <div className="absolute inset-0 bg-white/0 backdrop-blur-s" />
 
       {/* Content */}
-      <div className="relative z-10">
+      <div className="relative z-10 -mt-10">
         <h2 className="text-4xl md:text-7xl font-bold max-w-[850px] text-white  text-center mx-auto mt-8">
           All things fitness, play, & family wellness
         </h2>
@@ -32,7 +32,7 @@ export default function Hero() {
 
         <div className="mx-auto w-full flex items-center justify-center gap-3 mt-6">
           <button className="bg-blue-500 hover:bg-black text-white px-6 py-3 rounded-full font-medium transition">
-            <Link href="/login">Try FitPass for Free</Link>
+            <Link href="/login">Try for Free Today!</Link>
           </button>
 
           <button className="flex items-center gap-2 border border-slate-300 hover:bg-slate-200/30 text-white  rounded-full px-6 py-3">
