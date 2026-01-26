@@ -146,7 +146,7 @@ export default function SessionsPage() {
 
   return (
     <div className="max-w-7h-[70px] w-full px-6 md:px-16 lg:px-24 xl:px-32  items-center= z-20  mx-auto px-6 py-12">
-      <h1 className="text-3xl font-bold mb-6">All Classes</h1>
+      <h1 className="text-xl font-bold mb-6">All Activities, claases and wellness sessions</h1>
 
       {/* Filters */}
       <div className="grid gap-4 mb-8 sm:grid-cols-2 lg:grid-cols-6">
@@ -226,11 +226,11 @@ export default function SessionsPage() {
                 <h2 className="font-semibold">{s.name}</h2>
                 <p className="text-sm text-gray-500">{s.category}</p>
                 <p className="text-sm text-gray-500">{s.time}</p>
-                {/* {s.gyms && (
+                {s.gyms?.[0] && (
                   <p className="text-sm text-gray-500">
-                    {s.gyms.name} · {s.gyms.location}
+                    {s.gyms[0].name} · {s.gyms[0].location}
                   </p>
-                )} */}
+                )}
                 {/* <Link
                   href={`/sessions/${s.id}`}
                   className="block mt-3 text-sm font-medium text-center rounded-md bg-black text-white py-2 hover:bg-gray-800"
