@@ -168,13 +168,13 @@ export default function UserLoginPage() {
         {/* Header */}
         <div className="text-center mb-4">
           <h1 className="text-2xl font-bold text-gray-900 mt-4">
-            {view === "login" && "Welcome Back"}
+            {view === "login" && "Ready to get moving?"}
             {view === "signup" && "New to FitPass?"}
             {view === "forgot" && "Reset Password"}
             {view === "reset" && "Set New Password"}
           </h1>
           <p className="text-gray-600 mt-2 text-sm">
-            {view === "login" && "Sign in to access your fitness journey"}
+            {view === "login" && "Sign in to book your next session and to access all things fitness, play & family wellness"}
             {view === "signup" &&
               "Start with a free trial and explore top gyms, fitness studios, kids activities, salons, and spas — all with one flexible membership."}
             {view === "forgot" && "We'll send you a reset link"}

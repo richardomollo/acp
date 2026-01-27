@@ -123,14 +123,14 @@ export default function BookButton({
       <button
         disabled={isDisabled}
         onClick={handleBooking}
-        className="px-4 py-2 text-sm rounded bg-black text-white disabled:bg-gray-300 disabled:cursor-not-allowed hover:bg-gray-800 transition"
+        className="px-4 py-2 text-sm rounded bg-black text-white disabled:bg-gray-300 disabled:cursor-not-allowed hover:bg-gray-800 transition mb-2"
       >
         {loading
           ? "Booking..."
           : isBooked
           ? "Already Booked"
           : session.spots_left > 0
-          ? `Book (${session.spots_left} left)`
+          ? `Book (${session.spots_left} spots left)`
           : "Full"}
       </button>
       {error && (

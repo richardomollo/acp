@@ -102,7 +102,7 @@ export default async function SessionDetailPage({ params }: Props) {
       <p className="mt-4 text-sm font-semibold mb-2">{session.description}</p>
       
       <p className="text-sm text-gray-500 mb-2">
-        📅 {new Date(session.date).toLocaleDateString()} · 🕒 {session.time}
+      {new Date(session.date).toLocaleDateString()} · {session.time}
       </p>
 {/* 
       <BookButton 
