@@ -130,7 +130,7 @@ export default function BookButton({
           : isBooked
           ? "Already Booked"
           : session.spots_left > 0
-          ? `Book (${session.spots_left} spots left)`
+          ? `Book Now, ${session.spots_left} spots left`
           : "Full"}
       </button>
       {error && (
