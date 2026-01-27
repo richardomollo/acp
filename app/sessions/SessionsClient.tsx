@@ -194,13 +194,14 @@ export default function SessionsPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-6 md:px-16 lg:px-24 xl:px-32 py-12">
-      <h1 className="text-3xl font-bold mb-8">
+    <div className="max-w-7h-[70px]  w-full px-6 md:px-16 lg:px-24 xl:px-32  items-center= z-20  mx-auto px-6 py-12 ">
+
+      <h1 className="text-xl font-bold mb-8">
         All Activities, Classes and Wellness Sessions
       </h1>
 
       {/* Filters */}
-      <div className="grid gap-4 mb-8 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 mb-8 sm:grid-cols-2 lg:grid-cols-6">
         {/* Search */}
         <input
           type="text"
@@ -264,11 +265,11 @@ export default function SessionsPage() {
           </button>
         </div>
       ) : (
-        <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {filteredSessions.map((s) => (
             <li
               key={s.id}
-              className="rounded-xl border border-gray-200 bg-white overflow-hidden hover:shadow-lg transition-shadow"
+              className="bg-white rounded-xl overflow-hidden border border-gray-200 hover:-translate-y-1 transition duration-300"
             >
               <Link href={`/sessions/${s.id}`}>
                 {s.image_url ? (
@@ -296,14 +297,14 @@ export default function SessionsPage() {
                 )}
               </Link>
 
-              <div className="p-4 space-y-2">
+              <div className="p-4 space-y-1">
                 <Link href={`/sessions/${s.id}`}>
                   <h2 className="font-semibold text-lg hover:text-blue-600 transition-colors">
                     {s.name}
                   </h2>
                 </Link>
                 
-                <p className="text-sm text-gray-600">{s.category}</p>
+                <p className="text-sm text-gray">{s.category}, Instructor: {s.instructor}</p>
                 
                 <div className="flex items-center text-sm text-gray-500">
                   <svg
@@ -319,7 +320,7 @@ export default function SessionsPage() {
                       d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                     />
                   </svg>
-                  {s.time}
+                  {s.time} for {s.duration_minutes} minutes 
                 </div>
 
                 {s.gyms && (
@@ -349,17 +350,9 @@ export default function SessionsPage() {
                   </div>
                 )}
 
-                {s.instructor && (
-                  <p className="text-sm text-gray-500">
-                    Instructor: {s.instructor}
-                  </p>
-                )}
+               
 
-                {s.duration_minutes && (
-                  <p className="text-sm text-gray-500">
-                    {s.duration_minutes} minutes
-                  </p>
-                )}
+                
 
                 {s.spots_left !== undefined && (
                   <p className="text-sm font-medium text-gray-700">
@@ -373,12 +366,24 @@ export default function SessionsPage() {
                   </p>
                 )}
 
-                <Link
-                  href={`/sessions/${s.id}`}
-                  className="block mt-4 text-sm font-medium text-center rounded-md bg-black text-white py-2 hover:bg-gray-800 transition-colors"
-                >
-                  View Details
-                </Link>
+                <button className="flex items-center gap-2 text-grey-200 text-sm rounded-full py-1">
+                <Link href={`/sessions/${s.id}`}> View Activity Details </Link>
+                  <svg
+                    width="6"
+                    height="8"
+                    viewBox="0 0 6 8"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M1.25.5 4.75 4l-3.5 3.5"
+                      stroke="#050040"
+                      strokeOpacity=".4"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                 </button>
               </div>
             </li>
           ))}
