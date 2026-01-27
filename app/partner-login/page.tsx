@@ -83,19 +83,16 @@ export default function PartnerLoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-white flex items-center justify-center px-4">
+    <div className="min-h-screen flex items-center justify-center px-4">
       <div className="max-w-md w-full">
         {/* Header */}
         <div className="text-center mb-8">
-          <Link href="/" className="text-3xl font-bold text-indigo-600 mb-2 inline-block">
-            FitPass
-          </Link>
           <h1 className="text-2xl font-bold text-gray-900 mt-4">Partner Login</h1>
-          <p className="text-gray-600 mt-2">Access your gym dashboard</p>
+          <p className="text-gray-600 mt-2">Sign in to manage your activities,classes, schedules, and bookings</p>
         </div>
 
         {/* Login Card */}
-        <div className="bg-white rounded-lg shadow-md p-8">
+        <div className="bg-white rounded-lg p-8">
           {error && (
             <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm">
               {error}
@@ -145,7 +142,7 @@ export default function PartnerLoginPage() {
                     setShowForgotPassword(true);
                     setError("");
                   }}
-                  className="text-sm text-indigo-600 hover:text-indigo-700 font-semibold"
+                   className="text-sm text-blue-500 hover:text-blue-600"
                 >
                   Forgot password?
                 </button>
@@ -154,7 +151,7 @@ export default function PartnerLoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition disabled:bg-gray-400"
+                className="w-full bg-black text-white py-3 rounded-full text-sm hover:bg-gray-900 transition-all disabled:bg-gray-400"
               >
                 {loading ? "Logging in..." : "Log In"}
               </button>
@@ -177,11 +174,20 @@ export default function PartnerLoginPage() {
                   value={resetEmail}
                   onChange={(e) => setResetEmail(e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="partner@gym.com"
+                  placeholder="partner@partner.com"
                   required
                 />
               </div>
 
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-black text-white py-3 rounded-full text-sm hover:bg-gray-900 transition-all h-11 disabled:bg-gray-400"
+                >
+                  {loading ? "Sending..." : "Send Reset Link"}
+                </button>
+              </div>
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -190,17 +196,11 @@ export default function PartnerLoginPage() {
                     setResetSent(false);
                     setError("");
                   }}
-                  className="flex-1 border border-gray-300 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-50 transition"
+                  className="flex-1 text-sm text-blue-500 hover:text-blue-600"
                 >
                   Back to Login
                 </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition disabled:bg-gray-400"
-                >
-                  {loading ? "Sending..." : "Send Reset Link"}
-                </button>
+                
               </div>
             </form>
           )}
@@ -208,13 +208,13 @@ export default function PartnerLoginPage() {
           <div className="mt-6 pt-6 border-t border-gray-200 space-y-3">
             <p className="text-sm text-gray-600 text-center">
               Don't have a partner account?{" "}
-              <Link href="/partner-signup" className="text-indigo-600 hover:text-indigo-700 font-semibold">
+              <Link href="/partner-signup" className="ttext-sm text-blue-500 hover:text-blue-600">
                 Sign up here
               </Link>
             </p>
             <p className="text-sm text-gray-600 text-center">
               Looking for member login?{" "}
-              <Link href="/login" className="text-indigo-600 hover:text-indigo-700 font-semibold">
+              <Link href="/login" className="text-blue-500 hover:text-blue-600">
                 Member Login
               </Link>
             </p>

@@ -169,14 +169,14 @@ export default function UserLoginPage() {
         <div className="text-center mb-4">
           <h1 className="text-2xl font-bold text-gray-900 mt-4">
             {view === "login" && "Ready to get moving?"}
-            {view === "signup" && "New to FitPass?"}
+            {view === "signup" && "New to Active CityPass?"}
             {view === "forgot" && "Reset Password"}
             {view === "reset" && "Set New Password"}
           </h1>
           <p className="text-gray-600 mt-2 text-sm">
             {view === "login" && "Sign in to book your next session and to access all things fitness, play & family wellness"}
             {view === "signup" &&
-              "Start with a free trial and explore top gyms, fitness studios, kids activities, salons, and spas — all with one flexible membership."}
+              "Start with a free trial and explore top gyms, fitness studios, kids activities, salons, and spas. All with one flexible membership."}
             {view === "forgot" && "We'll send you a reset link"}
             {view === "reset" && "Enter your new password"}
           </p>
@@ -242,7 +242,8 @@ export default function UserLoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-blue-500 text-white py-3 rounded-lg hover:bg-blue-600 transition disabled:bg-gray-400"
+                className="w-full bg-black text-white py-3 rounded-full text-sm hover:bg-gray-900 transition-all h-11 disabled:bg-gray-400"
+
               >
                 {loading ? "Signing in..." : "Sign In"}
               </button>
@@ -278,7 +279,7 @@ export default function UserLoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-blue-500 text-white py-3 rounded-lg hover:bg-blue-600 transition disabled:bg-gray-400"
+                className="w-full bg-black text-white py-3 rounded-full text-sm hover:bg-gray-900 transition-all h-11 disabled:bg-gray-400"
               >
                 {loading ? "Creating account..." : "Create Account"}
               </button>
@@ -301,22 +302,24 @@ export default function UserLoginPage() {
               </div>
               <div className="flex gap-2">
                 <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-black text-white py-3 rounded-full text-sm hover:bg-gray-900 transition-all h-11 disabled:bg-gray-400"
+                >
+                  {loading ? "Sending..." : "Send Reset Link"}
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <button
                   type="button"
                   onClick={() => {
                     setView("login");
                     setResetSent(false);
                     setError("");
                   }}
-                  className="flex-1 border border-gray-300 text-gray-700 py-3 rounded-lg hover:bg-gray-50 transition"
+                  className="flex-1 py-1 rounded-lg hover:bg-gray-50 transition  text-sm text-blue-500 hover:text-blue-600"
                 >
                   Back to Login
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 bg-blue-500 text-white py-3 rounded-lg hover:bg-blue-600 transition disabled:bg-gray-400"
-                >
-                  {loading ? "Sending..." : "Send Reset Link"}
                 </button>
               </div>
             </form>
