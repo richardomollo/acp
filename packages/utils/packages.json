@@ -1,0 +1,12 @@
+{
+  "name": "fitpassweb",
+  "private": true,
+  "scripts": {
+    "dev:web": "pnpm --filter web dev",
+    "dev:mobile": "pnpm --filter mobile dev",
+    "install:all": "pnpm install"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  }
+}
