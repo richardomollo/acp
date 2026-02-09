@@ -1,10 +1,13 @@
 import { Tabs } from 'expo-router';
 import { Platform, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+
 
 export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
+         headerShown: false,
         tabBarActiveTintColor: '#667eea',
         tabBarInactiveTintColor: '#999',
         tabBarStyle: {
@@ -19,28 +22,44 @@ export default function TabLayout() {
           fontSize: 12,
           fontWeight: '600',
         },
-        headerShown: false,
+       
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color }) => <TabBarIcon name="home" color={color} />,
+          headerShown: false,
+          tabBarIcon: ({ color }) => <Ionicons name="home-outline" color={color} />,
         }}
       />
       <Tabs.Screen
-        name="explore"
+        name="venues"
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <TabBarIcon name="search" color={color} />,
+          title: 'Venues',
+          tabBarIcon: ({ color }) => <Ionicons name="search-outline" color={color}/>,
+        }}
+      />
+      <Tabs.Screen
+        name="classes"
+        options={{
+          title: 'Classes',
+          tabBarIcon: ({ color }) => <Ionicons name="baseball" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="check-in"
+        options={{
+          title: 'Check-in',
+          tabBarIcon: ({ color }) => <Ionicons name="barcode" color={color} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color }) => <TabBarIcon name="person" color={color} />,
+          headerShown: false,
+          tabBarIcon: ({ color }) => <Ionicons name="person" color={color} />,
         }}
       />
     </Tabs>

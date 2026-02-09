@@ -6,19 +6,55 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
-  ScrollView
+  ScrollView,
+  Alert,
+  ActivityIndicator
 } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { useState } from 'react';
+import { authService } from './services/auth';
 
 export default function LoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
-    console.log('Login:', { email, password });
-    router.push('/(tabs)');
+  // Email validation
+  const isValidEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  const handleLogin = async () => {
+    // Validation
+    if (!email || !password) {
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+
+    if (!isValidEmail(email)) {
+      Alert.alert('Error', 'Please enter a valid email address');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      await authService.login({ email, password });
+      
+      Alert.alert('Success', 'Logged in successfully!', [
+        {
+          text: 'OK',
+          onPress: () => router.replace('/(tabs)'),
+        },
+      ]);
+    } catch (error: any) {
+      console.error('Login error:', error);
+      Alert.alert('Error', error.message || 'Failed to login');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -30,17 +66,6 @@ export default function LoginScreen() {
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-       {/* Banner *
-        <View style={styles.banner}>
-          <ThemedText style={styles.bannerTitle}>Active CityPass</ThemedText>
-          <ThemedText style={styles.bannerSubtitle}>
-            Join us today
-          </ThemedText>
-        </View>
-        /}
-
-        {/* Form */}
-
         {/* Form */}
         <View style={styles.formContainer}>
           <ThemedText type="title" style={styles.title}>
@@ -49,7 +74,7 @@ export default function LoginScreen() {
 
           <ThemedText style={styles.description}>
             Sign in to book your next session and to access all things fitness, play & family wellness
-        </ThemedText>
+          </ThemedText>
 
           <TextInput
             style={styles.input}
@@ -59,6 +84,7 @@ export default function LoginScreen() {
             onChangeText={setEmail}
             keyboardType="email-address"
             autoCapitalize="none"
+            editable={!loading}
           />
 
           <TextInput
@@ -69,6 +95,9 @@ export default function LoginScreen() {
             onChangeText={setPassword}
             secureTextEntry
             autoCapitalize="none"
+            editable={!loading}
+            returnKeyType="go"
+            onSubmitEditing={handleLogin}
           />
 
           <TouchableOpacity onPress={() => router.push('/forgot-password')}>
@@ -78,12 +107,17 @@ export default function LoginScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.loginButton}
+            style={[styles.loginButton, loading && { opacity: 0.6 }]}
             onPress={handleLogin}
+            disabled={loading}
           >
-            <ThemedText style={styles.loginButtonText}>
-              Login
-            </ThemedText>
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <ThemedText style={styles.loginButtonText}>
+                Login
+              </ThemedText>
+            )}
           </TouchableOpacity>
 
           {/* Sign Up Link */}
@@ -100,6 +134,7 @@ export default function LoginScreen() {
           <TouchableOpacity 
             style={styles.guestButton}
             onPress={() => router.push('/(tabs)')}
+            disabled={loading}
           >
             <ThemedText style={styles.guestButtonText}>
               Continue as Guest
@@ -140,7 +175,7 @@ const styles = StyleSheet.create({
   formContainer: {
     flex: 1,
     padding: 20,
-    paddingTop:280,
+    paddingTop: 280,
   },
   title: {
     marginBottom: 10,
@@ -187,7 +222,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   signUpText: {
-   fontSize: 16,
+    fontSize: 16,
     color: '#000000',
     fontWeight: '600',
   },
@@ -196,7 +231,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   guestButton: {
-   paddingVertical: 12,
+    paddingVertical: 12,
     alignItems: 'center',
   },
   guestButtonText: {

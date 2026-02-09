@@ -7,34 +7,65 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert
+  Alert,
+  ActivityIndicator
 } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { useState } from 'react';
+import { authService } from './services/auth';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleResetPassword = () => {
+  // Email validation
+  const isValidEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  const handleResetPassword = async () => {
+    // Validation
     if (!email) {
       Alert.alert('Error', 'Please enter your email address');
       return;
     }
+
+    if (!isValidEmail(email)) {
+      Alert.alert('Error', 'Please enter a valid email address');
+      return;
+    }
     
-    console.log('Reset password for:', email);
-    
-    // Show success message
-    Alert.alert(
-      'Check your email',
-      'We\'ve sent you a password reset link',
-      [
-        {
-          text: 'OK',
-          onPress: () => router.push('/login')
-        }
-      ]
-    );
+    setLoading(true);
+
+    try {
+      await authService.forgotPassword(email);
+      
+      // Clear the input
+      setEmail('');
+      
+      Alert.alert(
+        'Check your email',
+        'If an account exists with this email, you will receive a password reset link shortly.',
+        [
+          {
+            text: 'OK',
+            onPress: () => router.push('/login')
+          }
+        ]
+      );
+    } catch (error: any) {
+      console.error('Forgot password error:', error);
+      
+      // Generic message for security (don't reveal if email exists)
+      Alert.alert(
+        'Request Sent',
+        'If an account exists with this email, you will receive a password reset link shortly.'
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -46,8 +77,6 @@ export default function ForgotPasswordScreen() {
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-       
-
         {/* Form */}
         <View style={styles.formContainer}>
           <ThemedText type="title" style={styles.title}>
@@ -66,15 +95,23 @@ export default function ForgotPasswordScreen() {
             onChangeText={setEmail}
             keyboardType="email-address"
             autoCapitalize="none"
+            editable={!loading}
+            returnKeyType="send"
+            onSubmitEditing={handleResetPassword}
           />
 
           <TouchableOpacity
-            style={styles.resetButton}
+            style={[styles.resetButton, loading && { opacity: 0.6 }]}
             onPress={handleResetPassword}
+            disabled={loading}
           >
-            <ThemedText style={styles.resetButtonText}>
-              Send Reset Link
-            </ThemedText>
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <ThemedText style={styles.resetButtonText}>
+                Send Reset Link
+              </ThemedText>
+            )}
           </TouchableOpacity>
 
           {/* Back to Login Link */}
@@ -121,7 +158,7 @@ const styles = StyleSheet.create({
   formContainer: {
     flex: 1,
     padding: 20,
-    paddingTop:280,
+    paddingTop: 280,
   },
   title: {
     marginBottom: 10,
