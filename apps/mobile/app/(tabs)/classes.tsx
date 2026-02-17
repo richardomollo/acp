@@ -261,12 +261,7 @@ export default function ExploreScreen() {
                   )}
 
                   {/* Credits Badge */}
-                  <View style={styles.creditsBadge}>
-                    <Ionicons name="wallet" size={14} color="#fff" />
-                    <ThemedText style={styles.creditsBadgeText}>
-                      {session.credits_required}
-                    </ThemedText>
-                  </View>
+                 
 
                   {/* Status Badge */}
                   <View style={[
@@ -285,6 +280,9 @@ export default function ExploreScreen() {
                     <View style={styles.sessionTitleContainer}>
                       <ThemedText style={styles.sessionName} numberOfLines={1}>
                         {session.name}
+                      </ThemedText>
+                      <ThemedText style={styles.classInstructorText} numberOfLines={1}>
+                           {session.description}
                       </ThemedText>
                       {session.instructor && (
                         <View style={styles.instructorRow}>
@@ -325,6 +323,9 @@ export default function ExploreScreen() {
                       </ThemedText>
                     </View>
                   </View>
+                  <ThemedText style={styles.classSpotsLeft} numberOfLines={1}>
+                      {session.credits_required} credits required to book
+                  </ThemedText>
                 </View>
               </TouchableOpacity>
             ))}
@@ -346,11 +347,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  classSpotsLeft: {
+    fontSize: 13,
+    color: '#00a63e',
+    flex: 1,
+  },
   header: {
     paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 20,
     backgroundColor: '#ffffff',
+  },
+  classInstructorText: {
+    fontSize: 13,
+    color: '#666',
+    flex: 1,
   },
   headerTitle: {
     fontSize: 28,

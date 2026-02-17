@@ -1,10 +1,11 @@
-import { StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator, TextInput } from 'react-native';
+import { StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator, TextInput, Image } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { useRouter } from 'expo-router';
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
-import { Image } from 'react-native';
+
+const fallbackImage = 'https://via.placeholder.com/400x160?text=No+Image';
 
 interface Gym {
   id: string;
@@ -14,7 +15,7 @@ interface Gym {
   contact_email: string | null;
   contact_phone: string | null;
   type: string | null;
-  rating: string | null;
+  rating: number | null;
   image_url: string | null;
 }
 
@@ -52,6 +53,24 @@ export default function venues() {
     gym.location.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const renderStars = (rating: number | null) => {
+    const numericRating = rating || 0;
+    return [1, 2, 3, 4, 5].map((star) => (
+      <Ionicons
+        key={star}
+        name={
+          star <= Math.floor(numericRating)
+            ? 'star'
+            : star <= numericRating
+            ? 'star-half'
+            : 'star-outline'
+        }
+        size={16}
+        color="#FFB800"
+      />
+    ));
+  };
+
   if (loading) {
     return (
       <View style={[styles.container, styles.centerContent]}>
@@ -70,12 +89,12 @@ export default function venues() {
         </ThemedText>
       </View>
 
-      {/* Search Bar - FIXED */}
+      {/* Search Bar */}
       <View style={styles.searchContainer}>
         <Ionicons name="search-outline" size={20} color="#999" style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search gyms or locations..."
+          placeholder="Search venues or locations..."
           placeholderTextColor="#999"
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -104,21 +123,22 @@ export default function venues() {
                 params: { gymId: gym.id }
               })}
             >
-              {/* Gym Image Placeholder */}
-              
+              {/* Gym Image */}
               <View style={styles.gymCardContainer}>
                 <Image
-                    source={{ uri: gym.image_url || fallbackImage }}
-                    style={styles.gymImage}
+                  source={{ uri: gym.image_url || fallbackImage }}
+                  style={styles.gymImage}
                 />
-
-                </View>
+              </View>
 
               {/* Gym Info */}
               <View style={styles.gymInfo}>
                 <ThemedText style={styles.gymName}>{gym.name}</ThemedText>
-                <ThemedText style={styles.gymDescription}>{gym.type}</ThemedText>
                 
+                {gym.type && (
+                  <ThemedText style={styles.gymDescription}>{gym.type}</ThemedText>
+                )}
+
                 <View style={styles.locationRow}>
                   <Ionicons name="location-outline" size={16} color="#666" />
                   <ThemedText style={styles.gymLocation}>{gym.location}</ThemedText>
@@ -132,8 +152,10 @@ export default function venues() {
 
                 <View style={styles.gymFooter}>
                   <View style={styles.ratingContainer}>
-                    <Ionicons name="star" size={16} color="#FFB800" />
-                    <ThemedText style={styles.rating}>{gym.rating}</ThemedText>
+                    {renderStars(gym.rating)}
+                    <ThemedText style={styles.rating}>
+                      {gym.rating ? gym.rating.toFixed(1) : 'N/A'}
+                    </ThemedText>
                   </View>
                   <Ionicons name="chevron-forward" size={20} color="#999" />
                 </View>
@@ -214,7 +236,7 @@ const styles = StyleSheet.create({
   },
   gymCard: {
     backgroundColor: '#fff',
-    borderRadius: 16,
+    borderRadius: 5,
     marginBottom: 16,
     overflow: 'hidden',
     borderWidth: 1,
@@ -226,19 +248,17 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   gymCardContainer: {
-  backgroundColor: '#fff',
-  borderRadius: 20,
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: 4 },
-  shadowOpacity: 0.08,
-  shadowRadius: 10,
-  elevation: 4, // Android
-},
+    backgroundColor: '#fff',
+    borderRadius: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 4,
+  },
   gymImage: {
     height: 160,
-    backgroundColor: '#002fff',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: '100%',
   },
   gymInfo: {
     padding: 16,
@@ -282,6 +302,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#000',
+    marginLeft: 4,
   },
   emptyState: {
     alignItems: 'center',

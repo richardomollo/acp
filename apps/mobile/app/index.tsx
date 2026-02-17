@@ -1,27 +1,49 @@
+import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { StyleSheet, TouchableOpacity, View, Text, Pressable, Image } from 'react-native';
+import { StyleSheet, TouchableOpacity, View, ActivityIndicator, Image } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
+import { authService } from './services/auth';
+
 export default function WelcomeScreen() {
   const router = useRouter();
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const session = await authService.getSession();
+        if (session) {
+          router.replace('/(tabs)');
+          return;
+        }
+      } catch (error) {
+        console.error('Auth check error:', error);
+      } finally {
+        setChecking(false);
+      }
+    };
+    checkAuth();
+  }, []);
+
+  if (checking) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <ActivityIndicator size="large" color="#000" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
       {/* Banner Section */}
       <View style={styles.bannerContainer}>
         <Image
-          source={require('@/assets/images/desktop.jpg')} // Replace with your image
+          source={require('@/assets/images/desktop.jpg')}
           style={styles.bannerImage}
           resizeMode="cover"
         />
-        {/* Optional overlay text on banner 
-        <View style={styles.bannerOverlay}>
-          <ThemedText style={styles.bannerTitle}>Active CityPass</ThemedText>
-          <ThemedText style={styles.bannerSubtitle}>
-            Continue your fitness journey
-          </ThemedText>
-        </View>
-        */}
       </View>
+
       <View style={styles.content}>
         <ThemedText type="title" style={styles.title}>
           Active CityPass
@@ -37,22 +59,19 @@ export default function WelcomeScreen() {
       <View style={styles.buttonContainer}>
         <TouchableOpacity
           style={styles.primaryButton}
-          onPress={() => {
-            router.push('/signup');
-          }}
+          onPress={() => router.push('/signup')}
         >
           <ThemedText style={styles.primaryButtonText}>Sign Up</ThemedText>
         </TouchableOpacity>
 
-        {/* Guest Access */}
-            <TouchableOpacity 
-              style={styles.secondaryButton}
-              onPress={() => router.push('/(tabs)')}
-            >
-              <ThemedText style={styles.secondaryButtonText}>
-                Discover Fitness Venues
-                </ThemedText>
-            </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.secondaryButton}
+          onPress={() => router.push('/(tabs)')}
+        >
+          <ThemedText style={styles.secondaryButtonText}>
+            Discover Fitness Venues
+          </ThemedText>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -61,7 +80,11 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-   backgroundColor: '#ffffff',
+    backgroundColor: '#ffffff',
+  },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   bannerContainer: {
     height: 300,
@@ -78,9 +101,8 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
     padding: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)', // Semi-transparent overlay
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
     paddingTop: '40%',
-   
   },
   bannerTitle: {
     fontSize: 32,
@@ -104,7 +126,7 @@ const styles = StyleSheet.create({
     fontSize: 32,
     marginBottom: 10,
   },
-  subtitle:{
+  subtitle: {
     marginBottom: 10,
     color: '#000000',
   },
@@ -117,7 +139,7 @@ const styles = StyleSheet.create({
   buttonContainer: {
     gap: 15,
     marginBottom: 40,
-    padding:20,
+    padding: 20,
   },
   primaryButton: {
     backgroundColor: '#000',
@@ -138,7 +160,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     borderRadius: 25,
     alignItems: 'center',
-    color: '#000',
   },
   secondaryButtonText: {
     fontSize: 16,

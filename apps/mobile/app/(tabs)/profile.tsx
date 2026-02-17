@@ -21,6 +21,7 @@ interface UpcomingClass {
   id: string;
   booking_date: string;
   status: string;
+  session_id: string;
   gym_class: {
     name: string;
     start_time: string;
@@ -28,7 +29,7 @@ interface UpcomingClass {
       name: string;
       location: string;
     };
-  };
+  } | null;
 }
 
 export default function ProfileScreen() {
@@ -48,7 +49,6 @@ export default function ProfileScreen() {
       setLoading(true);
       
       const session = await authService.getSession();
-      
       if (!session) {
         setIsGuest(true);
         setLoading(false);
@@ -76,37 +76,65 @@ export default function ProfileScreen() {
     }
   };
 
+  // --- Updated loadUpcomingClasses function ---
   const loadUpcomingClasses = async () => {
     try {
       const session = await authService.getSession();
       if (!session) return;
 
-      const { data, error } = await supabase
+      // Get today's date in YYYY-MM-DD format
+      const today = new Date().toISOString().split('T')[0];
+
+      // Fetch bookings with session and gym data in one query
+      const { data: bookingsData, error: bookingsError } = await supabase
         .from('bookings')
         .select(`
           id,
           booking_date,
+          booking_time,
           status,
-          gym_class:gym_classes (
+          sessions (
+            id,
             name,
-            start_time,
-            gym:gyms (
+            date,
+            time,
+            gyms (
               name,
               location
             )
           )
         `)
         .eq('user_id', session.user.id)
-        .gte('booking_date', new Date().toISOString())
+        .eq('status', 'confirmed')
+        .gte('booking_date', today)
         .order('booking_date', { ascending: true })
+        .order('booking_time', { ascending: true })
         .limit(5);
 
-      if (error) {
-        console.error('Error loading classes:', error);
+      if (bookingsError) {
+        console.error('Error loading bookings:', bookingsError);
         return;
       }
 
-      setUpcomingClasses(data || []);
+      if (!bookingsData || bookingsData.length === 0) {
+        setUpcomingClasses([]);
+        return;
+      }
+
+      // Transform data to match the interface
+      const transformedData = bookingsData.map(booking => ({
+        id: booking.id,
+        booking_date: booking.booking_date,
+        status: booking.status,
+        session_id: booking.sessions?.id || '',
+        gym_class: booking.sessions ? {
+          name: booking.sessions.name,
+          start_time: `${booking.sessions.date}T${booking.sessions.time}`,
+          gym: booking.sessions.gyms || { name: 'Unknown', location: '' }
+        } : null
+      }));
+
+      setUpcomingClasses(transformedData);
     } catch (error) {
       console.error('Classes error:', error);
     }
@@ -248,13 +276,31 @@ export default function ProfileScreen() {
           <View style={styles.emptyState}>
             <Ionicons name="calendar-outline" size={48} color="#ccc" />
             <ThemedText style={styles.emptyText}>No upcoming sessions</ThemedText>
-            <TouchableOpacity style={styles.bookButton}>
-              <ThemedText style={styles.bookButtonText}>Book a Class</ThemedText>
-            </TouchableOpacity>
+             {/* Getting Started Card */}
+                  <View style={styles.gettingStartedCard}>
+                    <ThemedText style={styles.gettingStartedTitle}>
+                     Let's get you moving
+                    </ThemedText>
+                    <ThemedText style={styles.gettingStartedDescription}>
+                      Discover hundreds of activities and start your fitness journey today
+                    </ThemedText>
+                    <TouchableOpacity 
+                      style={styles.exploreButton}
+                      onPress={() => router.push('/(tabs)/classes')}
+                    >
+                      <ThemedText style={styles.exploreButtonText}>Explore Classes</ThemedText>
+                      <Ionicons name="arrow-forward" size={20} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
           </View>
         ) : (
           upcomingClasses.map((booking) => (
-            <View key={booking.id} style={styles.classCard}>
+            <TouchableOpacity 
+              key={booking.id} 
+              style={styles.classCard}
+              onPress={() => router.push(`/session-details?sessionId=${booking.session_id}`)}
+              activeOpacity={0.7}
+            >
               <View style={styles.classHeader}>
                 <View style={styles.classInfo}>
                   <ThemedText style={styles.className}>
@@ -267,7 +313,10 @@ export default function ProfileScreen() {
                     </ThemedText>
                   </View>
                 </View>
-                <View style={[styles.statusDot, { backgroundColor: getStatusColor(booking.status) }]} />
+                <View style={styles.classStatusContainer}>
+                  <View style={[styles.statusDot, { backgroundColor: getStatusColor(booking.status) }]} />
+                  <Ionicons name="chevron-forward" size={20} color="#999" />
+                </View>
               </View>
               
               <View style={styles.classDetails}>
@@ -284,7 +333,7 @@ export default function ProfileScreen() {
                   </ThemedText>
                 </View>
               </View>
-            </View>
+            </TouchableOpacity>
           ))
         )}
       </View>
@@ -292,7 +341,8 @@ export default function ProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+// --- Styles remain unchanged ---
+const styles = StyleSheet.create({ 
   container: {
     flex: 1,
     backgroundColor: '#fff',
@@ -389,6 +439,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
   },
   classHeader: {
     flexDirection: 'row',
@@ -398,6 +450,11 @@ const styles = StyleSheet.create({
   },
   classInfo: {
     flex: 1,
+  },
+  classStatusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   className: {
     fontSize: 18,
@@ -442,6 +499,40 @@ const styles = StyleSheet.create({
     color: '#999',
     marginTop: 12,
     marginBottom: 20,
+  },
+  gettingStartedCard: {
+    padding: 24,
+    borderRadius: 16,
+    alignItems: 'center',
+  },
+  gettingStartedTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#000',
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  gettingStartedDescription: {
+    fontSize: 15,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 22,
+  },
+  exploreButton: {
+    backgroundColor: '#000000',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 25,
+  },
+  exploreButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   bookButton: {
     backgroundColor: '#000',

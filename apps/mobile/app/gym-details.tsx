@@ -15,6 +15,7 @@ interface Gym {
   contact_email: string | null;
   contact_phone: string | null;
   image_url: string | null;
+  rating: number | null;
 }
 
 interface Session {
@@ -28,7 +29,7 @@ interface Session {
   credits_required: number;
   max_capacity: number;
   spots_left: number;
-  image_url: string | null; // Added this field
+  image_url: string | null;
 }
 
 export default function GymDetailsScreen() {
@@ -44,15 +45,11 @@ export default function GymDetailsScreen() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [imageError, setImageError] = useState(false);
 
-  // Parse image URLs - could be a single URL or comma-separated URLs
   const getGymImages = (): string[] => {
     if (!gym?.image_url) return [];
-    
-    // Check if it's a comma-separated list of URLs
     if (gym.image_url.includes(',')) {
       return gym.image_url.split(',').map(url => url.trim()).filter(url => url.length > 0);
     }
-    
     return [gym.image_url];
   };
 
@@ -64,7 +61,6 @@ export default function GymDetailsScreen() {
       setLoading(false);
       return;
     }
-
     loadData();
   }, [gymId]);
 
@@ -73,7 +69,6 @@ export default function GymDetailsScreen() {
       setLoading(true);
       setError(null);
 
-      // Load gym
       const { data: gymData, error: gymError } = await supabase
         .from('gyms')
         .select('*')
@@ -81,10 +76,8 @@ export default function GymDetailsScreen() {
         .single();
 
       if (gymError) throw gymError;
-      
       setGym(gymData);
 
-      // Load sessions
       const { data: sessionsData, error: sessionsError } = await supabase
         .from('sessions')
         .select('*')
@@ -92,10 +85,7 @@ export default function GymDetailsScreen() {
         .order('date', { ascending: true })
         .order('time', { ascending: true });
 
-      if (sessionsError) {
-        console.error('Sessions error:', sessionsError);
-      }
-
+      if (sessionsError) console.error('Sessions error:', sessionsError);
       setSessions(sessionsData || []);
     } catch (err: any) {
       console.error('Error in loadData:', err);
@@ -128,7 +118,24 @@ export default function GymDetailsScreen() {
     setImageError(false);
   };
 
-  // Loading state
+  const renderStars = (rating: number | null) => {
+    const numericRating = rating || 0;
+    return [1, 2, 3, 4, 5].map((star) => (
+      <Ionicons
+        key={star}
+        name={
+          star <= Math.floor(numericRating)
+            ? 'star'
+            : star <= numericRating
+            ? 'star-half'
+            : 'star-outline'
+        }
+        size={18}
+        color="#FFB800"
+      />
+    ));
+  };
+
   if (loading) {
     return (
       <View style={[styles.container, styles.centerContent]}>
@@ -138,47 +145,35 @@ export default function GymDetailsScreen() {
     );
   }
 
-  // Error state
   if (error) {
     return (
       <View style={[styles.container, styles.centerContent]}>
         <Ionicons name="alert-circle-outline" size={64} color="#ff3b30" />
         <ThemedText style={styles.errorText}>{error}</ThemedText>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <ThemedText style={styles.backButtonText}>Go Back</ThemedText>
         </TouchableOpacity>
       </View>
     );
   }
 
-  // No gym found
   if (!gym) {
     return (
       <View style={[styles.container, styles.centerContent]}>
         <Ionicons name="alert-circle-outline" size={64} color="#ccc" />
         <ThemedText style={styles.errorText}>Gym not found</ThemedText>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <ThemedText style={styles.backButtonText}>Go Back</ThemedText>
         </TouchableOpacity>
       </View>
     );
   }
 
-  // Main render
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.headerBackButton}
-          onPress={() => router.back()}
-        >
+        <TouchableOpacity style={styles.headerBackButton} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <ThemedText type="title" style={styles.headerTitle}>{gym.name}</ThemedText>
@@ -199,7 +194,6 @@ export default function GymDetailsScreen() {
                 onError={() => setImageError(true)}
               />
               
-              {/* Image Counter */}
               {gymImages.length > 1 && (
                 <View style={styles.imageCounter}>
                   <ThemedText style={styles.imageCounterText}>
@@ -208,7 +202,6 @@ export default function GymDetailsScreen() {
                 </View>
               )}
 
-              {/* Navigation Arrows */}
               {gymImages.length > 1 && (
                 <>
                   <TouchableOpacity
@@ -217,7 +210,6 @@ export default function GymDetailsScreen() {
                   >
                     <Ionicons name="chevron-back" size={30} color="#fff" />
                   </TouchableOpacity>
-                  
                   <TouchableOpacity
                     style={[styles.imageNavButton, styles.rightNavButton]}
                     onPress={handleNextImage}
@@ -227,7 +219,6 @@ export default function GymDetailsScreen() {
                 </>
               )}
 
-              {/* Thumbnail Gallery */}
               {gymImages.length > 1 && (
                 <ScrollView
                   horizontal
@@ -238,27 +229,16 @@ export default function GymDetailsScreen() {
                   {gymImages.map((imageUrl, index) => (
                     <TouchableOpacity
                       key={index}
-                      onPress={() => {
-                        setCurrentImageIndex(index);
-                        setImageError(false);
-                      }}
-                      style={[
-                        styles.thumbnail,
-                        currentImageIndex === index && styles.thumbnailActive
-                      ]}
+                      onPress={() => { setCurrentImageIndex(index); setImageError(false); }}
+                      style={[styles.thumbnail, currentImageIndex === index && styles.thumbnailActive]}
                     >
-                      <Image
-                        source={{ uri: imageUrl }}
-                        style={styles.thumbnailImage}
-                        resizeMode="cover"
-                      />
+                      <Image source={{ uri: imageUrl }} style={styles.thumbnailImage} resizeMode="cover" />
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
               )}
             </>
           ) : (
-            // Fallback when no image or error
             <View style={styles.gymImagePlaceholder}>
               <Ionicons name="fitness" size={60} color="#fff" />
             </View>
@@ -267,11 +247,24 @@ export default function GymDetailsScreen() {
 
         {/* Gym Info */}
         <View style={styles.infoSection}>
+          {/* Rating Row */}
+          {gym.rating !== null && (
+            <View style={styles.ratingRow}>
+              <View style={styles.starsContainer}>
+                {renderStars(gym.rating)}
+              </View>
+              <ThemedText style={styles.ratingValue}>
+                {gym.rating.toFixed(1)}
+              </ThemedText>
+            </View>
+          )}
+
           {gym.description && (
             <ThemedText style={styles.description}>{gym.description}</ThemedText>
           )}
           
           <View style={styles.locationRow}>
+            <Ionicons name="location-outline" size={16} color="#666" />
             <ThemedText style={styles.location}>{gym.location}</ThemedText>
           </View>
         </View>
@@ -295,23 +288,13 @@ export default function GymDetailsScreen() {
               <TouchableOpacity
                 key={session.id}
                 style={styles.sessionCard}
-                onPress={() => {
-                  router.push({
-                    pathname: '/session-details',
-                    params: { 
-                      sessionId: session.id,
-                      gymName: gym.name 
-                    }
-                  });
-                }}
+                onPress={() => router.push({
+                  pathname: '/session-details',
+                  params: { sessionId: session.id, gymName: gym.name }
+                })}
               >
-                {/* Session Image */}
                 {session.image_url ? (
-                  <Image
-                    source={{ uri: session.image_url }}
-                    style={styles.sessionImage}
-                    resizeMode="cover"
-                  />
+                  <Image source={{ uri: session.image_url }} style={styles.sessionImage} resizeMode="cover" />
                 ) : (
                   <View style={styles.sessionImagePlaceholder}>
                     <Ionicons name="barbell-outline" size={40} color="#002fff" />
@@ -329,10 +312,7 @@ export default function GymDetailsScreen() {
                         </View>
                       )}
                     </View>
-                    <View style={styles.creditsBox}>
-                      <ThemedText style={styles.creditsValue}>{session.credits_required}</ThemedText>
-                      <ThemedText style={styles.creditsLabel}>credits</ThemedText>
-                    </View>
+                    
                   </View>
 
                   {session.description && (
@@ -344,9 +324,7 @@ export default function GymDetailsScreen() {
                   <View style={styles.sessionDetails}>
                     <View style={styles.detailItem}>
                       <Ionicons name="calendar-outline" size={18} color="#666" />
-                      <ThemedText style={styles.detailText}>
-                        {formatDate(session.date)}
-                      </ThemedText>
+                      <ThemedText style={styles.detailText}>{formatDate(session.date)}</ThemedText>
                     </View>
                     <View style={styles.detailItem}>
                       <Ionicons name="time-outline" size={18} color="#666" />
@@ -355,16 +333,14 @@ export default function GymDetailsScreen() {
                       </ThemedText>
                     </View>
                     <View style={styles.detailItem}>
-                      <Ionicons name="people-outline" size={18} color="#666" />
-                      <ThemedText style={styles.detailText}>
-                        {session.spots_left} spots left
-                      </ThemedText>
+                      <Ionicons name="people-outline" size={18} color="#00a63e" />
+                      <ThemedText style={styles.detailSpotsText}>{session.spots_left} spots left,  {session.credits_required} credits required to book</ThemedText>
                     </View>
                   </View>
 
                   <View style={styles.sessionFooter}>
                     <ThemedText style={styles.viewDetailsText}>View Details</ThemedText>
-                    <Ionicons name="chevron-forward" size={20} color="#002fff" />
+                    <Ionicons name="chevron-forward" size={20} color="#666" />
                   </View>
                 </View>
               </TouchableOpacity>
@@ -425,7 +401,6 @@ const styles = StyleSheet.create({
   gymImagePlaceholder: {
     width: '100%',
     height: 400,
-    backgroundColor: '#002fff',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -491,6 +466,22 @@ const styles = StyleSheet.create({
     borderBottomWidth: 8,
     borderBottomColor: '#f8f8f8',
   },
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  starsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  ratingValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#000',
+  },
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -505,20 +496,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
     lineHeight: 24,
-    marginBottom: 5,
-  },
-  contactSection: {
-    gap: 12,
-    marginTop: 6,
-  },
-  contactItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  contactText: {
-    fontSize: 16,
-    color: '#666',
+    marginBottom: 12,
   },
   sessionsSection: {
     padding: 20,
@@ -624,6 +602,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
   },
+ detailSpotsText: {
+    fontSize: 14, 
+    color:'#00a63e',
+  },
   sessionFooter: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -635,7 +617,7 @@ const styles = StyleSheet.create({
   viewDetailsText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#002fff',
+    color: '#666',
   },
   emptyState: {
     alignItems: 'center',

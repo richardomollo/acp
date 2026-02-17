@@ -214,14 +214,14 @@ export default function ProfileScreen() {
 
   if (isGuest) {
     return (
-      <ScrollView style={styles.container}>
-        <View style={styles.header}>
+      <ScrollView style={styles.LoggedOutContainer}>
+        {/* <View style={styles.header}>
           <View style={styles.avatar}>
             <Ionicons name="person-outline" size={40} color="#fff" />
           </View>
           <ThemedText type="title" style={styles.name}>Guest User</ThemedText>
           <ThemedText style={styles.email}>Not signed in</ThemedText>
-        </View>
+        </View> */}
 
         <View style={styles.guestPrompt}>
           <Ionicons name="information-circle-outline" size={24} color="#002fff" />
@@ -253,20 +253,8 @@ export default function ProfileScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.avatar}>
-          <ThemedText style={styles.avatarText}>
-            {getInitials(user?.name)}
-          </ThemedText>
-        </View>
         <ThemedText type="title" style={styles.name}>{user?.name}</ThemedText>
         <ThemedText style={styles.email}>{user?.email}</ThemedText>
-
-        <TouchableOpacity 
-          style={styles.settingsIcon}
-          onPress={() => router.push('/settings')}
-        >
-          <Ionicons name="settings-outline" size={24} color="#666" />
-        </TouchableOpacity>
       </View>
 
       {/* Tabs */}
@@ -297,12 +285,22 @@ export default function ProfileScreen() {
             <View style={styles.emptyState}>
               <Ionicons name="calendar-outline" size={64} color="#ccc" />
               <ThemedText style={styles.emptyText}>No upcoming bookings</ThemedText>
-              <TouchableOpacity 
-                style={styles.exploreButton}
-                onPress={() => router.push('/(tabs)/explore')}
-              >
-                <ThemedText style={styles.exploreButtonText}>Explore Classes</ThemedText>
-              </TouchableOpacity>
+            
+               <View style={styles.gettingStartedCard}>
+                   <ThemedText style={styles.gettingStartedTitle}>
+                      Let's get you moving
+                  </ThemedText>
+                   <ThemedText style={styles.gettingStartedDescription}>
+                      Discover hundreds of activities and start your fitness journey today
+                  </ThemedText>
+                      <TouchableOpacity 
+                        style={styles.exploreButt}
+                        onPress={() => router.push('/(tabs)/classes')}
+                      >
+                        <ThemedText style={styles.exploreButtText}>Explore Classes</ThemedText>
+                          <Ionicons name="arrow-forward" size={20} color="#fff" />
+                        </TouchableOpacity>
+                  </View>
             </View>
           ) : (
             upcomingBookings.map((booking) => (
@@ -491,6 +489,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
+   LoggedOutContainer: {
+    flex: 1,
+    backgroundColor: '#fff',
+    paddingTop: '70%',
+  },
   centerContent: {
     justifyContent: 'center',
     alignItems: 'center',
@@ -604,11 +607,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#e0e0e0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    
   },
   bookingHeader: {
     flexDirection: 'row',
@@ -629,6 +628,51 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+  },
+  gettingStartedCard: {
+    padding: 24,
+    borderRadius: 16,
+    alignItems: 'center',
+  },
+  gettingStartedTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#000',
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  gettingStartedDescription: {
+    fontSize: 15,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 22,
+  },
+  exploreButt: {
+    backgroundColor: '#000000',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 25,
+  },
+  exploreButtText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  bookButton: {
+    backgroundColor: '#000',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 25,
+  },
+  bookButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   bookingMetaText: {
     fontSize: 14,

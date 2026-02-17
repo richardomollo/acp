@@ -160,7 +160,7 @@ export default function HomeScreen() {
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <ThemedText style={styles.sectionTitle}>Top Venues</ThemedText>
-          <TouchableOpacity onPress={() => router.push('/(tabs)/explore')}>
+          <TouchableOpacity onPress={() => router.push('/(tabs)/venues')}>
             <ThemedText style={styles.seeAllText}>See All</ThemedText>
           </TouchableOpacity>
         </View>
@@ -253,11 +253,6 @@ export default function HomeScreen() {
                 </View>
               )}
               
-              <View style={styles.classCredits}>
-                <ThemedText style={styles.classCreditsText}>
-                  {session.credits_required}
-                </ThemedText>
-              </View>
 
               <View style={styles.classInfo}>
                 <ThemedText style={styles.className} numberOfLines={1}>
@@ -281,7 +276,7 @@ export default function HomeScreen() {
                   </ThemedText>
                 </View>
                 <ThemedText style={styles.classSpotsLeft} numberOfLines={1}>
-                  {session.spots_left} Spots left
+                  {session.spots_left} Spots left, {session.credits_required} credits required to book
                 </ThemedText>
               </View>
             </TouchableOpacity>
@@ -357,11 +352,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
   },
   creditsContent: {
     flexDirection: 'row',
@@ -454,7 +444,7 @@ const styles = StyleSheet.create({
     width: CARD_WIDTH,
     marginRight: 16,
     backgroundColor: '#fff',
-    borderRadius: 16,
+    borderRadius: 5,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#e0e0e0',
@@ -498,7 +488,7 @@ const styles = StyleSheet.create({
     width: CARD_WIDTH * 0.75,
     marginRight: 16,
     backgroundColor: '#fff',
-    borderRadius: 16,
+    borderRadius: 5,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#e0e0e0',
