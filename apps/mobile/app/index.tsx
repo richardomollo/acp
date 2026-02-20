@@ -64,12 +64,30 @@ export default function WelcomeScreen() {
           <ThemedText style={styles.primaryButtonText}>Sign Up</ThemedText>
         </TouchableOpacity>
 
+        {/* Sign Up Link */}
+                  <View style={styles.signUpContainer}>
+                    <ThemedText style={styles.signUpText}>
+                      Don't have an account?{' '}
+                    </ThemedText>
+                    <TouchableOpacity onPress={() => router.push('/login')}>
+                      <ThemedText style={styles.signUpLink}>Log in</ThemedText>
+                    </TouchableOpacity>
+                  </View>
+
+          <TouchableOpacity
+          style={styles.secondaryButton}
+        >
+          <ThemedText style={styles.alternateText}>
+           or 
+          </ThemedText>
+        </TouchableOpacity>
+
         <TouchableOpacity
           style={styles.secondaryButton}
           onPress={() => router.push('/(tabs)')}
         >
           <ThemedText style={styles.secondaryButtonText}>
-            Discover Fitness Venues
+            Continue as guest
           </ThemedText>
         </TouchableOpacity>
       </View>
@@ -156,7 +174,7 @@ const styles = StyleSheet.create({
   secondaryButton: {
     borderWidth: 0,
     borderColor: '#000',
-    paddingVertical: 16,
+    paddingVertical: 6,
     paddingHorizontal: 32,
     borderRadius: 25,
     alignItems: 'center',
@@ -165,5 +183,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#002fff',
+  },
+  alternateText: {
+    fontSize: 16,
+    color: '#666',
+    alignItems: 'center',
+  },signUpContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 10,
+  },
+  signUpText: {
+    fontSize: 16,
+    color: '#000000',
+    fontWeight: '600',
+  },
+  signUpLink: {
+    color: '#002fff',
+    fontWeight: '600',
   },
 });

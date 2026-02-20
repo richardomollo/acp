@@ -1,9 +1,39 @@
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import { Platform, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useState, useEffect } from 'react';
+import { authService } from '../services/auth';
 
 
 export default function TabLayout() {
+  const router = useRouter();
+  const [userId, setUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    checkAuth();
+  }, []);
+
+  const checkAuth = async () => {
+    const session = await authService.getSession();
+    setUserId(session?.user.id || null);
+  };
+
+  const handleProfilePress = (e: any) => {
+    // Check if user is logged in
+    if (!userId) {
+      e.preventDefault(); // Prevent navigation to profile
+      router.push('/login?redirect=/(tabs)/profile'); // Pass redirect param
+    }
+  };
+
+  const handleCheckInPress = (e: any) => {
+    // Check if user is logged in
+    if (!userId) {
+      e.preventDefault(); // Prevent navigation to profile
+      router.push('/login?redirect=/(tabs)/check-in'); // Pass redirect param
+    }
+  };
+
   return (
     <Tabs
       screenOptions={{
@@ -53,6 +83,9 @@ export default function TabLayout() {
           title: 'Check-in',
           tabBarIcon: ({ color }) => <Ionicons name="barcode" color={color} />,
         }}
+        // listeners={{
+        //   tabPress: handleCheckInPress,
+        // }}
       />
       <Tabs.Screen
         name="profile"
@@ -61,6 +94,9 @@ export default function TabLayout() {
           headerShown: false,
           tabBarIcon: ({ color }) => <Ionicons name="person" color={color} />,
         }}
+        // listeners={{
+        //   tabPress: handleProfilePress,
+        // }}
       />
     </Tabs>
   );

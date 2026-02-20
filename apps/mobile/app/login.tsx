@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { 
   StyleSheet, 
   TouchableOpacity, 
@@ -11,14 +11,19 @@ import {
   ActivityIndicator
 } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
+import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { authService } from './services/auth';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Get the redirect path from query params (default to tabs)
+  const redirectTo = (params.redirect as string) || '/(tabs)';
 
   // Email validation
   const isValidEmail = (email: string) => {
@@ -43,12 +48,8 @@ export default function LoginScreen() {
     try {
       await authService.login({ email, password });
       
-      Alert.alert('Success', 'Logged in successfully!', [
-        {
-          text: 'OK',
-          onPress: () => router.replace('/(tabs)'),
-        },
-      ]);
+      // Redirect back to where they came from
+      router.replace(redirectTo);
     } catch (error: any) {
       console.error('Login error:', error);
       Alert.alert('Error', error.message || 'Failed to login');
@@ -62,6 +63,18 @@ export default function LoginScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
+      {/* Header with Back Button */}
+      <View style={styles.header}>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => router.back()}
+        >
+          <Ionicons name="arrow-back" size={24} color="#000" />
+        </TouchableOpacity>
+        
+        <View style={styles.placeholder} />
+      </View>
+
       <ScrollView 
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
@@ -125,7 +138,7 @@ export default function LoginScreen() {
             <ThemedText style={styles.signUpText}>
               Don't have an account?{' '}
             </ThemedText>
-            <TouchableOpacity onPress={() => router.push('/signup')}>
+            <TouchableOpacity onPress={() => router.push(`/signup${params.redirect ? `?redirect=${params.redirect}` : ''}`)}>
               <ThemedText style={styles.signUpLink}>Sign up</ThemedText>
             </TouchableOpacity>
           </View>
@@ -151,6 +164,26 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#ffffff',
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 20,
+  
+  },
+  backButton: {
+    padding: 8,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#000',
+  },
+  placeholder: {
+    width: 40,
+  },
   scrollContent: {
     flexGrow: 1,
   },
@@ -175,7 +208,7 @@ const styles = StyleSheet.create({
   formContainer: {
     flex: 1,
     padding: 20,
-    paddingTop: 280,
+    paddingTop: 100,
   },
   title: {
     marginBottom: 10,

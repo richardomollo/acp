@@ -463,8 +463,6 @@ const styles = StyleSheet.create({
   },
   infoSection: {
     padding: 20,
-    borderBottomWidth: 8,
-    borderBottomColor: '#f8f8f8',
   },
   ratingRow: {
     flexDirection: 'row',
@@ -611,8 +609,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
   },
   viewDetailsText: {
     fontSize: 14,

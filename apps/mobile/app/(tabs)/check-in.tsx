@@ -223,28 +223,25 @@ export default function ProfileScreen() {
           <ThemedText style={styles.email}>Not signed in</ThemedText>
         </View> */}
 
-        <View style={styles.guestPrompt}>
-          <Ionicons name="information-circle-outline" size={24} color="#002fff" />
-          <ThemedText style={styles.guestText}>
-            Sign in to view your bookings and check in to classes
-          </ThemedText>
-        </View>
-
-        <View style={styles.section}>
-          <TouchableOpacity 
-            style={styles.primaryButton}
-            onPress={() => router.push('/login')}
-          >
-            <ThemedText style={styles.primaryButtonText}>Sign In</ThemedText>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.secondaryButton}
-            onPress={() => router.push('/signup')}
-          >
-            <ThemedText style={styles.secondaryButtonText}>Create Account</ThemedText>
-          </TouchableOpacity>
-        </View>
+          <View style={styles.emptyState}>
+              <Ionicons name="qr-code-outline" size={64} color="#ccc" />
+            
+               <View style={styles.gettingStartedCard}>
+                   <ThemedText style={styles.gettingStartedTitle}>
+                      Let's get checked in
+                  </ThemedText>
+                   <ThemedText style={styles.gettingStartedDescription}>
+                      Sign in to view your bookings and check in to classed to continue wellness journey today
+                  </ThemedText>
+                      <TouchableOpacity 
+                        style={styles.exploreButt}
+                         onPress={() => router.push('/login')}
+                      >
+                        <ThemedText style={styles.exploreButtText}> Sign In or Create Your Account</ThemedText>
+                          <Ionicons name="arrow-forward" size={20} color="#fff" />
+                        </TouchableOpacity>
+                  </View>
+            </View>
       </ScrollView>
     );
   }
@@ -502,7 +499,6 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingTop: 60,
     alignItems: 'center',
-    backgroundColor: '#f8f8f8',
     position: 'relative',
   },
   settingsIcon: {

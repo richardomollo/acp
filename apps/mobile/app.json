@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "A.CityPass",
-    "slug": "Active City Pass",
+    "slug": "acity-pass",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -45,6 +45,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "032ca33b-1213-4541-b3a3-1d319761c70c"
+      }
+    },
+    "owner": "romollo"
   }
 }

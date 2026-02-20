@@ -192,36 +192,25 @@ export default function ProfileScreen() {
   if (isGuest) {
     return (
       <ScrollView style={styles.container}>
-        <View style={styles.header}>
-          <View style={styles.avatar}>
-            <Ionicons name="person-outline" size={40} color="#fff" />
-          </View>
-          <ThemedText type="title" style={styles.name}>Guest User</ThemedText>
-          <ThemedText style={styles.email}>Not signed in</ThemedText>
-        </View>
-
-        <View style={styles.guestPrompt}>
-          <Ionicons name="information-circle-outline" size={24} color="#002fff" />
-          <ThemedText style={styles.guestText}>
-            Sign in to access your membership, bookings, and more!
-          </ThemedText>
-        </View>
-
-        <View style={styles.section}>
-          <TouchableOpacity 
-            style={styles.primaryButton}
-            onPress={() => router.push('/login')}
-          >
-            <ThemedText style={styles.primaryButtonText}>Sign In</ThemedText>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.secondaryButton}
-            onPress={() => router.push('/signup')}
-          >
-            <ThemedText style={styles.secondaryButtonText}>Create Account</ThemedText>
-          </TouchableOpacity>
-        </View>
+        <View style={styles.emptyStateSignIn}>
+                      <Ionicons name="person-circle-outline" size={64} color="#ccc" />
+                    
+                       <View style={styles.gettingStartedCard}>
+                           <ThemedText style={styles.gettingStartedTitle}>
+                              You need be be signed in
+                          </ThemedText>
+                           <ThemedText style={styles.gettingStartedDescription}>
+                              Sign in to view your account settings, manage your bookings, vedit your subscriptiond and manager your payment details. 
+                          </ThemedText>
+                              <TouchableOpacity 
+                                style={styles.exploreButt}
+                                 onPress={() => router.push('/login')}
+                              >
+                                <ThemedText style={styles.exploreButtText}>Sign In or Create Your Account</ThemedText>
+                                  <Ionicons name="arrow-forward" size={20} color="#fff" />
+                                </TouchableOpacity>
+                          </View>
+                    </View>
       </ScrollView>
     );
   }
@@ -231,11 +220,7 @@ export default function ProfileScreen() {
       {/* Header with Settings Icon */}
       <View style={styles.headerContainer}>
         <View style={styles.header}>
-          <View style={styles.avatar}>
-            <ThemedText style={styles.avatarText}>
-              {getInitials(user?.name)}
-            </ThemedText>
-          </View>
+          
           <ThemedText type="title" style={styles.name}>{user?.name}</ThemedText>
           <ThemedText style={styles.email}>{user?.email}</ThemedText>
           
@@ -257,16 +242,22 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Credits Info */}
-      <View style={styles.creditsSection}>
-        <View style={styles.creditsCard}>
-          <Ionicons name="wallet-outline" size={32} color="#002fff" />
-          <View style={styles.creditsInfo}>
-            <ThemedText style={styles.creditsLabel}>Available Credits</ThemedText>
-            <ThemedText style={styles.creditsValue}>{user?.credits || 0}</ThemedText>
-          </View>
-        </View>
-      </View>
+      {/* Credits Card (Logged In Users) */}
+            {!isGuest && user && (
+              <View style={styles.creditsCard}>
+                <View style={styles.creditsContent}>
+                  <Ionicons name="wallet-outline" size={32} color="#666" />
+                  <View style={styles.creditsInfo}>
+                    <ThemedText style={styles.creditsLabel}>Available Credits</ThemedText>
+                    <ThemedText style={styles.creditsValue}>{user.credits}</ThemedText>
+                  </View>
+                </View>
+                <TouchableOpacity style={styles.creditsButton}>
+                  <ThemedText style={styles.creditsButtonText}>Add Credits</ThemedText>
+                </TouchableOpacity>
+              </View>
+            )}
+      
 
       {/* Upcoming Classes */}
       <View style={styles.section}>
@@ -285,10 +276,10 @@ export default function ProfileScreen() {
                       Discover hundreds of activities and start your fitness journey today
                     </ThemedText>
                     <TouchableOpacity 
-                      style={styles.exploreButton}
+                      style={styles.exploreButt}
                       onPress={() => router.push('/(tabs)/classes')}
                     >
-                      <ThemedText style={styles.exploreButtonText}>Explore Classes</ThemedText>
+                      <ThemedText style={styles.exploreButtText}>Explore Classes</ThemedText>
                       <Ionicons name="arrow-forward" size={20} color="#fff" />
                     </TouchableOpacity>
                   </View>
@@ -358,7 +349,6 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingTop: 60,
     alignItems: 'center',
-    backgroundColor: '#f8f8f8',
   },
   settingsIcon: {
     position: 'absolute',
@@ -400,30 +390,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
   },
-  creditsSection: {
-    padding: 20,
-  },
-  creditsCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f8f8f8',
-    padding: 20,
-    borderRadius: 12,
-    gap: 16,
-  },
-  creditsInfo: {
-    flex: 1,
-  },
-  creditsLabel: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 4,
-  },
-  creditsValue: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#000',
-  },
+  
   section: {
     padding: 20,
     paddingTop: 0,
@@ -493,6 +460,12 @@ const styles = StyleSheet.create({
   emptyState: {
     alignItems: 'center',
     paddingVertical: 40,
+    marginTop: 40,
+  },
+  emptyStateSignIn: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    marginTop: 300,
   },
   emptyText: {
     fontSize: 16,
@@ -581,6 +554,82 @@ const styles = StyleSheet.create({
   secondaryButtonText: {
     color: '#000',
     fontSize: 16,
+    fontWeight: '600',
+  },
+   emptyState: {
+    alignItems: 'center',
+    paddingVertical: 80,
+    paddingHorizontal: 40,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#999',
+    marginTop: 16,
+    marginBottom: 24,
+  },
+  exploreButton: {
+    backgroundColor: '#002fff',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 25,
+  },
+  exploreButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  exploreButt: {
+    backgroundColor: '#000000',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 25,
+  },
+  exploreButtText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  creditsCard: {
+    backgroundColor: '#f8f8f8',
+    marginHorizontal: 20,
+    marginBottom:20,
+    padding: 20,
+    borderRadius: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  creditsContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  creditsInfo: {
+    gap: 4,
+  },
+  creditsLabel: {
+    fontSize: 13,
+    color: '#666',
+  },
+  creditsValue: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#000',
+    
+  },
+  creditsButton: {
+    backgroundColor: '#000',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+  },
+  creditsButtonText: {
+    color: '#fff',
+    fontSize: 14,
     fontWeight: '600',
   },
 });

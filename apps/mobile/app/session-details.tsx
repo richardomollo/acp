@@ -1,4 +1,4 @@
-import { StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { Image } from 'expo-image';
 import { ThemedText } from '@/components/themed-text';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -41,6 +41,15 @@ export default function SessionDetailsScreen() {
   const [userCredits, setUserCredits] = useState(0);
   const [spotsLeft, setSpotsLeft] = useState(0);
   const [userId, setUserId] = useState<string | null>(null);
+  
+  // Auth modal state
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
 
   useEffect(() => {
     loadSessionDetails();
@@ -104,10 +113,7 @@ export default function SessionDetailsScreen() {
   const handleBookSession = async () => {
     try {
       if (!userId) {
-        Alert.alert('Sign In Required', 'Please sign in to book sessions', [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Sign In', onPress: () => router.push('/login') }
-        ]);
+        setShowAuthModal(true);
         return;
       }
 
@@ -177,6 +183,97 @@ export default function SessionDetailsScreen() {
       Alert.alert('Error', error.message || 'Failed to book session');
     } finally {
       setBooking(false);
+    }
+  };
+
+  const handleAuth = async () => {
+    if (!email || !password) {
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+
+    if (isSignUp && !name) {
+      Alert.alert('Error', 'Please enter your name');
+      return;
+    }
+
+    try {
+      setAuthLoading(true);
+
+      if (isSignUp) {
+        // Sign up
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: { name }
+          }
+        });
+
+        if (error) throw error;
+
+        if (data.user) {
+          // Create user profile
+          const { error: profileError } = await supabase
+            .from('users')
+            .insert([{
+              id: data.user.id,
+              email: data.user.email,
+              name: name,
+              credits: 10 // Starting credits
+            }]);
+
+          if (profileError) throw profileError;
+
+          Alert.alert('Success', 'Account created! You have 10 credits to get started.', [
+            { text: 'OK', onPress: () => {
+              setShowAuthModal(false);
+              loadSessionDetails(); // Reload to get user data
+            }}
+          ]);
+        }
+      } else {
+        // Sign in
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (error) throw error;
+
+        setShowAuthModal(false);
+        loadSessionDetails(); // Reload to get user data
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Authentication failed');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      Alert.alert('Error', 'Please enter your email address');
+      return;
+    }
+
+    try {
+      setAuthLoading(true);
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: 'fitpass://reset-password',
+      });
+
+      if (error) throw error;
+
+      Alert.alert(
+        'Check Your Email',
+        'We\'ve sent you a password reset link. Please check your email.',
+        [{ text: 'OK', onPress: () => setShowForgotPassword(false) }]
+      );
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to send reset email');
+    } finally {
+      setAuthLoading(false);
     }
   };
 
@@ -342,7 +439,6 @@ export default function SessionDetailsScreen() {
               </ThemedText>
             </View>
             <View style={styles.cardContent}>
-              <ThemedText style={styles.cardLabel}>INSTRUCTOR</ThemedText>
               <ThemedText style={styles.cardTitle}>{session.instructor}</ThemedText>
               <ThemedText style={styles.cardSubtitle}>Certified Instructor</ThemedText>
             </View>
@@ -350,11 +446,12 @@ export default function SessionDetailsScreen() {
           </View>
         )}
 
-        
+      
+
         {/* ── CREDITS ──────────────────────────── */}
         <View style={styles.creditsCard}>
           <View>
-            <ThemedText style={styles.creditsLabel}>SESSION COST</ThemedText>
+            <ThemedText style={styles.creditsLabel}>Session cost</ThemedText>
             <View style={styles.creditsRow}>
               <ThemedText style={styles.creditsNumber}>{session.credits_required}</ThemedText>
               <ThemedText style={styles.creditsUnit}>credits</ThemedText>
@@ -387,11 +484,11 @@ export default function SessionDetailsScreen() {
           <TouchableOpacity
             style={[
               styles.bookBtn,
-              (booking || !userId || userCredits < session.credits_required || spotsLeft <= 0)
+              (booking || (userId && userCredits < session.credits_required) || spotsLeft <= 0)
               && styles.bookBtnDisabled
             ]}
             onPress={handleBookSession}
-            disabled={booking || !userId || userCredits < session.credits_required || spotsLeft <= 0}
+            disabled={booking || (userId && userCredits < session.credits_required) || spotsLeft <= 0}
             activeOpacity={0.85}
           >
             {booking ? (
@@ -413,6 +510,192 @@ export default function SessionDetailsScreen() {
           </TouchableOpacity>
         )}
       </View>
+
+      {/* ── AUTH MODAL ───────────────────────── */}
+      <Modal
+        visible={showAuthModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          setShowAuthModal(false);
+          setShowForgotPassword(false);
+        }}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => {
+              setShowAuthModal(false);
+              setShowForgotPassword(false);
+            }}
+          />
+          
+          <View style={styles.modalContent}>
+            {/* Close button */}
+            <TouchableOpacity
+              style={styles.modalClose}
+              onPress={() => {
+                setShowAuthModal(false);
+                setShowForgotPassword(false);
+              }}
+            >
+              <Ionicons name="close" size={28} color="#666" />
+            </TouchableOpacity>
+
+            {/* Session context */}
+            <View style={styles.modalHeader}>
+              <ThemedText type="title" style={styles.modalTitle}>
+                {showForgotPassword 
+                  ? 'Reset Password' 
+                  : isSignUp 
+                    ? 'Create Your Account' 
+                    : 'Ready to get moving?'}
+              </ThemedText>
+              <ThemedText style={styles.modalSubtitle}>
+                {showForgotPassword 
+                  ? `We'll send you a reset link to your email provided below`
+                  : `Sign in to book your next ${session.name} and to access all things fitness, play & family wellness` }
+              </ThemedText>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {showForgotPassword ? (
+                // FORGOT PASSWORD VIEW
+                <>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={styles.inputLabel}>Email</ThemedText>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="your@email.com"
+                      value={email}
+                      onChangeText={setEmail}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                  </View>
+
+                  <TouchableOpacity
+                    style={[styles.authButton, authLoading && styles.authButtonDisabled]}
+                    onPress={handleForgotPassword}
+                    disabled={authLoading}
+                  >
+                    {authLoading ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <ThemedText style={styles.authButtonText}>
+                        Send Reset Link
+                      </ThemedText>
+                    )}
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.toggleAuth}
+                    onPress={() => setShowForgotPassword(false)}
+                  >
+                    <ThemedText style={styles.toggleAuthText}>
+                      Remember your password?{' '}
+                      <ThemedText style={styles.toggleAuthLink}>
+                        Sign In
+                      </ThemedText>
+                    </ThemedText>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                // SIGN IN / SIGN UP VIEW
+                <>
+                  {/* Name field (sign up only) */}
+                  {isSignUp && (
+                    <View style={styles.inputGroup}>
+                      <ThemedText style={styles.inputLabel}>Name</ThemedText>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Your name"
+                        value={name}
+                        onChangeText={setName}
+                        autoCapitalize="words"
+                      />
+                    </View>
+                  )}
+
+                  {/* Email field */}
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={styles.inputLabel}>Email</ThemedText>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="your@email.com"
+                      value={email}
+                      onChangeText={setEmail}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                  </View>
+
+                  {/* Password field */}
+                  <View style={styles.inputGroup}>
+                    <View style={styles.passwordHeader}>
+                      <ThemedText style={styles.inputLabel}>Password</ThemedText>
+                      {!isSignUp && (
+                        <TouchableOpacity onPress={() => setShowForgotPassword(true)}>
+                          <ThemedText style={styles.forgotPasswordLink}>
+                            Forgot?
+                          </ThemedText>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="••••••••"
+                      value={password}
+                      onChangeText={setPassword}
+                      secureTextEntry
+                      autoCapitalize="none"
+                    />
+                  </View>
+
+                  {/* Submit button */}
+                  <TouchableOpacity
+                    style={[styles.authButton, authLoading && styles.authButtonDisabled]}
+                    onPress={handleAuth}
+                    disabled={authLoading}
+                  >
+                    {authLoading ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <ThemedText style={styles.authButtonText}>
+                        {isSignUp ? 'Create Your Account' : 'Sign In'}
+                      </ThemedText>
+                    )}
+                  </TouchableOpacity>
+
+                  {/* Toggle sign up / sign in */}
+                  <TouchableOpacity
+                    style={styles.toggleAuth}
+                    onPress={() => {
+                      setIsSignUp(!isSignUp);
+                      setName('');
+                      setEmail('');
+                      setPassword('');
+                    }}
+                  >
+                    <ThemedText style={styles.toggleAuthText}>
+                      {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
+                      <ThemedText style={styles.toggleAuthLink}>
+                        {isSignUp ? 'Sign In' : 'Sign Up'}
+                      </ThemedText>
+                    </ThemedText>
+                  </TouchableOpacity>
+                </>
+              )}
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -469,15 +752,14 @@ const styles = StyleSheet.create({
   statItem: { flex: 1, alignItems: 'center', gap: 5 },
   statSep: { width: 1, backgroundColor: '#efefef', marginVertical: 4 },
   statLabel: { fontSize: 9, fontWeight: '800', color: '#666', letterSpacing: 1.2, marginTop: 4 },
-  statValue: { fontSize: 13, fontWeight: '700', color: '#111', textAlign: 'center' },
+  statValue: { fontSize: 13,  color: '#111', textAlign: 'center' },
 
   // SHARED CARD
   card: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
     backgroundColor: '#fff', marginHorizontal: 16, marginTop: 10,
     borderRadius: 20, padding: 18,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
+   
   },
   cardIconWrap: {
     width: 50, height: 50, borderRadius: 15,
@@ -486,9 +768,9 @@ const styles = StyleSheet.create({
   cardContent: { flex: 1 },
   cardLabel: { fontSize: 9, fontWeight: '800', color: '#002fff', letterSpacing: 1.4, marginBottom: 3 },
   cardTitle: { fontSize: 16, fontWeight: '700', color: '#111', marginBottom: 2 },
-  cardSubtitle: { fontSize: 13, color: '#888' },
+  cardSubtitle: { fontSize: 16, color: '#666' },
   locationRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 1 },
-  locationText: { fontSize: 13, color: '#888' },
+  locationText: { fontSize: 13, color: '#666' },
 
   // INSTRUCTOR
   instructorAvatarWrap: { backgroundColor: '#002fff' },
@@ -498,11 +780,9 @@ const styles = StyleSheet.create({
   availCard: {
     backgroundColor: '#fff', marginHorizontal: 16, marginTop: 10,
     borderRadius: 20, padding: 18,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
   },
   availHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  availTitle: { fontSize: 15, fontWeight: '700', color: '#111' },
+  availTitle: {  fontWeight: '700', color: '#111' },
   badge: {
     backgroundColor: '#eef0ff', paddingHorizontal: 10,
     paddingVertical: 4, borderRadius: 20,
@@ -524,16 +804,16 @@ const styles = StyleSheet.create({
   // CREDITS
   creditsCard: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    backgroundColor: '#002fff', marginHorizontal: 16, marginTop: 10,
+    backgroundColor: '#f8f8f8', marginHorizontal: 16, marginTop: 10,
     borderRadius: 20, padding: 22,
   },
-  creditsLabel: { fontSize: 9, fontWeight: '800', color: 'rgba(255,255,255,0.55)', letterSpacing: 1.4, marginBottom: 4 },
+  creditsLabel: {color: '#666', marginBottom: 4 },
   creditsRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
-  creditsNumber: { fontSize: 52, fontWeight: '900', color: '#fff', lineHeight: 56 },
-  creditsUnit: { fontSize: 14, fontWeight: '700', color: 'rgba(255,255,255,0.7)', marginBottom: 10 },
+  creditsNumber: { fontSize: 52, fontWeight: '900', color: '#666', lineHeight: 56 },
+  creditsUnit: { fontSize: 14, fontWeight: '700', color: '#666', marginBottom: 10 },
   balanceBox: { alignItems: 'flex-end' },
-  balanceLabel: { fontSize: 11, color: 'rgba(255,255,255,0.55)', marginBottom: 4 },
-  balanceValue: { fontSize: 26, fontWeight: '800', color: '#fff' },
+  balanceLabel: {  color: '#666', marginBottom: 4 },
+  balanceValue: { fontSize: 26, fontWeight: '800', color: '#666' },
   balanceLow: { color: '#ffcc00' },
 
   // FOOTER
@@ -555,7 +835,109 @@ const styles = StyleSheet.create({
   bookedBanner: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     backgroundColor: '#f0fff4', paddingVertical: 18, borderRadius: 25,
-    gap: 10, borderWidth: 1.5, borderColor: '#00c853',
+    gap: 10, borderWidth: 0.5, borderColor: '#00c853',
   },
   bookedText: { fontSize: 17, fontWeight: '700', color: '#00c853' },
+
+  // MODAL
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  modalBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingTop: 32,
+    maxHeight: '90%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  modalClose: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    zIndex: 10,
+    padding: 4,
+  },
+  modalHeader: {
+    marginBottom: 24,
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontWeight: '800',
+    color: '#111',
+    marginBottom: 10 ,
+  },
+  modalSubtitle: {
+    color: '#666',
+    textAlign: 'center',
+  },
+  inputGroup: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontWeight: '600',
+    color: '#111',
+    marginBottom: 8,
+  },
+  passwordHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  forgotPasswordLink: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#002fff',
+  },
+  input: {
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    color: '#111',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  authButton: {
+    backgroundColor: '#000',
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  authButtonDisabled: {
+    opacity: 0.5,
+  },
+  authButtonText: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  toggleAuth: {
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  toggleAuthText: {
+    fontSize: 15,
+    color: '#666',
+  },
+  toggleAuthLink: {
+    color: '#002fff',
+    fontWeight: '700',
+  },
 });

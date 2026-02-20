@@ -85,7 +85,7 @@ export default function venues() {
       <View style={styles.header}>
         <ThemedText type="title" style={styles.headerTitle}>Discover Venues</ThemedText>
         <ThemedText style={styles.subtitle}>
-          Find the perfect gym for your fitness journey
+          Find the perfect venue for your wellness journey — with the freedom to explore them all.
         </ThemedText>
       </View>
 
@@ -94,7 +94,7 @@ export default function venues() {
         <Ionicons name="search-outline" size={20} color="#999" style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search venues or locations..."
+          placeholder="Search venues, play parks or locations..."
           placeholderTextColor="#999"
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -109,7 +109,7 @@ export default function venues() {
       <ScrollView style={styles.content}>
         {/* Gyms Count */}
         <ThemedText style={styles.resultsText}>
-          {filteredGyms.length} {filteredGyms.length === 1 ? 'gym' : 'gyms'} available
+          {filteredGyms.length} {filteredGyms.length === 1 ? 'gym' : 'venues'} available for you and your loved ones
         </ThemedText>
 
         {/* Gyms Grid */}
@@ -139,16 +139,16 @@ export default function venues() {
                   <ThemedText style={styles.gymDescription}>{gym.type}</ThemedText>
                 )}
 
-                <View style={styles.locationRow}>
-                  <Ionicons name="location-outline" size={16} color="#666" />
-                  <ThemedText style={styles.gymLocation}>{gym.location}</ThemedText>
-                </View>
-
-                {gym.description && (
+                 {gym.description && (
                   <ThemedText style={styles.gymDescription} numberOfLines={2}>
                     {gym.description}
                   </ThemedText>
                 )}
+
+                <View style={styles.locationRow}>
+                  <Ionicons name="location-outline" size={16} color="#666" />
+                  <ThemedText style={styles.gymLocation}>{gym.location}</ThemedText>
+                </View>
 
                 <View style={styles.gymFooter}>
                   <View style={styles.ratingContainer}>
@@ -290,8 +290,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
   },
   ratingContainer: {
     flexDirection: 'row',

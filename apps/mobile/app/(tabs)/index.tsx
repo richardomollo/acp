@@ -118,7 +118,7 @@ export default function HomeScreen() {
           {isGuest ? 'Active CityPass' : `Hi, ${user?.name || 'there'}!`}
         </ThemedText>
         <ThemedText style={styles.subtitle}>
-          {isGuest ? 'Your fitness journey starts here' : 'Ready to get moving?'}
+          {isGuest ? 'Your wellness journey starts here' : 'Ready to get moving?'}
         </ThemedText>
       </View>
 
@@ -194,6 +194,11 @@ export default function HomeScreen() {
                 <ThemedText style={styles.venueName} numberOfLines={1}>
                   {gym.name}
                 </ThemedText>
+                 <View style={styles.venueLocation}>
+                  <ThemedText style={styles.venueLocationText} numberOfLines={1}>
+                    {gym.description}
+                  </ThemedText>
+                </View>
                 <View style={styles.venueLocation}>
                   <Ionicons name="location-outline" size={14} color="#666" />
                   <ThemedText style={styles.venueLocationText} numberOfLines={1}>
@@ -275,9 +280,12 @@ export default function HomeScreen() {
                     {formatDate(session.date)} • {session.time}
                   </ThemedText>
                 </View>
+                <View style={styles.classSpots}>
+                <Ionicons name="people-outline" size={18} color="#00a63e"/>
                 <ThemedText style={styles.classSpotsLeft} numberOfLines={1}>
-                  {session.spots_left} Spots left, {session.credits_required} credits required to book
+                  {session.spots_left} Spots left, {session.credits_required} credits required
                 </ThemedText>
+                </View>
               </View>
             </TouchableOpacity>
           ))}
@@ -551,6 +559,12 @@ const styles = StyleSheet.create({
   classTimeText: {
     fontSize: 12,
     color: '#666',
+  },
+  classSpots: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop:5,
   },
   classSpotsLeft: {
     fontSize: 13,
