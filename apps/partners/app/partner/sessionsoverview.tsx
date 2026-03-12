@@ -4,7 +4,7 @@ import {
   TouchableOpacity, 
   View, 
   FlatList,
-  ScrollView,  // ← Added this
+  ScrollView,
   Alert,
   ActivityIndicator,
   RefreshControl,
@@ -14,6 +14,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
+import { Calendar } from 'react-native-calendars';
 
 interface Session {
   id: string;
@@ -41,10 +42,12 @@ export default function SessionsOverviewScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedVenue, setSelectedVenue] = useState<string>('all');
   const [venues, setVenues] = useState<Array<{ id: string; name: string }>>([]);
+  const [showCalendar, setShowCalendar] = useState(true);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
-  }, [filter]);
+  }, [filter, selectedDate]);
 
   useEffect(() => {
     applyFilters();
@@ -96,13 +99,22 @@ export default function SessionsOverviewScreen() {
         .order('time', { ascending: true });
 
       const today = new Date().toISOString().split('T')[0];
+      const oneWeekFromNow = new Date();
+      oneWeekFromNow.setDate(oneWeekFromNow.getDate() + 7);
+      const oneWeekDate = oneWeekFromNow.toISOString().split('T')[0];
 
-      if (filter === 'upcoming') {
-        query = query.gte('date', today);
+      // If a specific date is selected, filter by that date
+      if (selectedDate) {
+        query = query.eq('date', selectedDate);
+      } else if (filter === 'upcoming') {
+        // Default: show next week's sessions
+        query = query.gte('date', today).lte('date', oneWeekDate);
       } else if (filter === 'today') {
         query = query.eq('date', today);
       } else if (filter === 'past') {
         query = query.lt('date', today);
+      } else if (filter === 'all') {
+        // All shows everything (no date filter)
       }
 
       const { data: sessionsData, error } = await query;
@@ -161,6 +173,17 @@ export default function SessionsOverviewScreen() {
     loadData();
   };
 
+  const handleDateSelect = (date: string) => {
+    setSelectedDate(date);
+    setShowCalendar(false);
+    setFilter('all'); // Reset filter when selecting a date
+  };
+
+  const clearDateSelection = () => {
+    setSelectedDate(null);
+    setFilter('upcoming'); // Return to default
+  };
+
   const handleToggleActive = async (sessionId: string, currentStatus: boolean) => {
     try {
       const { error } = await supabase
@@ -214,6 +237,27 @@ export default function SessionsOverviewScreen() {
     const [hours, minutes] = timeString.split(':');
     const hour = parseInt(hours);
     return `${hour % 12 || 12}:${minutes} ${hour >= 12 ? 'PM' : 'AM'}`;
+  };
+
+  // Get marked dates for calendar
+  const getMarkedDates = () => {
+    const marked: any = {};
+    
+    sessions.forEach(session => {
+      if (!marked[session.date]) {
+        marked[session.date] = { marked: true, dotColor: '#002fff' };
+      }
+    });
+
+    if (selectedDate) {
+      marked[selectedDate] = {
+        ...marked[selectedDate],
+        selected: true,
+        selectedColor: '#002fff',
+      };
+    }
+
+    return marked;
   };
 
   const renderSession = ({ item }: { item: Session }) => {
@@ -321,6 +365,49 @@ export default function SessionsOverviewScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Calendar Toggle */}
+      <View style={styles.calendarToggleContainer}>
+        <TouchableOpacity
+          style={styles.calendarToggleButton}
+          onPress={() => setShowCalendar(!showCalendar)}
+        >
+          <Ionicons name="calendar" size={20} color="#002fff" />
+          <ThemedText style={styles.calendarToggleText}>
+            {selectedDate ? `Selected: ${formatDate(selectedDate)}` : 'Select Date'}
+          </ThemedText>
+          <Ionicons 
+            name={showCalendar ? "chevron-up" : "chevron-down"} 
+            size={20} 
+            color="#002fff" 
+          />
+        </TouchableOpacity>
+        {selectedDate && (
+          <TouchableOpacity
+            style={styles.clearDateButton}
+            onPress={clearDateSelection}
+          >
+            <Ionicons name="close-circle" size={20} color="#666" />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Calendar */}
+      {showCalendar && (
+        <View style={styles.calendarContainer}>
+          <Calendar
+            markedDates={getMarkedDates()}
+            onDayPress={(day) => handleDateSelect(day.dateString)}
+            theme={{
+              selectedDayBackgroundColor: '#002fff',
+              selectedDayTextColor: '#fff',
+              todayTextColor: '#002fff',
+              dotColor: '#002fff',
+              arrowColor: '#002fff',
+            }}
+          />
+        </View>
+      )}
+
       {/* Search Bar */}
       <View style={styles.searchContainer}>
         <Ionicons name="search" size={20} color="#999" style={styles.searchIcon} />
@@ -339,42 +426,44 @@ export default function SessionsOverviewScreen() {
       </View>
 
       {/* Filters */}
-      <View style={styles.filtersContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
-          <TouchableOpacity
-            style={[styles.filterChip, filter === 'all' && styles.filterChipActive]}
-            onPress={() => setFilter('all')}
-          >
-            <ThemedText style={[styles.filterText, filter === 'all' && styles.filterTextActive]}>
-              All
-            </ThemedText>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.filterChip, filter === 'today' && styles.filterChipActive]}
-            onPress={() => setFilter('today')}
-          >
-            <ThemedText style={[styles.filterText, filter === 'today' && styles.filterTextActive]}>
-              Today
-            </ThemedText>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.filterChip, filter === 'upcoming' && styles.filterChipActive]}
-            onPress={() => setFilter('upcoming')}
-          >
-            <ThemedText style={[styles.filterText, filter === 'upcoming' && styles.filterTextActive]}>
-              Upcoming
-            </ThemedText>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.filterChip, filter === 'past' && styles.filterChipActive]}
-            onPress={() => setFilter('past')}
-          >
-            <ThemedText style={[styles.filterText, filter === 'past' && styles.filterTextActive]}>
-              Past
-            </ThemedText>
-          </TouchableOpacity>
-        </ScrollView>
-      </View>
+      {!selectedDate && (
+        <View style={styles.filtersContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+            <TouchableOpacity
+              style={[styles.filterChip, filter === 'all' && styles.filterChipActive]}
+              onPress={() => setFilter('all')}
+            >
+              <ThemedText style={[styles.filterText, filter === 'all' && styles.filterTextActive]}>
+                All
+              </ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.filterChip, filter === 'today' && styles.filterChipActive]}
+              onPress={() => setFilter('today')}
+            >
+              <ThemedText style={[styles.filterText, filter === 'today' && styles.filterTextActive]}>
+                Today
+              </ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.filterChip, filter === 'upcoming' && styles.filterChipActive]}
+              onPress={() => setFilter('upcoming')}
+            >
+              <ThemedText style={[styles.filterText, filter === 'upcoming' && styles.filterTextActive]}>
+                Next Week
+              </ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.filterChip, filter === 'past' && styles.filterChipActive]}
+              onPress={() => setFilter('past')}
+            >
+              <ThemedText style={[styles.filterText, filter === 'past' && styles.filterTextActive]}>
+                Past
+              </ThemedText>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      )}
 
       {/* Venue Filter */}
       {venues.length > 1 && (
@@ -421,12 +510,12 @@ export default function SessionsOverviewScreen() {
             <View style={styles.emptyState}>
               <Ionicons name="calendar-outline" size={80} color="#e0e0e0" />
               <ThemedText style={styles.emptyTitle}>
-                {searchQuery ? 'No sessions found' : 'No sessions yet'}
+                {searchQuery ? 'No sessions found' : selectedDate ? 'No sessions on this date' : 'No sessions yet'}
               </ThemedText>
               <ThemedText style={styles.emptySubtitle}>
-                {searchQuery ? 'Try a different search' : 'Create your first session to get started'}
+                {searchQuery ? 'Try a different search' : selectedDate ? 'Try selecting a different date' : 'Create your first session to get started'}
               </ThemedText>
-              {!searchQuery && (
+              {!searchQuery && !selectedDate && (
                 <TouchableOpacity
                   style={styles.emptyButton}
                   onPress={() => router.push('/partner/create-session-select-venue')}
@@ -474,13 +563,48 @@ const styles = StyleSheet.create({
   addButton: {
     padding: 4,
   },
+  calendarToggleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  calendarToggleButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#f0f5ff',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+  },
+  calendarToggleText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#002fff',
+  },
+  clearDateButton: {
+    padding: 8,
+    marginLeft: 8,
+  },
+  calendarContainer: {
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+    paddingBottom: 12,
+  },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
     marginHorizontal: 20,
     marginTop: 16,
-     marginBottom: 16,
+    marginBottom: 16,
     paddingHorizontal: 16,
     borderRadius: 12,
     borderWidth: 1,

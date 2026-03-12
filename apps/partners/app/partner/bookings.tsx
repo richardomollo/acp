@@ -323,7 +323,12 @@ export default function BookingsScreen() {
     }
   };
 
-  const renderBooking = ({ item }: { item: Booking }) => (
+  const renderBooking = ({ item }: { item: Booking }) => {
+  // Check if session is in the past
+  const sessionDateTime = new Date(`${item.session_date}T${item.session_time}`);
+  const isPast = sessionDateTime < new Date();
+
+  return (
     <View style={styles.bookingCard}>
       <View style={styles.bookingHeader}>
         <View style={[
@@ -375,49 +380,56 @@ export default function BookingsScreen() {
         </View>
       </View>
 
-      {/* Actions */}
-      {item.status === 'pending' && (
-        <View style={styles.bookingActions}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.confirmButton]}
-            onPress={() => handleConfirmBooking(item.id, item.user_name)}
-          >
-            <Ionicons name="checkmark" size={18} color="#fff" />
-            <ThemedText style={styles.actionButtonText}>Confirm</ThemedText>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.cancelButton]}
-            onPress={() => handleCancelBooking(item.id, item.user_name)}
-          >
-            <Ionicons name="close" size={18} color="#fff" />
-            <ThemedText style={styles.actionButtonText}>Cancel</ThemedText>
-          </TouchableOpacity>
-        </View>
+      {/* Actions - Only show for future sessions */}
+      {!isPast && (
+        <>
+          {item.status === 'pending' && (
+            <View style={styles.bookingActions}>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.confirmButton]}
+                onPress={() => handleConfirmBooking(item.id, item.user_name)}
+              >
+                <Ionicons name="checkmark" size={18} color="#fff" />
+                <ThemedText style={styles.actionButtonText}>Confirm</ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.cancelButton]}
+                onPress={() => handleCancelBooking(item.id, item.user_name)}
+              >
+                <Ionicons name="close" size={18} color="#fff" />
+                <ThemedText style={styles.actionButtonText}>Cancel</ThemedText>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {item.status === 'confirmed' && (
+            <View style={styles.bookingActions}>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.checkInButton]}
+                onPress={() => handleCheckIn(item.id, item.user_name)}
+              >
+                <Ionicons name="checkmark-circle" size={18} color="#fff" />
+                <ThemedText style={styles.actionButtonText}>Check In</ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.cancelButton]}
+                onPress={() => handleCancelBooking(item.id, item.user_name)}
+              >
+                <Ionicons name="close" size={18} color="#fff" />
+                <ThemedText style={styles.actionButtonText}>Cancel</ThemedText>
+              </TouchableOpacity>
+            </View>
+          )}
+        </>
       )}
 
-      {item.status === 'confirmed' && (
-        <View style={styles.bookingActions}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.checkInButton]}
-            onPress={() => handleCheckIn(item.id, item.user_name)}
-          >
-            <Ionicons name="checkmark-circle" size={18} color="#fff" />
-            <ThemedText style={styles.actionButtonText}>Check In</ThemedText>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.cancelButton]}
-            onPress={() => handleCancelBooking(item.id, item.user_name)}
-          >
-            <Ionicons name="close" size={18} color="#fff" />
-            <ThemedText style={styles.actionButtonText}>Cancel</ThemedText>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {item.status === 'checked_in' && (
+      {/* Status Labels - Always show for completed/cancelled, or for past sessions */}
+      {(item.status === 'checked_in' || (isPast && item.status === 'confirmed')) && (
         <View style={styles.completedBadge}>
           <Ionicons name="checkmark-circle" size={16} color="#00c853" />
-          <ThemedText style={styles.completedText}>Completed</ThemedText>
+          <ThemedText style={styles.completedText}>
+            {item.status === 'checked_in' ? 'Checked In' : 'Completed'}
+          </ThemedText>
         </View>
       )}
 
@@ -427,8 +439,17 @@ export default function BookingsScreen() {
           <ThemedText style={[styles.completedText, { color: '#999' }]}>Cancelled</ThemedText>
         </View>
       )}
+
+      {/* No-show status for past sessions that were confirmed but not checked in */}
+      {isPast && item.status === 'pending' && (
+        <View style={styles.completedBadge}>
+          <Ionicons name="alert-circle" size={16} color="#ff9500" />
+          <ThemedText style={[styles.completedText, { color: '#ff9500' }]}>No Show</ThemedText>
+        </View>
+      )}
     </View>
   );
+};
 
   return (
     <View style={styles.container}>
@@ -452,15 +473,15 @@ export default function BookingsScreen() {
             <ThemedText style={styles.statLabel}>Total</ThemedText>
           </View>
           <View style={styles.statCard}>
-            <ThemedText style={[styles.statValue, { color: '#ff9500' }]}>{stats.pending}</ThemedText>
+            <ThemedText style={[styles.statValue, { color: '#000000' }]}>{stats.pending}</ThemedText>
             <ThemedText style={styles.statLabel}>Pending</ThemedText>
           </View>
           <View style={styles.statCard}>
-            <ThemedText style={[styles.statValue, { color: '#002fff' }]}>{stats.confirmed}</ThemedText>
+            <ThemedText style={[styles.statValue, { color: '#000000' }]}>{stats.confirmed}</ThemedText>
             <ThemedText style={styles.statLabel}>Confirmed</ThemedText>
           </View>
           <View style={styles.statCard}>
-            <ThemedText style={[styles.statValue, { color: '#00c853' }]}>{stats.checked_in}</ThemedText>
+            <ThemedText style={[styles.statValue, { color: '#000000' }]}>{stats.checked_in}</ThemedText>
             <ThemedText style={styles.statLabel}>Checked In</ThemedText>
           </View>
           <View style={styles.statCard}>
@@ -713,7 +734,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8f8f8',
   },
   filterChipActive: {
-    backgroundColor: '#002fff',
+    backgroundColor: '#000000',
   },
   filterText: {
     fontSize: 14,

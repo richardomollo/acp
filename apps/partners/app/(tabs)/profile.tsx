@@ -30,6 +30,7 @@ export default function ProfileSettingsScreen() {
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState<PartnerProfile | null>(null);
   const [editMode, setEditMode] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   
   // Edit form
   const [editForm, setEditForm] = useState({
@@ -55,7 +56,52 @@ export default function ProfileSettingsScreen() {
 
   useEffect(() => {
     loadProfile();
+    loadUnreadCount();
+
+    // Subscribe to notification changes for real-time updates
+    const subscription = supabase
+      .channel('notification_changes')
+      .on('postgres_changes', 
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'partner_notifications' 
+        }, 
+        () => {
+          loadUnreadCount();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
+
+  const loadUnreadCount = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: partner } = await supabase
+        .from('partners')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!partner) return;
+
+      const { count } = await supabase
+        .from('partner_notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('partner_id', partner.id)
+        .eq('read', false);
+
+      setUnreadCount(count || 0);
+    } catch (error) {
+      console.error('Load unread count error:', error);
+    }
+  };
 
   const loadProfile = async () => {
     try {
@@ -508,13 +554,37 @@ export default function ProfileSettingsScreen() {
         {/* Account Actions */}
         <View style={styles.section}>
           <ThemedText style={styles.sectionTitle}>Account</ThemedText>
+
+          {/* Notifications Center - UPDATED */}
+          <TouchableOpacity 
+            style={styles.actionItem} 
+            onPress={() => router.push('/notifications' as any)}
+          >
+            <View style={styles.actionIcon}>
+              <Ionicons name="notifications-outline" size={22} color="#002fff" />
+              {unreadCount > 0 && (
+                <View style={styles.notificationBadge}>
+                  <ThemedText style={styles.notificationBadgeText}>
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </ThemedText>
+                </View>
+              )}
+            </View>
+            <View style={styles.actionContent}>
+              <ThemedText style={styles.actionLabel}>Notifications Center</ThemedText>
+              <ThemedText style={styles.actionDescription}>
+                {unreadCount > 0 ? `${unreadCount} unread notification${unreadCount !== 1 ? 's' : ''}` : 'View all notifications'}
+              </ThemedText>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#999" />
+          </TouchableOpacity>
           
           <TouchableOpacity 
             style={styles.actionItem} 
             onPress={() => router.push('/partner/payout-information')}
           >
             <View style={styles.actionIcon}>
-              <Ionicons name="card-outline" size={22} color="#00c853" />
+              <Ionicons name="card-outline" size={22} color="#000000" />
             </View>
             <View style={styles.actionContent}>
               <ThemedText style={styles.actionLabel}>Payout Information</ThemedText>
@@ -525,7 +595,7 @@ export default function ProfileSettingsScreen() {
 
           <TouchableOpacity style={styles.actionItem} onPress={handleChangePassword}>
             <View style={styles.actionIcon}>
-              <Ionicons name="lock-closed-outline" size={22} color="#002fff" />
+              <Ionicons name="lock-closed-outline" size={22} color="#000000" />
             </View>
             <View style={styles.actionContent}>
               <ThemedText style={styles.actionLabel}>Change Password</ThemedText>
@@ -536,7 +606,7 @@ export default function ProfileSettingsScreen() {
 
           <TouchableOpacity style={styles.actionItem} onPress={handleLogout}>
             <View style={styles.actionIcon}>
-              <Ionicons name="log-out-outline" size={22} color="#ff9500" />
+              <Ionicons name="log-out-outline" size={22} color="#000000" />
             </View>
             <View style={styles.actionContent}>
               <ThemedText style={styles.actionLabel}>Logout</ThemedText>
@@ -565,7 +635,7 @@ export default function ProfileSettingsScreen() {
           
           <TouchableOpacity style={styles.actionItem}>
             <View style={styles.actionIcon}>
-              <Ionicons name="help-circle-outline" size={22} color="#00c853" />
+              <Ionicons name="help-circle-outline" size={22} color="#000000" />
             </View>
             <View style={styles.actionContent}>
               <ThemedText style={styles.actionLabel}>Help Center</ThemedText>
@@ -576,7 +646,7 @@ export default function ProfileSettingsScreen() {
 
           <TouchableOpacity style={styles.actionItem}>
             <View style={styles.actionIcon}>
-              <Ionicons name="chatbubble-outline" size={22} color="#002fff" />
+              <Ionicons name="chatbubble-outline" size={22} color="#000000" />
             </View>
             <View style={styles.actionContent}>
               <ThemedText style={styles.actionLabel}>Contact Support</ThemedText>
@@ -853,6 +923,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+    position: 'relative',
   },
   actionContent: {
     flex: 1,
@@ -874,5 +945,25 @@ const styles = StyleSheet.create({
   versionText: {
     fontSize: 13,
     color: '#999',
+  },
+  // NEW STYLES - Notification badge
+  notificationBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    backgroundColor: '#ff3b30',
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  notificationBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fff',
   },
 });

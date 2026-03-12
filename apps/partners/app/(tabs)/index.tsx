@@ -32,6 +32,12 @@ interface UpcomingSession {
   max_capacity: number;
 }
 
+interface Venue {
+  id: string;
+  name: string;
+  rate_floor: number | null;
+}
+
 export default function PartnerDashboardScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -46,6 +52,7 @@ export default function PartnerDashboardScreen() {
   });
   const [upcomingSessions, setUpcomingSessions] = useState<UpcomingSession[]>([]);
   const [partnerName, setPartnerName] = useState('Partner');
+  const [venuesWithoutSmartRate, setVenuesWithoutSmartRate] = useState<Venue[]>([]);
 
   useEffect(() => {
     loadDashboardData();
@@ -75,13 +82,20 @@ export default function PartnerDashboardScreen() {
 
       setPartnerName(partner.business_name || partner.email?.split('@')[0] || 'Partner');
 
-      // Get partner's gyms
+      // Get partner's gyms with rate_floor info
       const { data: partnerGyms } = await supabase
         .from('partner_gyms')
-        .select('gym_id, gyms(id, name)')
+        .select('gym_id, gyms(id, name, rate_floor)')
         .eq('partner_id', partner.id);
 
       const gymIds = partnerGyms?.map(pg => pg.gym_id) || [];
+      
+      // Check for venues without SmartRate (no rate_floor)
+      const venuesNoSmartRate = partnerGyms
+        ?.map(pg => (pg.gyms as any))
+        .filter((gym: any) => !gym.rate_floor) || [];
+      
+      setVenuesWithoutSmartRate(venuesNoSmartRate);
 
       // Get stats
       const today = new Date().toISOString().split('T')[0];
@@ -93,15 +107,16 @@ export default function PartnerDashboardScreen() {
         .select('*', { count: 'exact', head: true })
         .in('gym_id', gymIds);
 
-      // Upcoming sessions
+      // Upcoming sessions (NEXT WEEK ONLY)
       const { count: upcomingSessions } = await supabase
         .from('sessions')
         .select('*', { count: 'exact', head: true })
         .in('gym_id', gymIds)
         .gte('date', today)
+        .lte('date', weekFromNow)
         .eq('is_active', true);
 
-      // Get upcoming sessions details
+      // Get upcoming sessions details (NEXT WEEK ONLY)
       const { data: upcomingSessionsList } = await supabase
         .from('sessions')
         .select(`
@@ -114,6 +129,7 @@ export default function PartnerDashboardScreen() {
         `)
         .in('gym_id', gymIds)
         .gte('date', today)
+        .lte('date', weekFromNow)
         .eq('is_active', true)
         .order('date', { ascending: true })
         .order('time', { ascending: true })
@@ -276,7 +292,7 @@ export default function PartnerDashboardScreen() {
             <View style={styles.statCard}>
               <Ionicons name="calendar-outline" size={24} color="#000" />
               <ThemedText style={styles.statValue}>{stats.upcomingSessions}</ThemedText>
-              <ThemedText style={styles.statLabel}>Upcoming</ThemedText>
+              <ThemedText style={styles.statLabel}>Next Week</ThemedText>
             </View>
 
             <View style={styles.statCard}>
@@ -365,7 +381,33 @@ export default function PartnerDashboardScreen() {
         {/* Quick Links */}
         <View style={styles.section}>
           <ThemedText style={styles.sectionTitle}>Quick Links</ThemedText>
-           <TouchableOpacity
+
+          {/* SmartRate CTA - Show if venues without rate floor */}
+          {venuesWithoutSmartRate.length > 0 && (
+            <TouchableOpacity
+              style={styles.smartRateCTA}
+              onPress={() => {
+                // Navigate to first venue without SmartRate
+                const firstVenue = venuesWithoutSmartRate[0];
+                router.push(`/partner/rate-floor/${firstVenue.id}`);
+              }}
+            >
+              <View style={styles.smartRateCTAIcon}>
+                <Ionicons name="flash" size={24} color="#fff" />
+              </View>
+              <View style={styles.smartRateCTAContent}>
+                <ThemedText style={styles.smartRateCTATitle}>
+                  ⚡ Activate SmartRate Pricing
+                </ThemedText>
+                <ThemedText style={styles.smartRateCTASubtitle}>
+                  {venuesWithoutSmartRate.length} venue{venuesWithoutSmartRate.length > 1 ? 's' : ''} not using dynamic pricing
+                </ThemedText>
+              </View>
+              <Ionicons name="arrow-forward" size={20} color="#fff" />
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
             style={styles.linkCard}
             onPress={() => router.push('/partner/payout-information')}
           >
@@ -396,20 +438,6 @@ export default function PartnerDashboardScreen() {
             </View>
             <Ionicons name="chevron-forward" size={20} color="#999" />
           </TouchableOpacity>
-
-          {/* <TouchableOpacity
-            style={styles.linkCard}
-            onPress={() => router.push('/partner/analytics')}
-          >
-            <View style={styles.linkIcon}>
-              <Ionicons name="stats-chart" size={24} color="#00c853" />
-            </View>
-            <View style={styles.linkContent}>
-              <ThemedText style={styles.linkTitle}>Analytics</ThemedText>
-              <ThemedText style={styles.linkSubtitle}>View performance</ThemedText>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#999" />
-          </TouchableOpacity> */}
 
           <TouchableOpacity
             style={styles.linkCard}
@@ -528,29 +556,32 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   statCard: {
-    flex: 1,
-    minWidth: '47%',
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 16,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  statValue: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#000',
-    marginTop: 8,
-  },
-  statLabel: {
-    fontSize: 13,
-    color: '#666',
-    marginTop: 4,
-  },
+  flex: 1,
+  minWidth: '47%',
+  backgroundColor: '#fff',
+  padding: 16,
+  borderRadius: 16,
+  alignItems: 'center',
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.05,
+  shadowRadius: 8,
+  elevation: 2,
+  minHeight: 120,  // ← Add this to prevent truncation
+},
+statValue: {
+  fontSize: 28,
+  fontWeight: '800',
+  color: '#000',
+  marginTop: 8,
+  lineHeight: 34,  // ← Add this for proper spacing
+},
+statLabel: {
+  fontSize: 13,
+  color: '#666',
+  marginTop: 4,
+  textAlign: 'center',  // ← Add this
+},
   sessionCard: {
     backgroundColor: '#fff',
     borderRadius: 16,
@@ -626,6 +657,42 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#00c853',
+  },
+  smartRateCTA: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#002fff',
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 12,
+    marginTop: 12,
+    shadowColor: '#002fff',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  smartRateCTAIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  smartRateCTAContent: {
+    flex: 1,
+  },
+  smartRateCTATitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  smartRateCTASubtitle: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.9)',
   },
   linkCard: {
     flexDirection: 'row',

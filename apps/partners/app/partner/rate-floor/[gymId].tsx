@@ -246,7 +246,7 @@ export default function RateFloorNegotiationScreen() {
             <ThemedText style={styles.infoTitle}>How SmartRate Works</ThemedText>
           </View>
           <ThemedText style={styles.infoText}>
-            FitPass uses dynamic pricing to optimize fill rates. You set a <ThemedText style={styles.highlight}>rate floor</ThemedText> - the minimum payout you'll accept per booking.
+            Active City Pass uses dynamic pricing to optimize fill rates. You set a <ThemedText style={styles.highlight}>rate floor</ThemedText> - the minimum payout you'll accept per booking.
           </ThemedText>
           <ThemedText style={styles.infoText}>
             The platform adjusts credit costs based on demand, but <ThemedText style={styles.highlight}>always ensures your payout meets or exceeds your floor</ThemedText>.

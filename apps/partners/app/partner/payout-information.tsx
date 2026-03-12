@@ -350,7 +350,7 @@ export default function PayoutInformationScreen() {
             <View style={styles.balanceDivider} />
             <View style={styles.balanceItem}>
               <ThemedText style={styles.balanceLabel}>Pending</ThemedText>
-              <ThemedText style={[styles.balanceValue, { color: '#ff9500' }]}>
+              <ThemedText style={[styles.balanceValue, { color: '#000000' }]}>
                 KES {stats.pending_balance.toLocaleString()}
               </ThemedText>
             </View>
@@ -620,7 +620,7 @@ export default function PayoutInformationScreen() {
               <Switch
                 value={editForm.auto_payout}
                 onValueChange={(value) => setEditForm({ ...editForm, auto_payout: value })}
-                trackColor={{ false: '#e0e0e0', true: '#00A86B' }}
+                trackColor={{ false: '#e0e0e0', true: '#004cfe' }}
                 thumbColor="#fff"
               />
             </View>
@@ -877,7 +877,7 @@ const styles = StyleSheet.create({
   balanceValue: {
     fontSize: 24,
     fontWeight: '800',
-    color: '#00c853',
+    color: '#000',
   },
   balanceDivider: {
     width: 1,
