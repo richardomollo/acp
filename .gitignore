@@ -57,3 +57,4 @@ out
 # OS files
 .DS_Store
 
+*.apk
