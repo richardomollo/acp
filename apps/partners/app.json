@@ -1,48 +1,54 @@
 {
   "expo": {
     "name": "A.City partners",
-    "slug": "Active City partners",
+    "slug": "acitypass-partner",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "partners",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.activecity.partners",
+      "bundleIdentifier": "com.activecitypass.com.fitpass.partner",
       "infoPlist": {
         "UIBackgroundModes": [
           "remote-notification"
-        ]
+        ],
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "Camera is used to scan session QR codes"
       }
     },
+
     "android": {
-      "package": "com.activecity.partners",
-      "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
-      },
+      "package": "com.activecitypass.com.fitpass.partner",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "RECEIVE_BOOT_COMPLETED",
         "VIBRATE",
         "POST_NOTIFICATIONS"
-      ]
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      }
     },
+
     "web": {
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
+
     "notification": {
-      "icon": "./assets/images/notification-icon.png",
       "color": "#002fff",
       "androidMode": "default",
       "androidCollapsedTitle": "{{unread_count}} new notifications"
     },
+
     "plugins": [
       "expo-router",
       [
@@ -61,20 +67,23 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/notification-icon.png",
           "color": "#002fff",
           "sounds": [],
           "mode": "production"
         }
       ]
     ],
+
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
     },
+
     "extra": {
+      "supabaseUrl": "https://kdmhmkwzanqnwehcddvr.supabase.co",
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtkbWhta3d6YW5xbndlaGNkZHZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5OTI1NjMsImV4cCI6MjA4MzU2ODU2M30.j_Hy6AdylKECnp_f61EIl1B-_MgZ0VlF8RFNBKOz5_o",
       "eas": {
-        "projectId": "your-project-id-here"
+        "projectId": "5a285550-b084-4664-9b47-a12ad804ff95"
       }
     }
   }
