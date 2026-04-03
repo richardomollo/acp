@@ -8,19 +8,19 @@
     "scheme": "partners",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.activecitypass.com.fitpass.partner",
+      "appleTeamId": "XC8HZKA63A",
       "infoPlist": {
         "UIBackgroundModes": [
+          "remote-notification",
           "remote-notification"
         ],
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Camera is used to scan session QR codes"
       }
     },
-
     "android": {
       "package": "com.activecitypass.com.fitpass.partner",
       "edgeToEdgeEnabled": true,
@@ -37,18 +37,15 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       }
     },
-
     "web": {
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
-
     "notification": {
       "color": "#002fff",
       "androidMode": "default",
       "androidCollapsedTitle": "{{unread_count}} new notifications"
     },
-
     "plugins": [
       "expo-router",
       [
@@ -73,18 +70,18 @@
         }
       ]
     ],
-
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
     },
-
     "extra": {
       "supabaseUrl": "https://kdmhmkwzanqnwehcddvr.supabase.co",
       "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtkbWhta3d6YW5xbndlaGNkZHZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5OTI1NjMsImV4cCI6MjA4MzU2ODU2M30.j_Hy6AdylKECnp_f61EIl1B-_MgZ0VlF8RFNBKOz5_o",
       "eas": {
         "projectId": "5a285550-b084-4664-9b47-a12ad804ff95"
-      }
-    }
+      },
+      "router": {}
+    },
+    "owner": "acitypass"
   }
 }

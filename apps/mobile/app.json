@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "A.CityPass",
-    "slug": "acity-pass",
+    "slug": "acitypass",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -10,7 +10,10 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.Active-City-Pass"
+      "bundleIdentifier": "com.anonymous.Active-City-Pass",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -49,9 +52,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "032ca33b-1213-4541-b3a3-1d319761c70c"
+        "projectId": "9536944f-7807-4389-add0-706446f3ae81"
       }
     },
-    "owner": "romollo"
+    "owner": "acitypass"
   }
 }
