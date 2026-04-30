@@ -9,15 +9,15 @@ export default function Footer() {
                 </p>
             </div>
             <div className="flex-1 flex items-start md:justify-end gap-20">
-                <div>
-                    {/* <h2 className="font-semibold mb-5 text-gray-800">Company</h2>
+                 {/*<div>
+                    <h2 className="font-semibold mb-5 text-gray-800">Company</h2>
                     <ul className="text-sm space-y-2">
                         <li><a href="#">Home</a></li>
                         <li><a href="#">About us</a></li>
                         <li><a href="#">Contact us</a></li>
                          <li><a href="/partners/signup">Become a Partner</a></li>
-                    </ul> */}
-                </div>
+                    </ul> 
+                </div>*/}
                 <div>
                     <h2 className="font-semibold mb-5 text-gray-800">Get in touch</h2>
                     <div className="text-sm space-y-2">
