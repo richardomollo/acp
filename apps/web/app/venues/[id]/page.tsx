@@ -3,6 +3,7 @@ import { supabase } from "../../lib/supabase";
 import { notFound } from "next/navigation";
 import GymGallery from "@/app/components/GymGallery";
 import Link from "next/link";
+import VenueSessionsFilter from "./VenueSessionsFilter";
 
 
 
@@ -42,29 +43,37 @@ export default async function GymDetailPage({ params }: Props) {
   }
   
 
-  // Fetch sessions (add this after fetching the gym)
-const { data: sessions, error: sessionsError } = await supabase
-  .from("sessions")
-  .select(`
-    id,
-    name,
-    category,
-    date,
-    time,
-    duration_minutes,
-    instructor,
-    spots_left,
-    max_capacity,
-    image_url,
-    credits_required
-  `)
-  .eq("gym_id", id)
-  .order("date", { ascending: true })
-  .order("time", { ascending: true });
+  const todayStr = new Date().toISOString().split("T")[0];
+  const windowEndStr = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 14);
+    return d.toISOString().split("T")[0];
+  })();
 
-if (sessionsError) {
-  console.error("Error fetching sessions:", sessionsError);
-}
+  const { data: sessions, error: sessionsError } = await supabase
+    .from("sessions")
+    .select(`
+      id,
+      name,
+      category,
+      date,
+      time,
+      duration_minutes,
+      instructor,
+      spots_left,
+      max_capacity,
+      image_url,
+      credits_required
+    `)
+    .eq("gym_id", id)
+    .gte("date", todayStr)
+    .lte("date", windowEndStr)
+    .order("date", { ascending: true })
+    .order("time", { ascending: true });
+
+  if (sessionsError) {
+    console.error("Error fetching sessions:", sessionsError);
+  }
 
   return (
     <div className="max-w-7h-[70px]  w-full px-6 md:px-16 lg:px-24 xl:px-32  items-center= z-20  mx-auto px-6 py-12">
@@ -86,9 +95,9 @@ if (sessionsError) {
     name={gym.name}
     images={[
       gym.image_url,
-      "https://raw.githubusercontent.com/prebuiltui/prebuiltui/main/assets/gallery/slide1.png",
-      "https://raw.githubusercontent.com/prebuiltui/prebuiltui/main/assets/gallery/slide2.png",
-      "https://raw.githubusercontent.com/prebuiltui/prebuiltui/main/assets/gallery/slide3.png",
+      // "https://raw.githubusercontent.com/prebuiltui/prebuiltui/main/assets/gallery/slide1.png",
+      // "https://raw.githubusercontent.com/prebuiltui/prebuiltui/main/assets/gallery/slide2.png",
+      // "https://raw.githubusercontent.com/prebuiltui/prebuiltui/main/assets/gallery/slide3.png",
     ].filter(Boolean)}
   />
   </div>
@@ -97,49 +106,11 @@ if (sessionsError) {
       
       <p className="mt-6 text-sm text-gray-600 leading-relaxed">{gym.description}</p>
       {/* CLASSES / SESSIONS */}
-{sessions && sessions.length > 0 ? (
-  <div className="mt-12">
-    <h2 className="text-xl font-semibold mb-4">
-      Classes offered
-    </h2>
-
-    <ul className="grid gap-4 sm:grid-cols-5">
-      {sessions.map((session) => (
-          <div key={session.id} className="bg-white rounded-xl pb-4 overflow-hidden border border-gray-200 hover:-translate-y-1 transition duration-300">
-            <div className="relative h-35 w-full">
-              {session.image_url && (
-                
-                <Link
-                   href={`/sessions/${session.id}`}>
-                  <img
-                    src={session.image_url}
-                    alt={session.name}
-                    className="w-full h-35 object-cover object-top" />
-                </Link>
-              )}
-            </div>
-            <div className="flex flex-col p-6">
-              <h2 className="text-m font-semibold">{session.name} - {session.category}, {session.duration_minutes} min</h2>
-              {/* {session.description && (
-                <p className="text-sm">
-                  {session.description}
-                </p>
-              )} */}
-              <p className="text-sm text-gray-600">{session.instructor}</p>
-              <p className="text-sm text-gray-600">{session.duration_minutes} min</p>
-              <p className="text-sm text-gray-600 mb-2"> {session.spots_left} spots left out of {session.max_capacity}</p>
-              <p className="text-sm text-gray-700">
-               📅 {new Date(session.date).toLocaleDateString()} · 🕒 {session.time}
-              </p>
-              <p className="text-sm text-gray"> Credits required to book: {session.credits_required}</p>
-            </div>
-          </div>
-      ))}
-    </ul>
-  </div>
-) : (
-  <p className="mt-6 text-gray-500">No classes available at this gym yet.</p>
-)}
+      {sessions && sessions.length > 0 ? (
+        <VenueSessionsFilter sessions={sessions} />
+      ) : (
+        <p className="mt-6 text-gray-500">No classes available at this gym yet.</p>
+      )}
 
 
       {/* IMAGE */}

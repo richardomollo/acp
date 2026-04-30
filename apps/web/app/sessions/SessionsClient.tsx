@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "../lib/supabase";
 
-// Type for sessions with gym data
 type Session = {
   id: string;
   name: string;
@@ -39,13 +38,23 @@ function useDebounce<T>(value: T, delay = 400): T {
   return debounced;
 }
 
+function parseSessionDateTime(session: Session): Date | null {
+  const dateStr = session.date ?? new Date().toISOString().split("T")[0];
+  const timeStr = session.time?.includes(":") ? session.time : `${session.time}:00`;
+  const dt = new Date(`${dateStr}T${timeStr}`);
+  return isNaN(dt.getTime()) ? null : dt;
+}
+
+function toDateStr(d: Date): string {
+  return d.toISOString().split("T")[0];
+}
+
 /* ---------------- Page ---------------- */
 
 export default function SessionsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  /* URL-based state */
   const qParam = searchParams.get("q") ?? "";
   const catParam = searchParams.get("cat") ?? "All";
   const locParam = searchParams.get("loc") ?? "All";
@@ -56,6 +65,41 @@ export default function SessionsPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Today at midnight — stable reference
+  const today = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+
+  const todayStr = useMemo(() => toDateStr(today), [today]);
+
+  // Next-hour boundary — used to hide sessions that have already passed today
+  const windowStart = useMemo(() => {
+    const d = new Date();
+    d.setHours(d.getHours() + 1, 0, 0, 0);
+    return d;
+  }, []);
+
+  // 7-day window end
+  const windowEnd = useMemo(() => {
+    const d = new Date(today);
+    d.setDate(d.getDate() + 14);
+    d.setHours(23, 59, 59, 999);
+    return d;
+  }, [today]);
+
+  // Day strip: today + next 6 days
+  const days = useMemo(() => {
+    return Array.from({ length: 14 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() + i);
+      return d;
+    });
+  }, [today]);
+
+  const [selectedDay, setSelectedDay] = useState<string>(todayStr);
 
   /* ---------------- Fetch ---------------- */
 
@@ -75,6 +119,9 @@ export default function SessionsPage() {
               type
             )
           `)
+          .gte("date", todayStr)
+          .lte("date", toDateStr(windowEnd))
+          .order("date", { ascending: true })
           .order("time", { ascending: true });
 
         if (fetchError) {
@@ -82,8 +129,6 @@ export default function SessionsPage() {
           setError("Failed to load sessions");
           setSessions([]);
         } else {
-          console.log("Raw Supabase data:", data);
-          console.log("First session gyms:", data?.[0]?.gyms);
           setSessions(data ?? []);
         }
       } catch (err) {
@@ -96,7 +141,7 @@ export default function SessionsPage() {
     };
 
     fetchSessions();
-  }, []);
+  }, [todayStr, windowEnd]);
 
   /* ---------------- URL Sync ---------------- */
 
@@ -108,52 +153,54 @@ export default function SessionsPage() {
     if (locParam !== "All") params.set("loc", locParam);
 
     const queryString = params.toString();
-    router.replace(queryString ? `?${queryString}` : "/sessions", { 
-      scroll: false 
+    router.replace(queryString ? `?${queryString}` : "/sessions", {
+      scroll: false,
     });
   }, [debouncedSearch, catParam, locParam, router]);
 
   /* ---------------- Filters ---------------- */
 
   const categories = useMemo(() => {
-    const cats = sessions
-      .map(s => s.category)
-      .filter(Boolean);
+    const cats = sessions.map((s) => s.category).filter(Boolean);
     return ["All", ...new Set(cats)];
   }, [sessions]);
 
   const locations = useMemo(() => {
-    const locs = sessions
-      .map(s => s.gyms?.location)
-      .filter(Boolean);
+    const locs = sessions.map((s) => s.gyms?.location).filter(Boolean);
     return ["All", ...new Set(locs)];
   }, [sessions]);
 
   const filteredSessions = useMemo(() => {
     return sessions.filter((s) => {
+      const sessionDate = s.date ?? todayStr;
+
+      // Day strip filter
+      if (sessionDate !== selectedDay) return false;
+
+      // For today: hide sessions that have already passed (before next full hour)
+      if (selectedDay === todayStr) {
+        const dt = parseSessionDateTime(s);
+        if (dt && dt < windowStart) return false;
+      }
+
       const matchesSearch =
         !debouncedSearch ||
         s.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
         s.description?.toLowerCase().includes(debouncedSearch.toLowerCase());
 
-      const matchesCategory =
-        catParam === "All" || s.category === catParam;
-
-      const matchesLocation =
-        locParam === "All" || s.gyms?.location === locParam;
+      const matchesCategory = catParam === "All" || s.category === catParam;
+      const matchesLocation = locParam === "All" || s.gyms?.location === locParam;
 
       return matchesSearch && matchesCategory && matchesLocation;
     });
-  }, [sessions, debouncedSearch, catParam, locParam]);
+  }, [sessions, debouncedSearch, catParam, locParam, selectedDay, todayStr, windowStart]);
 
-  /* ---------------- Clear Filters ---------------- */
+  /* ---------------- Helpers ---------------- */
 
   const clearFilters = () => {
     setSearch("");
     router.replace("/sessions");
   };
-
-  /* ---------------- Handlers ---------------- */
 
   const handleCategoryChange = (value: string) => {
     const params = new URLSearchParams();
@@ -196,9 +243,42 @@ export default function SessionsPage() {
   return (
     <div className="max-w-7h-[70px]  w-full px-6 md:px-16 lg:px-24 xl:px-32  items-center= z-20  mx-auto px-6 py-12 ">
 
-      <h1 className="text-xl font-bold mb-8">
+      <h1 className="text-xl font-bold mb-6">
         All Activities, Classes and Wellness Sessions
       </h1>
+
+      {/* Day strip */}
+      <div className="flex gap-2 overflow-x-auto pb-2 mb-8 scrollbar-hide">
+        {days.map((d) => {
+          const ds = toDateStr(d);
+          const isSelected = ds === selectedDay;
+          const isToday = ds === todayStr;
+          const dayLabel = isToday
+            ? "Today"
+            : d.toLocaleDateString("en-US", { weekday: "short" });
+          const dateLabel = d.toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+          });
+
+          return (
+            <button
+              key={ds}
+              onClick={() => setSelectedDay(ds)}
+              className={`flex flex-col items-center px-5 py-2.5 rounded-xl border text-sm font-medium whitespace-nowrap transition-colors flex-shrink-0 ${
+                isSelected
+                  ? "bg-[#050040] text-white border-[#050040]"
+                  : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+              }`}
+            >
+              <span className={`text-xs ${isSelected ? "text-blue-200" : "text-gray-400"}`}>
+                {dayLabel}
+              </span>
+              <span className="font-semibold">{dateLabel}</span>
+            </button>
+          );
+        })}
+      </div>
 
       {/* Filters */}
       <div className="grid gap-4 mb-8 sm:grid-cols-2 lg:grid-cols-6">
@@ -303,9 +383,9 @@ export default function SessionsPage() {
                     {s.name}
                   </h2>
                 </Link>
-                
+
                 <p className="text-sm text-gray">{s.category}, Instructor: {s.instructor}</p>
-                
+
                 <div className="flex items-center text-sm text-gray-500">
                   <svg
                     className="w-4 h-4 mr-1"
@@ -320,7 +400,7 @@ export default function SessionsPage() {
                       d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                     />
                   </svg>
-                  {s.time} for {s.duration_minutes} minutes 
+                  {s.time} for {s.duration_minutes} minutes
                 </div>
 
                 {s.gyms && (
@@ -350,10 +430,6 @@ export default function SessionsPage() {
                   </div>
                 )}
 
-               
-
-                
-
                 {s.spots_left !== undefined && (
                   <p className="text-sm font-medium text-gray-700">
                     {s.spots_left > 0 ? (
@@ -367,7 +443,7 @@ export default function SessionsPage() {
                 )}
 
                 <button className="flex items-center gap-2 text-grey-200 text-sm rounded-full py-1">
-                <Link href={`/sessions/${s.id}`}> View Activity Details </Link>
+                  <Link href={`/sessions/${s.id}`}> View Activity Details </Link>
                   <svg
                     width="6"
                     height="8"
@@ -383,7 +459,7 @@ export default function SessionsPage() {
                       strokeLinejoin="round"
                     />
                   </svg>
-                 </button>
+                </button>
               </div>
             </li>
           ))}
@@ -391,4 +467,4 @@ export default function SessionsPage() {
       )}
     </div>
   );
-}// Force new chunk
+}
