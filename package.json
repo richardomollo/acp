@@ -5,6 +5,7 @@
     "apps/*"
   ],
   "scripts": {
+    "build": "cd apps/web && npm run build",
     "dev:web": "pnpm --filter web dev",
     "dev:mobile": "pnpm --filter mobile start"
   }
