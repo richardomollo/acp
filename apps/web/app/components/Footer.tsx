@@ -5,18 +5,18 @@ export default function Footer() {
             <div className="md:max-w-96">
                 <h1 className="text-2xl font-semibold text-gray-800">Active CityPass</h1>
                 <p className="mt-6 text-sm">
-                    The most flexible sports and wellness membership in Nairobi. Access 50+ activities for individuals, partners, kids, and families — train, play, and unwind anytime, anywhere.
+                    The most flexible sports and wellness membership in Nairobi. Activities for individuals, partners, kids, and families — train, play, and unwind anytime, anywhere.
                 </p>
             </div>
             <div className="flex-1 flex items-start md:justify-end gap-20">
                 <div>
-                    <h2 className="font-semibold mb-5 text-gray-800">Company</h2>
+                    {/* <h2 className="font-semibold mb-5 text-gray-800">Company</h2>
                     <ul className="text-sm space-y-2">
                         <li><a href="#">Home</a></li>
                         <li><a href="#">About us</a></li>
                         <li><a href="#">Contact us</a></li>
                          <li><a href="/partners/signup">Become a Partner</a></li>
-                    </ul>
+                    </ul> */}
                 </div>
                 <div>
                     <h2 className="font-semibold mb-5 text-gray-800">Get in touch</h2>
@@ -27,7 +27,7 @@ export default function Footer() {
             </div>
         </div>
         <p className="pt-4 text-center text-xs md:text-sm pb-5">
-            Copyright 2025 © <a href="#">Active CityPass</a>. All Right Reserved.
+            Copyright 2026 © <a href="#">Active CityPass</a>. All Right Reserved.
         </p>
     </footer>
   );

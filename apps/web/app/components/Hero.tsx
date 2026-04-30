@@ -25,8 +25,7 @@ export default function Hero() {
         </h2>
 
         <p className="mt-6 text-m md:text-base mx-auto max-w-2xl  text-white text-center max-md:px-2">
-          The most flexible sports and wellness membership in Nairobi. Access 50+
-          activities for individuals, partners, kids, and families — train,
+          The most flexible sports and wellness membership in Nairobi. Activities for individuals, partners, kids, and families — train,
           play, and unwind anytime, anywhere.
         </p>
 

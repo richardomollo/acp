@@ -242,6 +242,10 @@ export default async function SessionDetailPage({ params }: Props) {
               )}
             </div>
           </div>
+          {/* Booking Section */}
+          <div className="bg-white">
+            <BookButton session={session} isBooked={isBooked} />
+          </div>
         </div>
 
         {/* Sidebar */}
@@ -357,10 +361,7 @@ export default async function SessionDetailPage({ params }: Props) {
             </div>
           )}
 
-          {/* Booking Section */}
-          <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-            <BookButton session={session} isBooked={isBooked} />
-          </div>
+          
         </div>
       </div>
     </div>

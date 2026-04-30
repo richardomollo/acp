@@ -115,12 +115,13 @@ export default function VenueSessionsFilter({
               href={`/sessions/${session.id}`}
               className="bg-white rounded-xl pb-4 overflow-hidden border border-gray-200 hover:-translate-y-1 transition duration-300 block"
             >
-              <div className="relative h-35 w-full">
+              <div className="relative h-35 w-full bg-gradient-to-br from-gray-100 to-gray-200">
                 {session.image_url && (
                   <img
                     src={session.image_url}
                     alt={session.name}
                     className="w-full h-35 object-cover object-top"
+                    onError={(e) => { e.currentTarget.style.display = "none"; }}
                   />
                 )}
               </div>
