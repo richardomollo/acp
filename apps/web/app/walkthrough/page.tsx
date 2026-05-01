@@ -272,7 +272,7 @@ export default function WalkthroughPage() {
         >
           {/* Illustration */}
           <div className="w-full max-w-[260px] mb-8">
-            {slide.illustration}
+            {/* {slide.illustration} */}
           </div>
 
           {/* Text */}
