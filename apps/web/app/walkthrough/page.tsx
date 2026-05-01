@@ -6,7 +6,7 @@ import Link from "next/link";
 const SLIDES = [
   {
     // id: 1,
-    // accent: "#000000",
+    accent: "#000000",
     // illustration: (
     //   <svg viewBox="0 0 320 280" fill="none" className="w-full max-w-xs mx-auto">
     //     <rect x="20" y="160" width="40" height="100" rx="4" fill="#c7d2fe" opacity=".4"/>
@@ -32,7 +32,7 @@ const SLIDES = [
   },
   {
     // id: 2,
-    // accent: "#000000",
+    accent: "#000000",
     // illustration: (
     //   <svg viewBox="0 0 320 280" fill="none" className="w-full max-w-xs mx-auto">
     //     <circle cx="160" cy="140" r="90" fill="#bae6fd" opacity=".2"/>
@@ -61,7 +61,7 @@ const SLIDES = [
   },
   {
     // id: 3,
-    // accent: "#000000",
+    accent: "#000000",
     // illustration: (
     //   <svg viewBox="0 0 320 280" fill="none" className="w-full max-w-xs mx-auto">
     //     <rect x="105" y="20" width="110" height="200" rx="18" fill="#d1fae5" stroke="#10b981" strokeWidth="2"/>
@@ -92,7 +92,7 @@ const SLIDES = [
   },
   {
     // id: 4,
-    // accent: "#000000",
+    accent: "#000000",
     // illustration: (
     //   <svg viewBox="0 0 320 280" fill="none" className="w-full max-w-xs mx-auto">
     //     <circle cx="160" cy="120" r="55" fill="#ede9fe" opacity=".5"/>
@@ -126,7 +126,7 @@ const SLIDES = [
   },
   {
     // id: 5,
-    // accent: "#050040",
+    accent: "#050040",
     // illustration: (
     //   <svg viewBox="0 0 320 280" fill="none" className="w-full max-w-xs mx-auto">
     //     <circle cx="160" cy="110" r="65" fill="#e0e7ff" opacity=".4"/>
@@ -272,7 +272,6 @@ export default function WalkthroughPage() {
         >
           {/* Illustration */}
           <div className="w-full max-w-[260px] mb-8">
-            {/* {slide.illustration} */}
           </div>
 
           {/* Text */}
