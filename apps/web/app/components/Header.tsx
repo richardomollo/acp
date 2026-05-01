@@ -36,14 +36,9 @@ export default function Header() {
     <header className="w-full border-b border-gray-200">
       <nav className="h-[70px] relative w-full px-6 md:px-16 lg:px-24 xl:px-32 flex items-center justify-between z-20 bg-white text-gray-700 shadow-[0px_4px_25px_0px_#0000000D] transition-all">
         
-        <span className="text-indigo-600">
-          <Link 
-            href={user ? "/sessions" : "/"} 
-            className="text-2xl font-semibold text-gray-800"
-          >
-            Active CityPass
-          </Link>
-        </span>
+        <Link href={user ? "/sessions" : "/"}>
+          <img src="/images/logo.png" alt="Active CityPass" className="h-14 w-auto" />
+        </Link>
 
         <ul className="md:flex hidden items-center gap-10">
           <li><Link className="hover:text-gray-500/80 transition" href="/sessions">Find Classes and Appointments</Link></li>
