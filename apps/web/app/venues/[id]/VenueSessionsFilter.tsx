@@ -132,7 +132,9 @@ export default function VenueSessionsFilter({
                 <p className="text-sm text-gray-600">{session.instructor}</p>
                 <p className="text-sm text-gray-600">{session.duration_minutes} min</p>
                 <p className="text-sm text-gray-600 mb-2">
-                  {session.spots_left} spots left out of {session.max_capacity}
+                  {session.spots_left != null
+                    ? `${session.spots_left} spots left out of ${session.max_capacity}`
+                    : `${session.max_capacity} spots available`}
                 </p>
                 <p className="text-sm text-gray-700">
                   📅 {new Date(session.date).toLocaleDateString()} · 🕒 {session.time}

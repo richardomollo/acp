@@ -186,15 +186,14 @@ export async function cancelBooking(bookingId: string, userId: string) {
     const { data: session } = await supabase
       .from('sessions')
       .select('id, spots_left')
-      .eq('gym_id', booking.gym_id)
-      .eq('date', booking.booking_date)
+      .eq('id', booking.session_id)
       .single()
 
     if (session) {
       await supabase
         .from('sessions')
-        .update({ 
-          spots_left: session.spots_left + 1 
+        .update({
+          spots_left: session.spots_left + 1
         })
         .eq('id', session.id)
     }

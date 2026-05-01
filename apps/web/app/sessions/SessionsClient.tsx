@@ -437,7 +437,7 @@ export default function SessionsPage() {
                   </div>
                 )}
 
-                {s.spots_left !== undefined && (
+                {s.spots_left != null && (
                   <p className="text-sm font-medium text-gray-700">
                     {s.spots_left > 0 ? (
                       <span className="text-green-600">
