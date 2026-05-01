@@ -242,14 +242,14 @@ export default function WalkthroughPage() {
         <div className="flex items-center justify-between px-8 pt-6 pb-2">
           {/* Progress pills */}
           <div className="flex gap-1.5 flex-1 max-w-[160px]">
-            {SLIDES.map((_, i) => (
+            {/* {SLIDES.map((_, i) => (
               <button
                 key={i}
                 onClick={() => goTo(i, i > current ? "forward" : "back")}
                 className="flex-1 h-1.5 rounded-full transition-all duration-300"
                 style={{ background: i <= current ? "#050040" : "#e5e7eb" }}
               />
-            ))}
+            ))} */}
           </div>
           <Link
             href="/sessions"
