@@ -267,6 +267,7 @@ export default function CreateSessionScreen() {
           duration_minutes: session.durationMinutes,
           credits_required: session.creditsRequired,
           max_capacity: session.maxCapacity,
+          spots_left: session.maxCapacity,
           is_active: true,
           recurring: true,
           image_url: sessionImage,
@@ -373,6 +374,7 @@ export default function CreateSessionScreen() {
             duration_minutes: session.durationMinutes,
             credits_required: session.creditsRequired,
             max_capacity: session.maxCapacity,
+            spots_left: session.maxCapacity,
             is_active: true,
             image_url: sessionImage,
             // SmartRate fields
