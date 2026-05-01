@@ -15,7 +15,9 @@ export default function UserLoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [view, setView] = useState<"login" | "signup" | "forgot" | "reset">("login");
+  const [view, setView] = useState<"login" | "signup" | "forgot" | "reset">(
+    searchParams.get("view") === "signup" ? "signup" : "login"
+  );
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -167,12 +169,20 @@ export default function UserLoginPage() {
       <div className="max-w-md w-full">
         {/* Header */}
         <div className="text-center mb-4">
-          <h1 className="text-2xl font-bold text-gray-900 mt-4">
+          <span className="text-indigo-600">
+          <Link 
+            href={"/"} 
+            className="text-3xl font-semibold text-gray-800"
+          >
+            Active CityPass
+          </Link>
+        </span>
+          <p className=" font-bold text-gray-900 mt-4">
             {view === "login" && "Ready to get moving?"}
             {view === "signup" && "New to Active CityPass?"}
             {view === "forgot" && "Reset Password"}
             {view === "reset" && "Set New Password"}
-          </h1>
+          </p>
           <p className="text-gray-600 mt-2 text-sm">
             {view === "login" && "Sign in to book your next session and to access all things fitness, play & family wellness"}
             {view === "signup" &&
@@ -377,12 +387,12 @@ export default function UserLoginPage() {
                   {view === "login" ? "Sign up" : "Sign in"}
                 </button>
               </p>
-              <p className="text-sm text-gray-600 mt-3">
+              {/* <p className="text-sm text-gray-600 mt-3">
                 Are you a sports and wellness partner?{" "}
                 <Link href="/partner-login" className="text-blue-500 hover:text-blue-600">
                   Partner Login
                 </Link>
-              </p>
+              </p> */}
             </div>
           )}
         </div>

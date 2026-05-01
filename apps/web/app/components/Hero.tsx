@@ -21,7 +21,7 @@ export default function Hero() {
       {/* Content */}
       <div className="relative z-10 -mt-10">
         <h2 className="text-4xl md:text-7xl font-bold max-w-[850px] text-white  text-center mx-auto mt-8">
-          All things fitness, play, & family wellness
+          All things fitness, play, & wellness in one place
         </h2>
 
         <p className="mt-6 text-m md:text-base mx-auto max-w-2xl  text-white text-center max-md:px-2">
@@ -31,11 +31,11 @@ export default function Hero() {
 
         <div className="mx-auto w-full flex items-center justify-center gap-3 mt-6">
           <button className="bg-blue-500 hover:bg-black text-white px-6 py-3 rounded-full font-medium transition">
-            <Link href="/login">Try for Free Today!</Link>
+            <Link href="/login?view=signup">Get 14 Days Free!</Link>
           </button>
 
           <button className="flex items-center gap-2 border border-slate-300 hover:bg-slate-200/30 text-white  rounded-full px-6 py-3">
-            <Link href="/venues/">Discover Fitness Venues</Link>
+            <Link href="/sessions/">Browse Activities, Classes & Wellness Sessions</Link>
             <svg
               width="6"
               height="8"
