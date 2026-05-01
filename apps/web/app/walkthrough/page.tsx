@@ -292,7 +292,7 @@ export default function WalkthroughPage() {
         </div>
 
         {/* Bottom nav */}
-        <div className="px-8 pb-10 pt-2">
+        <div className="px-8 pb-50 pt-2">
           {isLast ? (
             <div className="flex flex-col gap-3 max-w-sm mx-auto">
               <Link
