@@ -169,17 +169,12 @@ export default function UserLoginPage() {
       <div className="max-w-md w-full">
         {/* Header */}
         <div className="text-center mb-4">
-          <span className="text-indigo-600">
-          <Link 
-            href={"/"} 
-            className="text-3xl font-semibold text-gray-800"
-          >
-            Active CityPass
+          <Link href="/" className="inline-block mb-4">
+            <img src="/images/logo.png" alt="Active CityPass" className="h-14 w-auto mx-auto" />
           </Link>
-        </span>
           <p className=" font-bold text-gray-900 mt-4">
             {view === "login" && "Ready to get moving?"}
-            {view === "signup" && "New to Active CityPass?"}
+            {view === "signup" && "New to Active CityPass? 14 days on us, no strings attached!"}
             {view === "forgot" && "Reset Password"}
             {view === "reset" && "Set New Password"}
           </p>
@@ -376,7 +371,7 @@ export default function UserLoginPage() {
           {(view === "login" || view === "signup") && (
             <div className="mt-6 pt-6 border-t border-gray-200 text-center">
               <p className="text-sm text-gray-600">
-                {view === "login" ? "Don't have an account?" : "Already have an account?"}{" "}
+                {view === "login" ? "Don't have an account? 14 free days on us, no strings attached" : "Already have an account?"}{" "}
                 <button
                   onClick={() => {
                     setView(view === "login" ? "signup" : "login");

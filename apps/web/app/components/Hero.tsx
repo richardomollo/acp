@@ -31,7 +31,7 @@ export default function Hero() {
 
         <div className="mx-auto w-full flex items-center justify-center gap-3 mt-6">
           <button className="bg-blue-500 hover:bg-black text-white px-6 py-3 rounded-full font-medium transition">
-            <Link href="/login?view=signup">Get 14 Days Free!</Link>
+            <Link href="/walkthrough">Get 14 Days Free!</Link>
           </button>
 
           <button className="flex items-center gap-2 border border-slate-300 hover:bg-slate-200/30 text-white  rounded-full px-6 py-3">
