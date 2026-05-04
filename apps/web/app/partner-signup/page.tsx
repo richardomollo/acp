@@ -131,23 +131,20 @@ export default function PartnerSignupPage() {
           alt=""
           className="absolute inset-0 w-full h-full object-cover"
         />
-        <div className="absolute inset-0 bg-[#050040]/65" />
+        <div className="absolute inset-0 bg-[#000]/35" />
         <div className="relative z-10 flex flex-col justify-between h-full p-8 md:min-h-screen">
-          <Link href="/">
-            <img src="/images/logo-white.png" alt="Active CityPass" className="h-10 w-auto" />
-          </Link>
-          <div className="mt-6">
+          <div className="mt-6 py-90 px-10">
             <p className="text-white/60 text-xs font-semibold tracking-widest uppercase mb-2">For Partners</p>
             <h2 className="text-white text-xl md:text-2xl font-bold leading-snug mb-2">
               Grow your business with Active CityPass
             </h2>
-            <p className="text-white/60 text-sm">Join 50+ venues already earning with us.</p>
+            <p className="text-white/80 text-sm">Through revenue optimization tools, marketing, and access to a high-intent customer base, Active City Pass helps businesses like yours turn unfilled spots into incremental revenue. List your business at no upfront cost to start growing today.</p>
           </div>
         </div>
       </div>
 
       {/* ── Form panel ── */}
-      <div className="flex-1 flex flex-col items-center justify-center px-4 py-12 bg-gray-50">
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-12 ">
       <div className="w-full max-w-lg">
 
         {/* Step indicator */}

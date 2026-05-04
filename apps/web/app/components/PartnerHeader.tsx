@@ -8,11 +8,12 @@ export default function PartnerHeader() {
 
   return (
     <header className="w-full bg-white border-b border-gray-100 sticky top-0 z-50">
-      <nav className="max-w-7xl mx-auto px-6 md:px-16 h-16 flex items-center justify-between">
+      
+      <nav className="mx-auto px-6 md:px-16 h-16 flex items-center justify-between">
 
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2 flex-shrink-0">
-          <img src="/images/logo.png" alt="Active CityPass" className="h-14 w-auto" />
+        <Link href="#" className="flex items-center gap-2 flex-shrink-0">
+          <img src="/images/logo.png" alt="Active CityPass" className="h-12 w-auto" />
           <span className="hidden sm:inline-block text-xs font-medium text-gray-400 border border-gray-200 rounded px-1.5 py-0.5">
             for Partners
           </span>
