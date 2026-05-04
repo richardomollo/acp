@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import Header from "./Header";
 import Footer from "./Footer";
 
-const HIDE_CHROME = ["/login", "/partners/signup", "/partner-signup", "/partner-login", "/walkthrough"];
+const HIDE_CHROME = ["/login", "/partners/signup", "/partner-signup", "/partner-login", "/walkthrough", "/partner-dashboard"];
 
 export default function ConditionalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

@@ -38,15 +38,12 @@ function useDebounce<T>(value: T, delay = 400): T {
   return debounced;
 }
 
-function parseSessionDateTime(session: Session): Date | null {
-  const dateStr = session.date ?? new Date().toISOString().split("T")[0];
-  const timeStr = session.time?.includes(":") ? session.time : `${session.time}:00`;
-  const dt = new Date(`${dateStr}T${timeStr}`);
-  return isNaN(dt.getTime()) ? null : dt;
-}
 
 function toDateStr(d: Date): string {
-  return d.toISOString().split("T")[0];
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 /* ---------------- Page ---------------- */
@@ -75,12 +72,6 @@ export default function SessionsPage() {
 
   const todayStr = useMemo(() => toDateStr(today), [today]);
 
-  // Next-hour boundary — used to hide sessions that have already passed today
-  const windowStart = useMemo(() => {
-    const d = new Date();
-    d.setHours(d.getHours() + 1, 0, 0, 0);
-    return d;
-  }, []);
 
   // 7-day window end
   const windowEnd = useMemo(() => {
@@ -177,12 +168,6 @@ export default function SessionsPage() {
       // Day strip filter
       if (sessionDate !== selectedDay) return false;
 
-      // For today: hide sessions that have already passed (before next full hour)
-      if (selectedDay === todayStr) {
-        const dt = parseSessionDateTime(s);
-        if (dt && dt < windowStart) return false;
-      }
-
       const matchesSearch =
         !debouncedSearch ||
         s.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
@@ -193,7 +178,7 @@ export default function SessionsPage() {
 
       return matchesSearch && matchesCategory && matchesLocation;
     });
-  }, [sessions, debouncedSearch, catParam, locParam, selectedDay, todayStr, windowStart]);
+  }, [sessions, debouncedSearch, catParam, locParam, selectedDay, todayStr]);
 
   /* ---------------- Helpers ---------------- */
 
@@ -267,7 +252,7 @@ export default function SessionsPage() {
               onClick={() => setSelectedDay(ds)}
               className={`flex flex-col items-center px-5 py-2.5 rounded-xl border text-sm font-medium whitespace-nowrap transition-colors flex-shrink-0 ${
                 isSelected
-                  ? "bg-[#050040] text-white border-[#050040]"
+                  ? "bg-[#000] text-white border-[#050040]"
                   : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
               }`}
             >

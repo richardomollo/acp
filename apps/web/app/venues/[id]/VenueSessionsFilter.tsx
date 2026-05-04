@@ -18,12 +18,10 @@ type VenueSession = {
 };
 
 function toDateStr(d: Date): string {
-  return d.toISOString().split("T")[0];
-}
-
-function parseTime(date: string, time: string): Date {
-  const dt = new Date(`${date}T${time}`);
-  return isNaN(dt.getTime()) ? new Date(0) : dt;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 export default function VenueSessionsFilter({
@@ -39,12 +37,6 @@ export default function VenueSessionsFilter({
 
   const todayStr = useMemo(() => toDateStr(today), [today]);
 
-  const windowStart = useMemo(() => {
-    const d = new Date();
-    d.setHours(d.getHours() + 1, 0, 0, 0);
-    return d;
-  }, []);
-
   const days = useMemo(() =>
     Array.from({ length: 14 }, (_, i) => {
       const d = new Date(today);
@@ -56,15 +48,8 @@ export default function VenueSessionsFilter({
   const [selectedDay, setSelectedDay] = useState<string>(todayStr);
 
   const filtered = useMemo(() => {
-    return sessions.filter((s) => {
-      if (s.date !== selectedDay) return false;
-      if (selectedDay === todayStr) {
-        const dt = parseTime(s.date, s.time);
-        if (dt < windowStart) return false;
-      }
-      return true;
-    });
-  }, [sessions, selectedDay, todayStr, windowStart]);
+    return sessions.filter((s) => s.date === selectedDay);
+  }, [sessions, selectedDay]);
 
   return (
     <div className="mt-12">
@@ -90,7 +75,7 @@ export default function VenueSessionsFilter({
               onClick={() => setSelectedDay(ds)}
               className={`flex flex-col items-center px-5 py-2.5 rounded-xl border text-sm font-medium whitespace-nowrap transition-colors flex-shrink-0 ${
                 isSelected
-                  ? "bg-[#050040] text-white border-[#050040]"
+                  ? "bg-[#000] text-white border-[#050040]"
                   : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
               }`}
             >
