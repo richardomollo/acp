@@ -206,7 +206,7 @@ export default function WalkthroughPage() {
         {/* Logo */}
         <div className="relative z-10 p-8">
           <Link href="/" className="inline-flex">
-            <img src="/images/logo-white.png" alt="Active CityPass" className="h-17 w-auto" />
+            <img src="/images/logo-white.png" alt="Active CityPass" className="h-12 w-auto" />
           </Link>
         </div>
 
