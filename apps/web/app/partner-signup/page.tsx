@@ -132,14 +132,14 @@ export default function PartnerSignupPage() {
           className="absolute inset-0 w-full h-full object-cover"
         />
         <div className="absolute inset-0 bg-[#000]/35" />
-        <div className="relative z-10 flex flex-col justify-between h-full p-8 md:min-h-screen">
-          <div className="mt-6 py-90 px-10">
-            <p className="text-white/60 text-xs font-semibold tracking-widest uppercase mb-2">For Partners</p>
-            <h2 className="text-white text-xl md:text-2xl font-bold leading-snug mb-2">
-              Grow your business with Active CityPass
-            </h2>
-            <p className="text-white/80 text-sm">Through revenue optimization tools, marketing, and access to a high-intent customer base, Active City Pass helps businesses like yours turn unfilled spots into incremental revenue. List your business at no upfront cost to start growing today.</p>
-          </div>
+        <div className="relative z-10 flex flex-col items-center justify-center h-full p-8 text-center md:text-left md:items-start">
+          <p className="text-white/60 text-xs font-semibold tracking-widest uppercase mb-2">For Partners</p>
+          <h2 className="text-white text-xl md:text-2xl font-bold leading-snug mb-3">
+            Grow your business with Active CityPass
+          </h2>
+          <p className="text-white/80 text-sm leading-relaxed">
+            Through revenue optimization tools, marketing, and access to a high-intent customer base, Active CityPass helps businesses like yours turn unfilled spots into incremental revenue. List your business at no upfront cost to start growing today.
+          </p>
         </div>
       </div>
 

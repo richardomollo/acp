@@ -191,69 +191,57 @@ export default function WalkthroughPage() {
   const slide = SLIDES[current];
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row">
+    <div className="h-screen flex flex-col md:flex-row overflow-hidden">
 
-      {/* ── Left: fixed image panel ── */}
-      <div className="relative hidden md:flex md:w-1/2 flex-col">
+      {/* ── Left: image panel (visible on mobile too) ── */}
+      <div className="relative flex w-full h-64 flex-shrink-0 md:h-auto md:w-1/2 md:min-h-screen flex-col">
         {/* Background image */}
-        <div
-          className="absolute inset-0 bg-cover bg-center"
-          style={{ backgroundImage: "url('/images/desktop.jpg')" }}
-        />
+        <img src="/images/desktop.jpg" alt="" className="absolute inset-0 w-full h-full object-cover" />
         {/* Dark overlay */}
-        <div className="absolute inset-0 bg-[#000]/20" />
+        <div className="absolute inset-0 bg-[#000]/40" />
 
-        {/* Logo */}
-        <div className="relative z-10 p-8">
+        {/* Top bar — logo + explore link on mobile, logo only on desktop */}
+        <div className="relative z-10 flex items-center justify-between p-6 md:p-8">
           <Link href="/" className="inline-flex">
-            <img src="/images/logo-white.png" alt="Active CityPass" className="h-12 w-auto" />
+            <img
+              src="/images/logo-white.png"
+              alt="Active CityPass"
+              className="h-10 md:h-12 w-auto"
+            />
+          </Link>
+          <Link
+            href="/sessions"
+            className="md:hidden text-sm text-white/80 hover:text-white transition font-medium"
+          >
+            Explore →
           </Link>
         </div>
 
-        {/* Bottom tagline */}
-        <div className="relative z-10 mt-auto p-30">
-          <p className="text-white/90 text-xs font-semibold tracking-widest uppercase mb-3">
+        {/* Tagline — hidden on mobile, vertically centered on desktop */}
+        <div className="relative z-10 hidden md:flex flex-col items-start justify-center h-full p-8 text-left">
+          <p className="text-white/90 text-xs font-semibold tracking-widest uppercase mb-2">
             One pass. 50+ venues. Unlimited possibilities.
           </p>
-          <h2 className="text-white text-3xl font-bold leading-snug mb-3">
-            Nairobi's most flexible sports & <br/>
-             wellness membership
+          <h2 className="text-white text-2xl md:text-3xl font-bold leading-snug mb-3">
+            Nairobi's most flexible sports &amp; <br /> wellness membership
           </h2>
-          <p className="text-white/90 text-sm leading-relaxed">
-             The most flexible sports and wellness membership in Nairobi. Activities for individuals, partners, kids, and families — train, play, and unwind anytime, anywhere.
+          <p className="text-white/80 text-sm leading-relaxed hidden md:block">
+            Activities for individuals, partners, kids, and families — train, play, and unwind anytime, anywhere. <br />Active CityPass gives you access to top-rated gyms, fitness studios, wellness centers, and spas.
           </p>
         </div>
       </div>
 
       {/* ── Right: slides panel ── */}
       <div
-        className="flex-1 flex flex-col bg-white min-h-screen"
+        className="flex-1 flex flex-col bg-white overflow-y-auto"
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >
-        {/* Mobile logo (hidden on desktop) */}
-        <div className="md:hidden flex items-center justify-between px-6 pt-6 pb-2">
-          <Link href="/">
-            <img src="/images/logo.png" alt="Active CityPass" className="h-10 w-auto" />
-          </Link>
-        </div>
-
-        {/* Top bar */}
-        <div className="flex items-center justify-between px-8 pt-6 pb-2">
-          {/* Progress pills */}
-          <div className="flex gap-1.5 flex-1 max-w-[160px]">
-            {/* {SLIDES.map((_, i) => (
-              <button
-                key={i}
-                onClick={() => goTo(i, i > current ? "forward" : "back")}
-                className="flex-1 h-1.5 rounded-full transition-all duration-300"
-                style={{ background: i <= current ? "#050040" : "#e5e7eb" }}
-              />
-            ))} */}
-          </div>
+        {/* Desktop-only explore link */}
+        <div className="hidden md:flex justify-end px-8 pt-6 pb-2">
           <Link
             href="/sessions"
-            className="text-sm text-gray-400 hover:text-gray-700 transition font-medium ml-6"
+            className="text-sm text-gray-400 hover:text-gray-700 transition font-medium"
           >
             Explore →
           </Link>
@@ -270,10 +258,6 @@ export default function WalkthroughPage() {
             transition: "opacity 0.28s ease, transform 0.28s ease",
           }}
         >
-          {/* Illustration */}
-          <div className="w-full max-w-[260px] mb-8">
-          </div>
-
           {/* Text */}
           <div className="text-center max-w-sm">
             <p
@@ -292,7 +276,7 @@ export default function WalkthroughPage() {
         </div>
 
         {/* Bottom nav */}
-        <div className="px-8 pb-50 pt-2">
+        <div className="px-8 pb-8 pt-2">
           {isLast ? (
             <div className="flex flex-col gap-3 max-w-sm mx-auto">
               <Link

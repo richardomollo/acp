@@ -40,7 +40,7 @@ export default function Header() {
           <img src="/images/logo.png" alt="Active CityPass" className="h-12 w-auto" />
         </Link>
 
-        <ul className="md:flex hidden items-center gap-10">
+        <ul className="md:flex hidden items-center gap-10 text-sm">
           <li><Link className="hover:text-gray-500/80 transition" href="/sessions">Find Classes and Appointments</Link></li>
           <li><Link className="hover:text-gray-500/80 transition" href="/venues">Discover Venues</Link></li>
           
