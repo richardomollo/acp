@@ -62,6 +62,7 @@ export default function SessionsPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
 
   // Today at midnight — stable reference
   const today = useMemo(() => {
@@ -207,7 +208,7 @@ export default function SessionsPage() {
 
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto px-6 py-12">
+      <div className="w-full px-6 md:px-16 lg:px-24 xl:px-32 mx-auto py-12">
         <div className="flex items-center justify-center min-h-[400px]">
           <p className="text-gray-500">Loading classes…</p>
         </div>
@@ -217,7 +218,7 @@ export default function SessionsPage() {
 
   if (error) {
     return (
-      <div className="max-w-7xl mx-auto px-6 py-12">
+      <div className="w-full px-6 md:px-16 lg:px-24 xl:px-32 mx-auto py-12">
         <div className="flex items-center justify-center min-h-[400px]">
           <p className="text-red-500">{error}</p>
         </div>
@@ -226,7 +227,7 @@ export default function SessionsPage() {
   }
 
   return (
-    <div className="max-w-7h-[70px]  w-full px-6 md:px-16 lg:px-24 xl:px-32  items-center= z-20  mx-auto px-6 py-12 ">
+    <div className="w-full px-6 md:px-16 lg:px-24 xl:px-32 mx-auto py-12">
 
       <h1 className="text-xl font-bold mb-6">
         All Activities, Classes and Wellness Sessions
@@ -265,15 +266,36 @@ export default function SessionsPage() {
         })}
       </div>
 
-      {/* Filters */}
-      <div className="grid gap-4 mb-8 sm:grid-cols-2 lg:grid-cols-6">
-        {/* Search */}
+      {/* Mobile: search + filter toggle row */}
+      <div className="flex items-center gap-2 mb-4 sm:hidden">
         <input
           type="text"
           placeholder="Search classes..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <button
+          onClick={() => setShowFilters((v) => !v)}
+          className="flex items-center gap-1.5 text-sm font-medium border border-gray-200 rounded-lg px-3 py-2 hover:bg-gray-50 transition-colors flex-shrink-0"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+              d="M3 4h18M7 8h10M11 12h4" />
+          </svg>
+          Filters
+        </button>
+      </div>
+
+      {/* Filters */}
+      <div className={`grid gap-4 mb-8 sm:grid-cols-2 lg:grid-cols-6 ${showFilters ? "grid" : "hidden sm:grid"}`}>
+        {/* Search — desktop only */}
+        <input
+          type="text"
+          placeholder="Search classes..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="hidden sm:block rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
 
         {/* Category */}
@@ -330,129 +352,51 @@ export default function SessionsPage() {
           </button>
         </div>
       ) : (
-        <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <ul className="flex flex-col gap-3 max-w-3xl">
           {filteredSessions.map((s) => (
-            <li
-              key={s.id}
-              className="bg-white rounded-xl overflow-hidden border border-gray-200 hover:-translate-y-1 transition duration-300"
-            >
-              <Link href={`/sessions/${s.id}`}>
+            <li key={s.id}>
+              <Link
+                href={`/sessions/${s.id}`}
+                className="flex items-center gap-4 bg-white rounded-xl border border-gray-200 hover:border-gray-300 hover:shadow-sm transition duration-200 overflow-hidden"
+              >
+                {/* Thumbnail */}
                 {s.image_url ? (
                   <img
                     src={s.image_url}
                     alt={s.name}
-                    className="h-48 w-full object-cover"
-                    onError={(e) => {
-                      const el = e.currentTarget;
-                      el.style.display = "none";
-                      el.nextElementSibling?.removeAttribute("style");
-                    }}
+                    className="w-24 h-24 object-cover flex-shrink-0"
                   />
-                ) : null}
-                <div
-                  className="h-48 bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400"
-                  style={s.image_url ? { display: "none" } : undefined}
-                >
-                  <svg
-                    className="w-16 h-16"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                    />
-                  </svg>
-                </div>
-              </Link>
-
-              <div className="p-4 space-y-1">
-                <Link href={`/sessions/${s.id}`}>
-                  <h2 className="font-semibold text-lg hover:text-blue-600 transition-colors">
-                    {s.name}
-                  </h2>
-                </Link>
-
-                <p className="text-sm text-gray">{s.category}, Instructor: {s.instructor}</p>
-
-                <div className="flex items-center text-sm text-gray-500">
-                  <svg
-                    className="w-4 h-4 mr-1"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                  {s.time} for {s.duration_minutes} minutes
-                </div>
-
-                {s.gyms && (
-                  <div className="flex items-start text-sm text-gray-500">
-                    <svg
-                      className="w-4 h-4 mr-1 mt-0.5 flex-shrink-0"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                      />
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                      />
+                ) : (
+                  <div className="w-24 h-24 bg-gray-100 flex items-center justify-center text-gray-300 flex-shrink-0">
+                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                        d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                     </svg>
-                    <span>
-                      {s.gyms.name} · {s.gyms.location}
-                    </span>
                   </div>
                 )}
 
-                {s.spots_left != null && (
-                  <p className="text-sm font-medium text-gray-700">
-                    {s.spots_left > 0 ? (
-                      <span className="text-green-600">
-                        {s.spots_left} spots left
-                      </span>
-                    ) : (
-                      <span className="text-red-600">Fully booked</span>
-                    )}
-                  </p>
-                )}
+                {/* Info */}
+                <div className="flex flex-col flex-1 py-3 min-w-0">
+                  <h2 className="text-sm font-semibold truncate">{s.name}</h2>
+                  <p className="text-xs text-gray-500 capitalize">{s.category}{s.instructor ? ` · ${s.instructor}` : ""}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{s.time} · {s.duration_minutes}min</p>
+                  {s.gyms && (
+                    <p className="text-xs text-gray-400 truncate">{s.gyms.name} · {s.gyms.location}</p>
+                  )}
+                </div>
 
-                <button className="flex items-center gap-2 text-grey-200 text-sm rounded-full py-1">
-                  <Link href={`/sessions/${s.id}`}> View Activity Details </Link>
-                  <svg
-                    width="6"
-                    height="8"
-                    viewBox="0 0 6 8"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path
-                      d="M1.25.5 4.75 4l-3.5 3.5"
-                      stroke="#050040"
-                      strokeOpacity=".4"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </button>
-              </div>
+                {/* Right side */}
+                <div className="flex flex-col items-end pr-4 gap-1 flex-shrink-0">
+                  {s.spots_left != null && (
+                    <span className={`text-xs font-medium ${s.spots_left > 0 ? "text-green-600" : "text-red-500"}`}>
+                      {s.spots_left > 0 ? `${s.spots_left} spots` : "Full"}
+                    </span>
+                  )}
+                  {s.credits_required != null && (
+                    <span className="text-xs text-gray-500">{s.credits_required} cr</span>
+                  )}
+                </div>
+              </Link>
             </li>
           ))}
         </ul>
