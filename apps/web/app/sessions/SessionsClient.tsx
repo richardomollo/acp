@@ -229,7 +229,7 @@ export default function SessionsPage() {
   return (
     <div className="w-full px-6 md:px-16 lg:px-24 xl:px-32 mx-auto py-12">
 
-      <h1 className="text-xl font-bold mb-6">
+      <h1 className="text-md font-bold mb-6">
         All Activities, Classes and Wellness Sessions
       </h1>
 
@@ -352,22 +352,22 @@ export default function SessionsPage() {
           </button>
         </div>
       ) : (
-        <ul className="flex flex-col gap-3 max-w-3xl">
+        <ul className="flex flex-col divide-y divide-gray-100 max-w-3xl">
           {filteredSessions.map((s) => (
             <li key={s.id}>
               <Link
                 href={`/sessions/${s.id}`}
-                className="flex items-center gap-4 bg-white rounded-xl border border-gray-200 hover:border-gray-300 hover:shadow-sm transition duration-200 overflow-hidden"
+                className="flex gap-4 py-4 hover:bg-gray-50 transition-colors duration-150"
               >
                 {/* Thumbnail */}
                 {s.image_url ? (
                   <img
                     src={s.image_url}
                     alt={s.name}
-                    className="w-24 h-24 object-cover flex-shrink-0"
+                    className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
                   />
                 ) : (
-                  <div className="w-24 h-24 bg-gray-100 flex items-center justify-center text-gray-300 flex-shrink-0">
+                  <div className="w-20 h-20 rounded-lg bg-gray-100 flex items-center justify-center text-gray-300 flex-shrink-0">
                     <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
                         d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -376,26 +376,30 @@ export default function SessionsPage() {
                 )}
 
                 {/* Info */}
-                <div className="flex flex-col flex-1 py-3 min-w-0">
-                  <h2 className="text-sm font-semibold truncate">{s.name}</h2>
-                  <p className="text-xs text-gray-500 capitalize">{s.category}{s.instructor ? ` · ${s.instructor}` : ""}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{s.time} · {s.duration_minutes}min</p>
+                <div className="flex flex-col flex-1 min-w-0">
+                  <p className="text-xs text-gray-400 uppercase tracking-wide capitalize mb-0.5">
+                    {s.category}{s.instructor ? ` · ${s.instructor}` : ""}
+                  </p>
+                  <h2 className="text-sm font-bold text-gray-900 mb-0.5">{s.name}</h2>
                   {s.gyms && (
-                    <p className="text-xs text-gray-400 truncate">{s.gyms.name} · {s.gyms.location}</p>
+                    <p className="text-sm text-gray-500 mb-1">{s.gyms.location}, {s.gyms.name}</p>
                   )}
+                  <p className="text-sm text-gray-400">
+                    {s.time} · {s.duration_minutes} min
+                    {s.spots_left != null && (
+                      <span className={`ml-2 ${s.spots_left > 0 ? "text-green-600" : "text-red-500"}`}>
+                        · {s.spots_left > 0 ? `${s.spots_left} spots left` : "Fully booked"}
+                      </span>
+                    )}
+                  </p>
                 </div>
 
-                {/* Right side */}
-                <div className="flex flex-col items-end pr-4 gap-1 flex-shrink-0">
-                  {s.spots_left != null && (
-                    <span className={`text-xs font-medium ${s.spots_left > 0 ? "text-green-600" : "text-red-500"}`}>
-                      {s.spots_left > 0 ? `${s.spots_left} spots` : "Full"}
-                    </span>
-                  )}
-                  {s.credits_required != null && (
-                    <span className="text-xs text-gray-500">{s.credits_required} cr</span>
-                  )}
-                </div>
+                {/* Credits */}
+                {s.credits_required != null && (
+                  <div className="flex-shrink-0 text-right">
+                    <span className="text-xs text-gray-400">{s.credits_required} credits </span>
+                  </div>
+                )}
               </Link>
             </li>
           ))}
