@@ -169,12 +169,12 @@ export default function UserLoginPage() {
       <div className="max-w-md w-full">
         {/* Header */}
         <div className="text-center mb-4">
-          <Link href="/" className="inline-block mb-4">
-            <img src="/images/logo.png" alt="Active CityPass" className="h-14 w-auto mx-auto" />
+          <Link href="/" className="inline-block mb-4 py-5">
+            <img src="/images/logo.png" alt="Active CityPass" className="h-13 w-auto mx-auto py-1" />
           </Link>
-          <p className=" font-bold text-gray-900 mt-4">
+          <p className=" font-bold text-gray-900 mt-2 text-lg">
             {view === "login" && "Ready to get moving?"}
-            {view === "signup" && "New to Active CityPass? 14 days on us, no strings attached!"}
+            {view === "signup" && "New to Active CityPass?"}
             {view === "forgot" && "Reset Password"}
             {view === "reset" && "Set New Password"}
           </p>
@@ -256,6 +256,28 @@ export default function UserLoginPage() {
           )}
 
           {/* Signup */}
+          {view === "signup" && (
+            <div className="bg-blue-100 rounded-2xl p-5 mb-6">
+              <p className="text-xs font-semibold text-gray-600 mb-1">Quick recap</p>
+              <p className="text-2xl font-extrabold text-gray-900 mb-4">Free for 14 days</p>
+              <ul className="space-y-3 text-sm text-gray-800">
+                {[
+                  <>Get <strong>50 credits</strong> to visit a selection of our partner venues one time each.</>,
+                  <>Credits <strong>expire at the end of your trial.</strong></>,
+                  <>We'll send you an email reminder <strong>before your trial ends.</strong> Cancel anytime.</>,
+                  <><strong>Upgrade anytime</strong> to unlock unlimited bookings and access to all premium venues.</>,
+                ].map((item, i) => (
+                  <li key={i} className="flex items-start gap-3">
+                    <svg className="w-4 h-4 mt-0.5 flex-shrink-0 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {view === "signup" && (
             <form onSubmit={handleSignup} className="space-y-4">
               <div>
