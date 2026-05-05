@@ -168,11 +168,16 @@ const Ic = {
         d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
     </svg>
   ),
+  ChevronDown: (p: React.SVGProps<SVGSVGElement>) => (
+    <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+    </svg>
+  ),
 };
 
 const NAV: { key: Section; label: string; Icon: typeof Ic.Grid }[] = [
   { key: "overview",  label: "Overview",  Icon: Ic.Grid },
-  { key: "venue",     label: "My Venue",  Icon: Ic.Building },
+  { key: "venue",     label: "Venue",     Icon: Ic.Building },
   { key: "sessions",  label: "Sessions",  Icon: Ic.Calendar },
   { key: "revenue",   label: "Revenue",   Icon: Ic.Chart },
   { key: "checkin",   label: "Check-in",  Icon: Ic.Check },
@@ -184,11 +189,14 @@ export default function PartnerDashboard() {
   const router = useRouter();
   const [section, setSection]             = useState<Section>("overview");
   const [user, setUser]                   = useState<any>(null);
-  const [gym, setGym]                     = useState<Gym | null>(null);
+  const [gyms, setGyms]                   = useState<Gym[]>([]);
+  const [activeGym, setActiveGym]         = useState<Gym | null>(null);
   const [sessions, setSessions]           = useState<Session[]>([]);
   const [bookings, setBookings]           = useState<Booking[]>([]);
   const [loading, setLoading]             = useState(true);
+  const [switching, setSwitching]         = useState(false);
   const [emailVerified, setEmailVerified] = useState(true);
+  const [showVenuePicker, setShowVenuePicker] = useState(false);
 
   useEffect(() => { init(); }, []);
 
@@ -198,14 +206,29 @@ export default function PartnerDashboard() {
     setUser(user);
     setEmailVerified(!!user.email_confirmed_at);
 
-    const { data: gymData } = await supabase
-      .from("gyms").select("*").eq("contact_email", user.email).single();
+    const { data: gymsData } = await supabase
+      .from("gyms")
+      .select("*")
+      .eq("contact_email", user.email)
+      .order("name");
 
-    if (gymData) {
-      setGym(gymData);
-      await Promise.all([loadSessions(gymData.id), loadBookings(gymData.id)]);
+    if (gymsData && gymsData.length > 0) {
+      setGyms(gymsData);
+      setActiveGym(gymsData[0]);
+      await Promise.all([loadSessions(gymsData[0].id), loadBookings(gymsData[0].id)]);
     }
     setLoading(false);
+  }
+
+  async function switchVenue(gym: Gym) {
+    if (gym.id === activeGym?.id) { setShowVenuePicker(false); return; }
+    setSwitching(true);
+    setShowVenuePicker(false);
+    setActiveGym(gym);
+    setSessions([]);
+    setBookings([]);
+    await Promise.all([loadSessions(gym.id), loadBookings(gym.id)]);
+    setSwitching(false);
   }
 
   async function loadSessions(gymId: string) {
@@ -225,6 +248,11 @@ export default function PartnerDashboard() {
     setBookings(data || []);
   }
 
+  function handleGymSaved(updated: Gym) {
+    setGyms(prev => prev.map(g => g.id === updated.id ? updated : g));
+    setActiveGym(updated);
+  }
+
   const signOut = async () => {
     await supabase.auth.signOut();
     router.push("/partner-login");
@@ -236,11 +264,11 @@ export default function PartnerDashboard() {
     </div>
   );
 
-  if (!gym) return (
+  if (gyms.length === 0) return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <div className="bg-white rounded-2xl shadow-sm p-10 text-center max-w-sm w-full">
-        <p className="text-gray-900 font-bold text-xl mb-2">No venue found</p>
-        <p className="text-gray-500 text-sm mb-6">No venue is linked to this account.</p>
+        <p className="text-gray-900 font-bold text-xl mb-2">No venues found</p>
+        <p className="text-gray-500 text-sm mb-6">No venue is linked to this account yet.</p>
         <Link href="/partner-signup"
           className="inline-block bg-[#050040] text-white text-sm font-semibold px-8 py-3 rounded-full hover:bg-indigo-900 transition">
           Register Your Venue
@@ -248,6 +276,8 @@ export default function PartnerDashboard() {
       </div>
     </div>
   );
+
+  const gym = activeGym!;
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -260,6 +290,59 @@ export default function PartnerDashboard() {
           </Link>
           <p className="text-white/40 text-[11px] font-medium mt-1.5 tracking-wide">Partner Portal</p>
         </div>
+
+        {/* Venue switcher */}
+        {gyms.length > 0 && (
+          <div className="px-3 pt-3 pb-2 border-b border-white/10 flex-shrink-0 relative">
+            <p className="text-white/40 text-[10px] uppercase tracking-wider mb-1.5 px-1">Current venue</p>
+            <button
+              onClick={() => setShowVenuePicker(p => !p)}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 transition text-left"
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-white text-xs font-semibold truncate">{gym.name}</p>
+                <p className="text-white/40 text-[10px] truncate capitalize">{gym.type} · {gym.area}</p>
+              </div>
+              <Ic.ChevronDown className={`w-3.5 h-3.5 text-white/40 flex-shrink-0 transition-transform ${showVenuePicker ? "rotate-180" : ""}`} />
+            </button>
+
+            {/* Dropdown */}
+            {showVenuePicker && (
+              <div className="absolute left-3 right-3 top-full mt-1 bg-white rounded-xl shadow-xl overflow-hidden z-30 border border-gray-100">
+                {gyms.map(g => (
+                  <button
+                    key={g.id}
+                    onClick={() => switchVenue(g)}
+                    className={`w-full text-left px-4 py-3 text-sm transition flex items-center gap-3 ${
+                      g.id === gym.id
+                        ? "bg-[#050040]/5 text-[#050040] font-semibold"
+                        : "text-gray-700 hover:bg-gray-50"
+                    }`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{g.name}</p>
+                      <p className="text-xs text-gray-400 truncate capitalize">{g.type} · {g.area}</p>
+                    </div>
+                    {g.id === gym.id && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#050040] flex-shrink-0" />
+                    )}
+                  </button>
+                ))}
+                <div className="border-t border-gray-100">
+                  <Link
+                    href="/partner-signup"
+                    className="flex items-center gap-2 px-4 py-3 text-sm text-gray-500 hover:bg-gray-50 transition"
+                    onClick={() => setShowVenuePicker(false)}
+                  >
+                    <Ic.Plus className="w-4 h-4" />
+                    Add another venue
+                  </Link>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
           {NAV.map(({ key, label, Icon }) => (
             <button key={key} onClick={() => setSection(key)}
@@ -275,8 +358,7 @@ export default function PartnerDashboard() {
         </nav>
         <div className="p-3 border-t border-white/10 flex-shrink-0">
           <div className="px-3 py-2 mb-1">
-            <p className="text-white text-xs font-semibold truncate">{gym.name}</p>
-            <p className="text-white/40 text-[11px] truncate">{user?.email}</p>
+            <p className="text-white/40 text-[10px] truncate">{user?.email}</p>
           </div>
           <button onClick={signOut}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-white/50 hover:text-white hover:bg-white/8 transition-colors">
@@ -294,6 +376,34 @@ export default function PartnerDashboard() {
           <img src="/images/logo-white.png" alt="Active CityPass" className="h-7 w-auto" />
           <button onClick={signOut} className="text-white/60 text-xs font-medium">Sign out</button>
         </header>
+
+        {/* Mobile venue switcher */}
+        {gyms.length > 1 && (
+          <div className="md:hidden bg-[#050040]/95 px-4 pb-2 flex-shrink-0">
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {gyms.map(g => (
+                <button
+                  key={g.id}
+                  onClick={() => switchVenue(g)}
+                  className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                    g.id === gym.id
+                      ? "bg-white text-[#050040]"
+                      : "bg-white/15 text-white/70 hover:bg-white/25"
+                  }`}
+                >
+                  {g.name}
+                </button>
+              ))}
+              <Link
+                href="/partner-signup"
+                className="flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/10 text-white/60 hover:bg-white/20 transition"
+              >
+                <Ic.Plus className="w-3 h-3" />
+                Add venue
+              </Link>
+            </div>
+          </div>
+        )}
 
         {/* Mobile nav tabs */}
         <div className="md:hidden bg-white border-b border-gray-100 sticky top-[52px] z-10 overflow-x-auto flex-shrink-0">
@@ -322,28 +432,37 @@ export default function PartnerDashboard() {
         )}
         {!gym.is_active && (
           <div className="bg-orange-50 border-b border-orange-200 px-5 py-2.5 text-xs text-orange-700 font-medium flex-shrink-0">
-            Venue pending approval — our team will review within 24–48 hours.
+            <strong>{gym.name}</strong> is pending approval — our team will review within 24–48 hours.
+          </div>
+        )}
+
+        {/* Switching overlay */}
+        {switching && (
+          <div className="flex-1 flex items-center justify-center p-20">
+            <div className="w-7 h-7 border-[3px] border-[#050040] border-t-transparent rounded-full animate-spin" />
           </div>
         )}
 
         {/* Section content */}
-        <main className="flex-1 p-4 md:p-8 max-w-5xl w-full mx-auto">
-          {section === "overview" && (
-            <OverviewSection gym={gym} sessions={sessions} bookings={bookings} />
-          )}
-          {section === "venue" && (
-            <VenueSection gym={gym} onSaved={setGym} />
-          )}
-          {section === "sessions" && (
-            <SessionsSection gym={gym} sessions={sessions} onRefresh={() => loadSessions(gym.id)} />
-          )}
-          {section === "revenue" && (
-            <RevenueSection bookings={bookings} />
-          )}
-          {section === "checkin" && (
-            <CheckInSection sessions={sessions} />
-          )}
-        </main>
+        {!switching && (
+          <main className="flex-1 p-4 md:p-8 max-w-5xl w-full mx-auto">
+            {section === "overview" && (
+              <OverviewSection gym={gym} sessions={sessions} bookings={bookings} />
+            )}
+            {section === "venue" && (
+              <VenueSection gym={gym} gyms={gyms} onSaved={handleGymSaved} />
+            )}
+            {section === "sessions" && (
+              <SessionsSection gym={gym} sessions={sessions} onRefresh={() => loadSessions(gym.id)} />
+            )}
+            {section === "revenue" && (
+              <RevenueSection bookings={bookings} />
+            )}
+            {section === "checkin" && (
+              <CheckInSection sessions={sessions} />
+            )}
+          </main>
+        )}
       </div>
     </div>
   );
@@ -376,7 +495,6 @@ function OverviewSection({ gym, sessions, bookings }: { gym: Gym; sessions: Sess
         </p>
       </div>
 
-      {/* Stat cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {stats.map(s => (
           <div key={s.label} className="bg-white rounded-2xl p-5 shadow-sm">
@@ -387,7 +505,6 @@ function OverviewSection({ gym, sessions, bookings }: { gym: Gym; sessions: Sess
         ))}
       </div>
 
-      {/* Upcoming sessions */}
       <div className="bg-white rounded-2xl shadow-sm p-5">
         <h2 className="font-semibold text-gray-900 mb-4">Upcoming Sessions</h2>
         {upcoming.length === 0 ? (
@@ -423,7 +540,6 @@ function OverviewSection({ gym, sessions, bookings }: { gym: Gym; sessions: Sess
         )}
       </div>
 
-      {/* Recent bookings */}
       <div className="bg-white rounded-2xl shadow-sm p-5">
         <h2 className="font-semibold text-gray-900 mb-4">Recent Bookings</h2>
         {bookings.length === 0 ? (
@@ -456,7 +572,7 @@ function OverviewSection({ gym, sessions, bookings }: { gym: Gym; sessions: Sess
 
 // ─── Venue ────────────────────────────────────────────────────────────────────
 
-function VenueSection({ gym, onSaved }: { gym: Gym; onSaved: (g: Gym) => void }) {
+function VenueSection({ gym, gyms, onSaved }: { gym: Gym; gyms: Gym[]; onSaved: (g: Gym) => void }) {
   const [form, setForm] = useState({
     name:          gym.name,
     location:      gym.location,
@@ -470,6 +586,20 @@ function VenueSection({ gym, onSaved }: { gym: Gym; onSaved: (g: Gym) => void })
   const [uploading, setUploading] = useState(false);
   const [msg,       setMsg]       = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Reset form when active gym changes
+  useEffect(() => {
+    setForm({
+      name:          gym.name,
+      location:      gym.location,
+      area:          gym.area,
+      type:          gym.type,
+      description:   gym.description,
+      contact_phone: gym.contact_phone,
+    });
+    setImageUrl(gym.image_url ?? "");
+    setMsg("");
+  }, [gym.id]);
 
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }));
 
@@ -504,9 +634,66 @@ function VenueSection({ gym, onSaved }: { gym: Gym; onSaved: (g: Gym) => void })
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">My Venue</h1>
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">Venue</h1>
+        {gyms.length > 1 && (
+          <p className="text-sm text-gray-400 mt-0.5">
+            Managing <span className="font-medium text-gray-600">{gym.name}</span>
+            {" "}· {gyms.length} venues on your account
+          </p>
+        )}
+      </div>
 
+      {/* All venues summary (multi-venue accounts) */}
+      {gyms.length > 1 && (
+        <div className="bg-white rounded-2xl shadow-sm p-5">
+          <h2 className="font-semibold text-gray-900 mb-3 text-sm">All your venues</h2>
+          <div className="space-y-2">
+            {gyms.map(g => (
+              <div key={g.id} className={`flex items-center gap-3 p-3 rounded-xl border transition ${
+                g.id === gym.id ? "border-[#050040]/30 bg-[#050040]/5" : "border-gray-100"
+              }`}>
+                <div className="w-9 h-9 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0">
+                  {g.image_url ? (
+                    <img src={g.image_url} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Ic.Building className="w-4 h-4 text-gray-300" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">{g.name}</p>
+                  <p className="text-xs text-gray-400 truncate capitalize">{g.type} · {g.area}</p>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                    g.is_active ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-600"
+                  }`}>
+                    {g.is_active ? "Live" : "Pending"}
+                  </span>
+                  {g.id === gym.id && (
+                    <span className="text-xs text-[#050040] font-semibold">Editing</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          <Link
+            href="/partner-signup"
+            className="mt-3 flex items-center gap-2 text-sm text-[#050040] font-medium hover:underline"
+          >
+            <Ic.Plus className="w-4 h-4" />
+            Register another venue
+          </Link>
+        </div>
+      )}
+
+      {/* Edit active venue */}
       <div className="bg-white rounded-2xl shadow-sm p-6 space-y-6">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+          Edit: {gym.name}
+        </p>
 
         {/* Photo */}
         <div>
@@ -609,10 +796,7 @@ function SessionsSection({ gym, sessions, onRefresh }: {
 
   const t = todayStr();
 
-  // Group recurring sessions (same name+time+category) into a single representative row.
-  // One-off sessions are shown individually.
   const oneOff = sessions.filter(s => !s.recurring);
-
   const recurringGroups = new Map<string, Session[]>();
   for (const s of sessions.filter(s => s.recurring)) {
     const key = `${s.name}||${s.time}||${s.category}`;
@@ -620,14 +804,12 @@ function SessionsSection({ gym, sessions, onRefresh }: {
     recurringGroups.get(key)!.push(s);
   }
 
-  // A representative session + its group for each recurring series
   type RecurringGroup = { rep: Session; all: Session[] };
   const groups: RecurringGroup[] = [...recurringGroups.values()].map(all => {
     const sorted = [...all].sort((a, b) => a.date.localeCompare(b.date));
     return { rep: sorted[0], all: sorted };
   });
 
-  // Apply filter
   const filteredOneOff = oneOff.filter(s =>
     filter === "upcoming" ? s.date >= t :
     filter === "past"     ? s.date < t  : true
@@ -640,7 +822,6 @@ function SessionsSection({ gym, sessions, onRefresh }: {
   const totalCount = filteredOneOff.length + filteredGroups.length;
 
   const setF = (k: string, v: any) => setForm(p => ({ ...p, [k]: v }));
-
   const resetRecurring = () => { setIsRecurring(false); setRecurDays([]); setRecurEndDate(""); };
 
   function openNew() {
@@ -697,37 +878,23 @@ function SessionsSection({ gym, sessions, onRefresh }: {
     let error: any;
 
     if (editGroupIds) {
-      // Update all sessions in the recurring series (each keeps its own date)
       ({ error } = await supabase.from("sessions").update({
-        name:             form.name,
-        description:      form.description,
-        time:             form.time,
+        name: form.name, description: form.description, time: form.time,
         duration_minutes: Number(form.duration_minutes),
         credits_required: Number(form.credits_required),
-        max_capacity:     Number(form.max_capacity),
-        category:         form.category,
-        instructor:       form.instructor,
-        image_url:        form.image_url || null,
+        max_capacity: Number(form.max_capacity),
+        category: form.category, instructor: form.instructor, image_url: form.image_url || null,
       }).in("id", editGroupIds));
 
     } else if (!editId && isRecurring) {
-      // Generate all occurrences between start and end date on selected days
       const dates = generateRecurringDates(form.date, recurEndDate, recurDays);
       if (dates.length === 0) { setSaving(false); alert("No sessions fall on the selected days in that date range."); return; }
       const base = {
-        gym_id:           gym.id,
-        name:             form.name,
-        description:      form.description,
-        time:             form.time,
-        duration_minutes: Number(form.duration_minutes),
-        credits_required: Number(form.credits_required),
-        max_capacity:     Number(form.max_capacity),
-        spots_left:       Number(form.max_capacity),
-        category:         form.category,
-        instructor:       form.instructor,
-        image_url:        form.image_url || null,
-        is_active:        true,
-        recurring:        true,
+        gym_id: gym.id, name: form.name, description: form.description, time: form.time,
+        duration_minutes: Number(form.duration_minutes), credits_required: Number(form.credits_required),
+        max_capacity: Number(form.max_capacity), spots_left: Number(form.max_capacity),
+        category: form.category, instructor: form.instructor, image_url: form.image_url || null,
+        is_active: true, recurring: true,
       };
       ({ error } = await supabase.from("sessions").insert(dates.map(date => ({ ...base, date }))));
 
@@ -736,10 +903,10 @@ function SessionsSection({ gym, sessions, onRefresh }: {
         gym_id: gym.id, ...form,
         duration_minutes: Number(form.duration_minutes),
         credits_required: Number(form.credits_required),
-        max_capacity:     Number(form.max_capacity),
-        spots_left:       Number(form.max_capacity),
-        image_url:        form.image_url || null,
-        is_active:        true,
+        max_capacity: Number(form.max_capacity),
+        spots_left: Number(form.max_capacity),
+        image_url: form.image_url || null,
+        is_active: true,
       };
       ({ error } = editId
         ? await supabase.from("sessions").update(payload).eq("id", editId)
@@ -766,7 +933,10 @@ function SessionsSection({ gym, sessions, onRefresh }: {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Sessions</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Sessions</h1>
+          <p className="text-gray-400 text-sm mt-0.5">{gym.name}</p>
+        </div>
         <button onClick={openNew}
           className="flex items-center gap-2 bg-[#050040] text-white text-sm font-semibold px-5 py-2.5 rounded-full hover:bg-indigo-900 transition">
           <Ic.Plus className="w-4 h-4" />
@@ -774,7 +944,6 @@ function SessionsSection({ gym, sessions, onRefresh }: {
         </button>
       </div>
 
-      {/* Create / Edit form */}
       {showForm && (
         <div className="bg-white rounded-2xl shadow-sm p-6 space-y-5">
           <div>
@@ -783,12 +952,11 @@ function SessionsSection({ gym, sessions, onRefresh }: {
             </h2>
             {editGroupIds && (
               <p className="text-xs text-gray-400 mt-0.5">
-                Changes apply to all {editGroupIds.length} occurrences. Each session keeps its own date.
+                Changes apply to all {editGroupIds.length} occurrences.
               </p>
             )}
           </div>
 
-          {/* Photo */}
           <div>
             <p className="text-xs font-semibold text-gray-600 mb-2">Session photo</p>
             <div className="flex items-center gap-4">
@@ -833,25 +1001,19 @@ function SessionsSection({ gym, sessions, onRefresh }: {
               </div>
             )}
 
-            {/* Recurring toggle — only on new sessions */}
             {!editId && !editGroupIds && (
               <div className="md:col-span-2">
                 <label className="flex items-center gap-3 cursor-pointer select-none w-fit">
                   <div
                     onClick={() => { setIsRecurring(p => !p); setRecurDays([]); setRecurEndDate(""); }}
-                    className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${
-                      isRecurring ? "bg-[#050040]" : "bg-gray-200"
-                    }`}>
-                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-                      isRecurring ? "translate-x-5" : "translate-x-0"
-                    }`} />
+                    className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${isRecurring ? "bg-[#050040]" : "bg-gray-200"}`}>
+                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${isRecurring ? "translate-x-5" : "translate-x-0"}`} />
                   </div>
                   <span className="text-sm font-medium text-gray-700">Recurring session</span>
                 </label>
 
                 {isRecurring && (
                   <div className="mt-4 space-y-4 pl-1">
-                    {/* Day picker */}
                     <div>
                       <p className="text-xs font-semibold text-gray-600 mb-2">Repeat on *</p>
                       <div className="flex gap-1.5 flex-wrap">
@@ -869,15 +1031,12 @@ function SessionsSection({ gym, sessions, onRefresh }: {
                         ))}
                       </div>
                     </div>
-                    {/* End date */}
                     <div className="max-w-xs">
                       <label className="block text-xs font-semibold text-gray-600 mb-1.5">End date *</label>
                       <input type="date" value={recurEndDate}
                         onChange={e => setRecurEndDate(e.target.value)}
-                        min={form.date || undefined}
-                        className={inp} />
+                        min={form.date || undefined} className={inp} />
                     </div>
-                    {/* Preview count */}
                     {form.date && recurEndDate && recurDays.length > 0 && (
                       <p className="text-xs text-[#050040] font-medium">
                         {generateRecurringDates(form.date, recurEndDate, recurDays).length} sessions will be created
@@ -917,8 +1076,7 @@ function SessionsSection({ gym, sessions, onRefresh }: {
             <div className="md:col-span-2">
               <label className="block text-xs font-semibold text-gray-600 mb-1.5">Description</label>
               <textarea value={form.description} onChange={e => setF("description", e.target.value)}
-                rows={3} className={inp + " resize-none"}
-                placeholder="What will members experience?" />
+                rows={3} className={inp + " resize-none"} placeholder="What will members experience?" />
             </div>
           </div>
 
@@ -935,7 +1093,6 @@ function SessionsSection({ gym, sessions, onRefresh }: {
         </div>
       )}
 
-      {/* Filter pills */}
       <div className="flex items-center gap-2">
         {(["upcoming", "all", "past"] as const).map(f => (
           <button key={f} onClick={() => setFilter(f)}
@@ -948,15 +1105,12 @@ function SessionsSection({ gym, sessions, onRefresh }: {
         <span className="text-xs text-gray-400 ml-1">{totalCount} sessions</span>
       </div>
 
-      {/* Session list */}
       {totalCount === 0 ? (
         <div className="bg-white rounded-2xl shadow-sm p-10 text-center">
           <p className="text-gray-400 text-sm">No sessions found.</p>
         </div>
       ) : (
         <div className="space-y-3">
-
-          {/* Recurring series — one row per series */}
           {filteredGroups.map(({ rep, all }) => {
             const upcoming = all.filter(s => s.date >= t).sort((a, b) => a.date.localeCompare(b.date));
             const nextDate  = upcoming[0]?.date;
@@ -964,12 +1118,9 @@ function SessionsSection({ gym, sessions, onRefresh }: {
             const allActive = all.every(s => s.is_active);
 
             async function toggleAll() {
-              await supabase.from("sessions")
-                .update({ is_active: !allActive })
-                .in("id", all.map(s => s.id));
+              await supabase.from("sessions").update({ is_active: !allActive }).in("id", all.map(s => s.id));
               onRefresh();
             }
-
             async function deleteAll() {
               if (!confirm(`Delete all ${all.length} occurrences of "${rep.name}"?`)) return;
               await supabase.from("sessions").delete().in("id", all.map(s => s.id));
@@ -990,12 +1141,8 @@ function SessionsSection({ gym, sessions, onRefresh }: {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-semibold text-gray-900 text-sm">{rep.name}</p>
-                    <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-full text-xs font-medium">
-                      Recurring
-                    </span>
-                    <span className="px-2 py-0.5 bg-gray-100 rounded-full text-xs text-gray-500 capitalize">
-                      {rep.category.replace("-", " ")}
-                    </span>
+                    <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-full text-xs font-medium">Recurring</span>
+                    <span className="px-2 py-0.5 bg-gray-100 rounded-full text-xs text-gray-500 capitalize">{rep.category.replace("-", " ")}</span>
                   </div>
                   <p className="text-xs text-gray-400 mt-0.5">
                     {all.length} sessions · {rep.time?.slice(0, 5)} · {rep.duration_minutes}min
@@ -1009,16 +1156,10 @@ function SessionsSection({ gym, sessions, onRefresh }: {
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <button onClick={toggleAll}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
-                      allActive
-                        ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
-                        : "bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100"
-                    }`}>
-                    {allActive ? "Active" : "Inactive"}
-                  </button>
+                      allActive ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-50 text-gray-500 border-gray-200"
+                    }`}>{allActive ? "Active" : "Inactive"}</button>
                   <button onClick={() => openEditGroup(rep, all)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition">
-                    Edit
-                  </button>
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition">Edit</button>
                   <button onClick={deleteAll}
                     className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition">
                     <Ic.Trash className="w-4 h-4" />
@@ -1028,7 +1169,6 @@ function SessionsSection({ gym, sessions, onRefresh }: {
             );
           })}
 
-          {/* One-off sessions */}
           {filteredOneOff.map(s => (
             <div key={s.id} className="bg-white rounded-2xl shadow-sm p-4 flex gap-4 items-center">
               <div className="w-16 h-16 rounded-xl bg-gray-100 overflow-hidden flex-shrink-0">
@@ -1043,34 +1183,22 @@ function SessionsSection({ gym, sessions, onRefresh }: {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="font-semibold text-gray-900 text-sm">{s.name}</p>
-                  <span className="px-2 py-0.5 bg-gray-100 rounded-full text-xs text-gray-500 capitalize">
-                    {s.category.replace("-", " ")}
-                  </span>
-                  {!s.is_active && (
-                    <span className="px-2 py-0.5 bg-gray-100 rounded-full text-xs text-gray-400">Inactive</span>
-                  )}
+                  <span className="px-2 py-0.5 bg-gray-100 rounded-full text-xs text-gray-500 capitalize">{s.category.replace("-", " ")}</span>
+                  {!s.is_active && <span className="px-2 py-0.5 bg-gray-100 rounded-full text-xs text-gray-400">Inactive</span>}
                 </div>
                 <p className="text-xs text-gray-400 mt-0.5">
                   {fmtDate(s.date)} · {s.time?.slice(0, 5)} · {s.duration_minutes}min
                   {s.instructor && ` · ${s.instructor}`}
                 </p>
-                <p className="text-xs text-gray-400">
-                  {s.spots_left}/{s.max_capacity} spots · {s.credits_required} credits
-                </p>
+                <p className="text-xs text-gray-400">{s.spots_left}/{s.max_capacity} spots · {s.credits_required} credits</p>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 <button onClick={() => handleToggle(s)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
-                    s.is_active
-                      ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
-                      : "bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100"
-                  }`}>
-                  {s.is_active ? "Active" : "Inactive"}
-                </button>
+                    s.is_active ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-50 text-gray-500 border-gray-200"
+                  }`}>{s.is_active ? "Active" : "Inactive"}</button>
                 <button onClick={() => openEdit(s)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition">
-                  Edit
-                </button>
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition">Edit</button>
                 <button onClick={() => handleDelete(s.id)}
                   className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition">
                   <Ic.Trash className="w-4 h-4" />
@@ -1088,9 +1216,9 @@ function SessionsSection({ gym, sessions, onRefresh }: {
 
 function RevenueSection({ bookings }: { bookings: Booking[] }) {
   const m = monthStr();
-  const monthBookings  = bookings.filter(b => b.booking_date?.startsWith(m));
-  const totalCredits   = bookings.reduce((s, b) => s + (b.sessions?.credits_required ?? 0), 0);
-  const monthCredits   = monthBookings.reduce((s, b) => s + (b.sessions?.credits_required ?? 0), 0);
+  const monthBookings = bookings.filter(b => b.booking_date?.startsWith(m));
+  const totalCredits  = bookings.reduce((s, b) => s + (b.sessions?.credits_required ?? 0), 0);
+  const monthCredits  = monthBookings.reduce((s, b) => s + (b.sessions?.credits_required ?? 0), 0);
 
   const stats = [
     { label: "Total Bookings",       value: bookings.length },
@@ -1102,7 +1230,6 @@ function RevenueSection({ bookings }: { bookings: Booking[] }) {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-gray-900">Revenue</h1>
-
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {stats.map(s => (
           <div key={s.label} className="bg-white rounded-2xl p-5 shadow-sm">
@@ -1111,7 +1238,6 @@ function RevenueSection({ bookings }: { bookings: Booking[] }) {
           </div>
         ))}
       </div>
-
       <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-50">
           <h2 className="font-semibold text-gray-900">Booking History</h2>
@@ -1123,9 +1249,7 @@ function RevenueSection({ bookings }: { bookings: Booking[] }) {
             {bookings.map(b => (
               <div key={b.id} className="flex items-center gap-4 px-5 py-3">
                 <div className="w-8 h-8 rounded-full bg-[#050040]/10 flex items-center justify-center flex-shrink-0">
-                  <span className="text-xs font-bold text-[#050040]">
-                    {(b.users?.name ?? "?")[0]?.toUpperCase()}
-                  </span>
+                  <span className="text-xs font-bold text-[#050040]">{(b.users?.name ?? "?")[0]?.toUpperCase()}</span>
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">{b.users?.name ?? "Member"}</p>
@@ -1133,9 +1257,7 @@ function RevenueSection({ bookings }: { bookings: Booking[] }) {
                 </div>
                 <div className="flex-shrink-0 text-right">
                   <p className="text-xs text-gray-500">{fmtDate(b.booking_date)}</p>
-                  <p className="text-sm font-semibold text-[#050040]">
-                    +{b.sessions?.credits_required ?? 0} cr
-                  </p>
+                  <p className="text-sm font-semibold text-[#050040]">+{b.sessions?.credits_required ?? 0} cr</p>
                 </div>
               </div>
             ))}
@@ -1159,13 +1281,9 @@ function CheckInSection({ sessions }: { sessions: Session[] }) {
   const daySessions = sessions.filter(s => s.date === date);
 
   async function selectSession(id: string) {
-    setSelectedSession(id);
-    setSearch("");
-    setLoadingList(true);
+    setSelectedSession(id); setSearch(""); setLoadingList(true);
     const { data } = await supabase
-      .from("bookings")
-      .select("*, users(name, email, phone)")
-      .eq("session_id", id);
+      .from("bookings").select("*, users(name, email, phone)").eq("session_id", id);
     setAttendees(data || []);
     setCheckedIn(new Set((data || []).filter((b: any) => b.checked_in).map((b: any) => b.id)));
     setLoadingList(false);
@@ -1173,26 +1291,20 @@ function CheckInSection({ sessions }: { sessions: Session[] }) {
 
   async function toggleCheckIn(bookingId: string) {
     const was = checkedIn.has(bookingId);
-    setCheckedIn(prev => {
-      const next = new Set(prev);
-      was ? next.delete(bookingId) : next.add(bookingId);
-      return next;
-    });
+    setCheckedIn(prev => { const next = new Set(prev); was ? next.delete(bookingId) : next.add(bookingId); return next; });
     await supabase.from("bookings").update({ checked_in: !was }).eq("id", bookingId);
   }
 
   const displayed = attendees.filter(b => {
     if (!search) return true;
     const q = search.toLowerCase();
-    return (b.users?.name ?? "").toLowerCase().includes(q) ||
-           (b.users?.email ?? "").toLowerCase().includes(q);
+    return (b.users?.name ?? "").toLowerCase().includes(q) || (b.users?.email ?? "").toLowerCase().includes(q);
   });
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-gray-900">Check-in</h1>
 
-      {/* Date + session picker */}
       <div className="bg-white rounded-2xl shadow-sm p-5 space-y-4">
         <div>
           <label className="block text-xs font-semibold text-gray-600 mb-1.5">Date</label>
@@ -1200,7 +1312,6 @@ function CheckInSection({ sessions }: { sessions: Session[] }) {
             onChange={e => { setDate(e.target.value); setSelectedSession(null); setAttendees([]); }}
             className={inp + " max-w-xs"} />
         </div>
-
         {daySessions.length === 0 ? (
           <p className="text-sm text-gray-400">No sessions scheduled for this date.</p>
         ) : (
@@ -1225,24 +1336,16 @@ function CheckInSection({ sessions }: { sessions: Session[] }) {
         )}
       </div>
 
-      {/* Attendees list */}
       {selectedSession && (
         <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-50 flex items-center justify-between gap-4">
             <div>
               <h2 className="font-semibold text-gray-900">Attendees</h2>
-              <p className="text-xs text-gray-400 mt-0.5">
-                {checkedIn.size} / {attendees.length} checked in
-              </p>
+              <p className="text-xs text-gray-400 mt-0.5">{checkedIn.size} / {attendees.length} checked in</p>
             </div>
-            <input
-              placeholder="Search member…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-[#050040] w-40 transition"
-            />
+            <input placeholder="Search member…" value={search} onChange={e => setSearch(e.target.value)}
+              className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-[#050040] w-40 transition" />
           </div>
-
           {loadingList ? (
             <div className="p-8 flex justify-center">
               <div className="w-6 h-6 border-2 border-[#050040] border-t-transparent rounded-full animate-spin" />
@@ -1257,17 +1360,13 @@ function CheckInSection({ sessions }: { sessions: Session[] }) {
                 const checked = checkedIn.has(b.id);
                 return (
                   <div key={b.id} className="flex items-center gap-4 px-5 py-3">
-                    <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
-                      checked ? "bg-green-100" : "bg-gray-100"
-                    }`}>
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${checked ? "bg-green-100" : "bg-gray-100"}`}>
                       <span className={`text-sm font-bold ${checked ? "text-green-700" : "text-gray-500"}`}>
                         {(b.users?.name ?? "?")[0]?.toUpperCase()}
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">
-                        {b.users?.name ?? "Member"}
-                      </p>
+                      <p className="text-sm font-medium text-gray-900 truncate">{b.users?.name ?? "Member"}</p>
                       <p className="text-xs text-gray-400 truncate">{b.users?.email}</p>
                     </div>
                     <button onClick={() => toggleCheckIn(b.id)}

@@ -38,17 +38,25 @@ export default function PartnerLoginPage() {
 
       if (authError) throw authError;
 
-      // 2. Check if user has a gym (is a partner)
-      const { data: gymData, error: gymError } = await supabase
-        .from('gyms')
-        .select('id, name')
-        .eq('contact_email', email)
-        .single();
-
-      if (gymError || !gymData) {
-        // Not a partner account
+      // 2. Check if user has a gym via server route (bypasses RLS)
+      const accessToken = authData.session?.access_token;
+      if (!accessToken) {
         await supabase.auth.signOut();
-        setError("No gym found for this account. Please use the regular login or sign up as a partner.");
+        setError("Could not establish a session. Please confirm your email before logging in.");
+        setLoading(false);
+        return;
+      }
+
+      const res = await fetch('/api/check-partner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, accessToken }),
+      });
+      const json = await res.json();
+
+      if (!json.isPartner) {
+        await supabase.auth.signOut();
+        setError(json.error || "No partner venue found for this account. Please sign up as a partner or use the member login.");
         setLoading(false);
         return;
       }
