@@ -89,7 +89,7 @@ export default function VenuesClient({ gyms }: { gyms: Gym[] }) {
                   <p className="text-xs text-gray-400 uppercase tracking-wide capitalize mb-0.5">{gym.type}</p>
                   <Link
                     href={`/venues/${gym.id}`}
-                    onClick={(e) => e.stopPropagation()}
+                    onClick={(e: React.MouseEvent) => e.stopPropagation()}
                     className="text-sm font-semibold hover:underline truncate"
                   >
                     {gym.name}
