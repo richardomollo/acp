@@ -249,7 +249,7 @@ export default function WalkthroughPage() {
 
         {/* Slide content */}
         <div
-          className="flex-1 flex flex-col items-center justify-center px-8 py-8"
+          className="md:flex-1 flex flex-col items-center md:justify-center px-8 pt-6 pb-4"
           style={{
             opacity: animating ? 0 : 1,
             transform: animating
@@ -276,7 +276,7 @@ export default function WalkthroughPage() {
         </div>
 
         {/* Bottom nav */}
-        <div className="px-8 pb-8 pt-2">
+        <div className="px-8 pb-6 pt-2">
           {isLast ? (
             <div className="flex flex-col gap-3 max-w-sm mx-auto">
               <Link
