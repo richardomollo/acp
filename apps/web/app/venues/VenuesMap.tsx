@@ -40,7 +40,6 @@ const NAIROBI_AREA_COORDS: Record<string, [number, number]> = {
   "Riverside":    [-1.2740, 36.7980],
   "Spring Valley":[-1.2580, 36.7820],
   "Loresho":      [-1.2460, 36.7690],
-  "Runda":        [-1.2175, 36.7915],
   "Ruaka":        [-1.2050, 36.7700],
   "Mlolongo":     [-1.3850, 36.9050],
   "Rongai":       [-1.3950, 36.7450],
