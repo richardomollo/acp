@@ -42,8 +42,7 @@ export default function Header() {
 
         <ul className="md:flex hidden items-center gap-10 text-sm">
           <li><Link className="hover:text-gray-500/80 transition" href="/sessions">Find Classes and Appointments</Link></li>
-          <li><Link className="hover:text-gray-500/80 transition" href="/venues">Discover Venues</Link></li>
-          
+
           {user && (
             <li>
               <Link className="hover:text-gray-500/80 transition" href="/bookings">
@@ -107,11 +106,6 @@ export default function Header() {
             <li>
               <Link href="/sessions" className="text-sm block" onClick={() => setMobileMenuOpen(false)}>
                 Find Classes and Appointments
-              </Link>
-            </li>
-            <li>
-              <Link href="/venues" className="text-sm block" onClick={() => setMobileMenuOpen(false)}>
-                Discover Venues
               </Link>
             </li>
             {user && (

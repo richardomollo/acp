@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useState } from "react";
 import Link from "next/link";
 
+
 const VenuesMap = dynamic(() => import("./VenuesMap"), { ssr: false });
 
 type Gym = {
@@ -55,7 +56,15 @@ export default function VenuesClient({ gyms }: { gyms: Gym[] }) {
           } sm:flex flex-col w-full sm:w-[45%] lg:w-[40%] overflow-y-auto border-r border-gray-100`}
         >
           <div className="px-6 md:px-16 lg:px-24 xl:px-32 py-5 border-b border-gray-100">
-            <h1 className="text-lg font-bold">Venues in Nairobi</h1>
+            {/* Sessions / Venues toggle */}
+            <div className="inline-flex bg-gray-100 rounded-full p-1 mb-3">
+              <Link href="/sessions" className="px-4 py-1.5 text-sm font-medium rounded-full text-gray-500 hover:text-gray-700 transition-colors">
+                Classes
+              </Link>
+              <span className="px-4 py-1.5 text-sm font-medium rounded-full bg-white text-gray-900 shadow-sm">
+                Venues
+              </span>
+            </div>
             <p className="text-sm text-gray-500">{gyms.length} venues found</p>
           </div>
 
