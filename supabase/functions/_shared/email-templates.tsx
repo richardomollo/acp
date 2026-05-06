@@ -293,6 +293,73 @@ export function getFirstPayoutEmail(data: EmailData): string {
   `;
 }
 
+export function getBookingConfirmationEmail(data: EmailData): string {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <body style="background: #f5f5f5; margin: 0; padding: 20px;">
+      <div style="${baseStyle}">
+        <h1 style="${headingStyle}">You're booked! 🎉</h1>
+        <p style="${paragraphStyle}">Hi ${data.customerName || 'there'},</p>
+        <p style="${paragraphStyle}">
+          Your booking is confirmed. See you at the session!
+        </p>
+        <div style="background: #f9f9f9; border: 1px solid #eee; border-radius: 12px; padding: 20px; margin: 20px 0;">
+          <p style="margin: 0 0 8px; font-size: 15px;"><strong>${data.sessionName}</strong></p>
+          <p style="margin: 0 0 4px; font-size: 14px; color: #666;">📍 ${data.venueName}${data.venueLocation ? ', ' + data.venueLocation : ''}</p>
+          <p style="margin: 0 0 4px; font-size: 14px; color: #666;">🗓️ ${data.sessionDate}</p>
+          <p style="margin: 0 0 4px; font-size: 14px; color: #666;">⏰ ${data.sessionTime}</p>
+          ${data.confirmationCode ? `<p style="margin: 12px 0 0; font-size: 14px; color: #333;">Check-in code: <strong style="font-family: monospace; font-size: 18px; letter-spacing: 2px;">${data.confirmationCode}</strong></p>` : ''}
+        </div>
+        <p style="${paragraphStyle}">Show this code at the venue when you arrive.</p>
+        <a href="https://activecitypass.com/bookings" style="${buttonStyle}">View My Bookings</a>
+        <p style="${paragraphStyle}">
+          Need to cancel? You can do so anytime from your bookings page — credits are refunded immediately.
+        </p>
+        <div style="${footerStyle}">
+          Active CityPass | Nairobi, Kenya<br>
+          Questions? <a href="mailto:support@activecitypass.com" style="color: #999;">support@activecitypass.com</a>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
+export function getTrialWelcomeEmail(data: EmailData): string {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <body style="background: #f5f5f5; margin: 0; padding: 20px;">
+      <div style="${baseStyle}">
+        <h1 style="${headingStyle}">Your free trial has started! 🏃</h1>
+        <p style="${paragraphStyle}">Welcome to Active CityPass!</p>
+        <p style="${paragraphStyle}">
+          You have <strong>50 credits</strong> and <strong>14 days</strong> to explore the best
+          gyms, studios, and wellness spaces in Nairobi — all with one membership.
+        </p>
+        <div style="background: #f0f4ff; border-radius: 12px; padding: 20px; margin: 20px 0;">
+          <p style="margin: 0 0 8px; font-size: 15px; font-weight: 600; color: #333;">How it works</p>
+          <p style="margin: 0 0 6px; font-size: 14px; color: #555;">✅ Browse classes across 100+ venues in Nairobi</p>
+          <p style="margin: 0 0 6px; font-size: 14px; color: #555;">✅ Use your 50 credits to book sessions</p>
+          <p style="margin: 0 0 6px; font-size: 14px; color: #555;">✅ Visit each partner venue once during your trial</p>
+          <p style="margin: 0; font-size: 14px; color: #555;">✅ Cancel any booking to get your credits back instantly</p>
+        </div>
+        <a href="https://activecitypass.com/sessions" style="${buttonStyle}">Find a Class</a>
+        <p style="${paragraphStyle}">
+          Your trial ends in 14 days. Upgrade anytime to unlock unlimited bookings and access
+          to all premium venues.
+        </p>
+        <div style="${footerStyle}">
+          Active CityPass | Nairobi, Kenya<br>
+          Questions? <a href="mailto:support@activecitypass.com" style="color: #999;">support@activecitypass.com</a>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
 export function getEmailTemplate(type: string, data: EmailData): string {
   switch (type) {
     case 'welcome':
