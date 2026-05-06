@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import BookButton from "../../components/BookButton";
+import VenueDetailMapWrapper from "../../venues/[id]/VenueDetailMapWrapper";
 
 // Create a server-side Supabase client that can access cookies
 async function createServerClient() {
@@ -250,118 +251,62 @@ export default async function SessionDetailPage({ params }: Props) {
 
         {/* Sidebar */}
         <div className="md:col-span-1">
-          {/* Location Card */}
           {session.gyms && (
-            <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6 sticky top-6">
-              <h3 className="font-semibold text-lg mb-2 flex items-center">
-                <svg
-                  className="w-5 h-5 mr-2 text-gray-600"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                  />
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                  />
-                </svg>
-               {session.gyms.name}
-              </h3>
-{/* 
-              {session.gyms.image_url && (
-                <img
-                  src={session.gyms.image_url}
-                  alt={session.gyms.name}
-                  className="w-full h-32 object-cover rounded-lg mb-4"
+            <div className="sticky top-[86px] space-y-3">
+              {/* Map */}
+              <div className="rounded-2xl overflow-hidden border border-gray-200" style={{ height: 240 }}>
+                <VenueDetailMapWrapper
+                  name={session.gyms.name}
+                  area={session.gyms.area ?? session.gyms.location ?? ""}
+                  location={session.gyms.location ?? ""}
                 />
-              )} */}
+              </div>
 
-              <div className="space-y-2">
+              {/* Venue info card */}
+              <div className="bg-white rounded-2xl border border-gray-200 p-4 text-sm space-y-3">
                 <div>
-                  {/* <p className="font-semibold text-gray-900">{session.gyms.name}</p> */}
-                  <p className="text-sm text-gray-600 mt-1">{session.gyms.location}</p>
-                  {session.gyms.area && (
-                    <p className="text-sm text-gray-600">{session.gyms.area}</p>
-                  )}
+                  <p className="font-semibold text-gray-900">{session.gyms.name}</p>
+                  <p className="text-gray-500 capitalize mt-0.5">{session.gyms.type}</p>
                 </div>
 
-                {session.gyms.type && (
-                  <span className="inline-block px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-medium">
-                    {session.gyms.type}
-                  </span>
-                )}
-
                 {session.gyms.description && (
-                  <p className="text-sm text-gray-600 pt-2">
+                  <p className="text-xs text-gray-500 leading-relaxed border-t border-gray-100 pt-3">
                     {session.gyms.description}
                   </p>
                 )}
 
-                <div className="pt-3 space-y-2">
-                  {session.gyms.contact_phone && (
-                    <a 
-                      href={`tel:${session.gyms.contact_phone}`}
-                      className="flex items-center text-sm text-gray-700 hover:text-blue-600"
-                    >
-                      <svg
-                        className="w-4 h-4 mr-2"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                        />
-                      </svg>
-                      {session.gyms.contact_phone}
-                    </a>
-                  )}
-                  
-                  {session.gyms.contact_email && (
-                    <a 
-                      href={`mailto:${session.gyms.contact_email}`}
-                      className="flex items-center text-sm text-gray-700 hover:text-blue-600"
-                    >
-                      <svg
-                        className="w-4 h-4 mr-2"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                        />
-                      </svg>
-                      {session.gyms.contact_email}
-                    </a>
-                  )}
-                </div>
+                {(session.gyms.location || session.gyms.contact_phone || session.gyms.contact_email) && (
+                  <div className="border-t border-gray-100 pt-3 space-y-1.5">
+                    {session.gyms.location && (
+                      <p className="text-gray-500 flex gap-1.5">
+                        <span>📍</span>
+                        <span>{session.gyms.location}{session.gyms.area ? `, ${session.gyms.area}` : ""}</span>
+                      </p>
+                    )}
+                    {session.gyms.contact_phone && (
+                      <p className="text-gray-500 flex gap-1.5">
+                        <span>📞</span>
+                        <span>{session.gyms.contact_phone}</span>
+                      </p>
+                    )}
+                    {session.gyms.contact_email && (
+                      <a href={`mailto:${session.gyms.contact_email}`} className="text-blue-600 hover:underline flex gap-1.5">
+                        <span>✉️</span>
+                        <span>{session.gyms.contact_email}</span>
+                      </a>
+                    )}
+                  </div>
+                )}
 
                 <Link
                   href={`/venues/${session.gym_id}`}
-                  className="block text-right text-sm text-blue-600 hover:text-blue-800 font-medium pt-3"
+                  className="block text-sm text-blue-600 hover:underline font-medium pt-1 border-t border-gray-100"
                 >
-                  View venue details →
+                  View venue →
                 </Link>
               </div>
             </div>
           )}
-
-          
         </div>
       </div>
     </div>

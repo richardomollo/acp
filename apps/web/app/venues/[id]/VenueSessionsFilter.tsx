@@ -93,44 +93,38 @@ export default function VenueSessionsFilter({
           No classes scheduled for this day.
         </p>
       ) : (
-        <ul className="grid gap-4 sm:grid-cols-5">
+        <div className="divide-y divide-gray-100 border border-gray-200 rounded-2xl overflow-hidden bg-white">
           {filtered.map((session) => (
             <Link
               key={session.id}
               href={`/sessions/${session.id}`}
-              className="bg-white rounded-xl pb-4 overflow-hidden border border-gray-200 hover:-translate-y-1 transition duration-300 block"
+              className="flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors"
             >
-              <div className="relative h-35 w-full bg-gradient-to-br from-gray-100 to-gray-200">
-                {session.image_url && (
-                  <img
-                    src={session.image_url}
-                    alt={session.name}
-                    className="w-full h-35 object-cover object-top"
-                    onError={(e) => { e.currentTarget.style.display = "none"; }}
-                  />
-                )}
+              {session.image_url && (
+                <img
+                  src={session.image_url}
+                  alt={session.name}
+                  className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
+                  onError={(e) => { e.currentTarget.style.display = "none"; }}
+                />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-gray-400 uppercase tracking-wide mb-0.5">
+                  {session.category}{session.instructor ? ` · ${session.instructor}` : ""}
+                </p>
+                <p className="text-sm font-semibold text-gray-900 truncate">{session.name}</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {session.time.slice(0, 5)}
+                  {session.duration_minutes ? ` · ${session.duration_minutes} min` : ""}
+                  {session.spots_left != null ? ` · ${session.spots_left} spots left` : ""}
+                </p>
               </div>
-              <div className="flex flex-col p-6">
-                <h2 className="text-m font-semibold">
-                  {session.name} - {session.category}, {session.duration_minutes} min
-                </h2>
-                <p className="text-sm text-gray-600">{session.instructor}</p>
-                <p className="text-sm text-gray-600">{session.duration_minutes} min</p>
-                <p className="text-sm text-gray-600 mb-2">
-                  {session.spots_left != null
-                    ? `${session.spots_left} spots left out of ${session.max_capacity}`
-                    : `${session.max_capacity} spots available`}
-                </p>
-                <p className="text-sm text-gray-700">
-                  📅 {new Date(session.date).toLocaleDateString()} · 🕒 {session.time}
-                </p>
-                <p className="text-sm text-gray">
-                  Credits required to book: {session.credits_required}
-                </p>
+              <div className="text-right flex-shrink-0">
+                <p className="text-sm font-semibold text-gray-900">{session.credits_required} credit{session.credits_required !== 1 ? "s" : ""}</p>
               </div>
             </Link>
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );
