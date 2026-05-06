@@ -244,7 +244,7 @@ export default function SessionsPage() {
             placeholder="Search classes..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none"
           />
           <button
             onClick={() => setShowFilters((v) => !v)}
@@ -264,19 +264,19 @@ export default function SessionsPage() {
             placeholder="Search classes..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="hidden sm:block rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="hidden sm:block rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none"
           />
           <select
             value={catParam}
             onChange={(e) => handleCategoryChange(e.target.value)}
-            className="rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none"
           >
             {categories.map((c) => <option key={c} value={c}>{c === "All" ? "All Categories" : c}</option>)}
           </select>
           <select
             value={locParam}
             onChange={(e) => handleLocationChange(e.target.value)}
-            className="rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none"
           >
             {locations.map((l) => <option key={l} value={l}>{l === "All" ? "All Locations" : l}</option>)}
           </select>
@@ -284,9 +284,10 @@ export default function SessionsPage() {
             onClick={clearFilters}
             className="rounded-md border border-gray-200 text-sm font-medium py-2 hover:bg-gray-50 transition-colors"
           >
-            Clear Filters
+            Clear
           </button>
         </div>
+
       </div>
 
       {/* ── Bottom: list + map split (aligned with header) ── */}

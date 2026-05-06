@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 
 
@@ -21,6 +21,20 @@ type Gym = {
 export default function VenuesClient({ gyms }: { gyms: Gym[] }) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [mobileView, setMobileView] = useState<"list" | "map">("list");
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("All");
+  const [areaFilter, setAreaFilter] = useState("All");
+
+  const types = useMemo(() => ["All", ...new Set(gyms.map((g) => g.type).filter(Boolean))], [gyms]);
+  const areas = useMemo(() => ["All", ...new Set(gyms.map((g) => g.area).filter(Boolean))], [gyms]);
+
+  const filtered = useMemo(() => gyms.filter((g) => {
+    const q = search.toLowerCase();
+    const matchesSearch = !q || g.name.toLowerCase().includes(q) || g.description?.toLowerCase().includes(q) || g.location?.toLowerCase().includes(q);
+    const matchesType = typeFilter === "All" || g.type === typeFilter;
+    const matchesArea = areaFilter === "All" || g.area === areaFilter;
+    return matchesSearch && matchesType && matchesArea;
+  }), [gyms, search, typeFilter, areaFilter]);
 
   return (
     <div className="flex flex-col" style={{ height: "calc(100vh - 70px)" }}>
@@ -57,7 +71,7 @@ export default function VenuesClient({ gyms }: { gyms: Gym[] }) {
         >
           <div className="px-6 md:px-16 lg:px-24 xl:px-32 py-5 border-b border-gray-100">
             {/* Sessions / Venues toggle */}
-            <div className="inline-flex bg-gray-100 rounded-full p-1 mb-3">
+            <div className="inline-flex bg-gray-100 rounded-full p-1 mb-4">
               <Link href="/sessions" className="px-4 py-1.5 text-sm font-medium rounded-full text-gray-500 hover:text-gray-700 transition-colors">
                 Classes
               </Link>
@@ -65,11 +79,37 @@ export default function VenuesClient({ gyms }: { gyms: Gym[] }) {
                 Venues
               </span>
             </div>
-            <p className="text-sm text-gray-500">{gyms.length} venues found</p>
+
+            {/* Search + filters */}
+            <div className="grid gap-2 sm:grid-cols-3">
+              <input
+                type="text"
+                placeholder="Search venues..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <select
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+                className="rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none"
+              >
+                {types.map((t) => <option key={t} value={t}>{t === "All" ? "All Types" : t}</option>)}
+              </select>
+              <select
+                value={areaFilter}
+                onChange={(e) => setAreaFilter(e.target.value)}
+                className="rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none"
+              >
+                {areas.map((a) => <option key={a} value={a}>{a === "All" ? "All Areas" : a}</option>)}
+              </select>
+            </div>
+
+            <p className="text-xs text-gray-400 mt-2">{filtered.length} venue{filtered.length !== 1 ? "s" : ""}</p>
           </div>
 
           <div className="divide-y divide-gray-100">
-            {gyms.map((gym) => (
+            {filtered.map((gym) => (
               <div
                 key={gym.id}
                 onClick={() => setActiveId(gym.id === activeId ? null : gym.id)}
@@ -122,11 +162,11 @@ export default function VenuesClient({ gyms }: { gyms: Gym[] }) {
 
         {/* Map panel — always mounted on desktop, conditionally on mobile */}
         <div className="hidden sm:flex flex-1">
-          <VenuesMap gyms={gyms} activeId={activeId} onSelect={setActiveId} />
+          <VenuesMap gyms={filtered} activeId={activeId} onSelect={setActiveId} />
         </div>
         {mobileView === "map" && (
           <div className="flex sm:hidden flex-1">
-            <VenuesMap gyms={gyms} activeId={activeId} onSelect={setActiveId} />
+            <VenuesMap gyms={filtered} activeId={activeId} onSelect={setActiveId} />
           </div>
         )}
       </div>
