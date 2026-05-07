@@ -16,6 +16,7 @@ type Gym = {
   is_active: boolean;
   image_url: string | null;
   rate_floor: number | null;
+  rate_floor_percentage: number | null;
   created_at: string;
 };
 
@@ -157,6 +158,7 @@ export default function VenuesPage() {
               <th className="text-left px-5 py-3 font-semibold text-gray-600">Type / Area</th>
               <th className="text-left px-5 py-3 font-semibold text-gray-600">Owner</th>
               <th className="text-left px-5 py-3 font-semibold text-gray-600">Rating</th>
+              <th className="text-left px-5 py-3 font-semibold text-gray-600">Rate Floor</th>
               <th className="text-left px-5 py-3 font-semibold text-gray-600">Status</th>
               <th className="text-right px-5 py-3 font-semibold text-gray-600">Actions</th>
             </tr>
@@ -183,6 +185,20 @@ export default function VenuesPage() {
                     <span className="text-yellow-400">★</span>
                     <span className="font-medium">{gym.rating ?? '—'}</span>
                   </div>
+                </td>
+                <td className="px-5 py-4">
+                  {gym.rate_floor != null ? (
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">KES {gym.rate_floor.toLocaleString()}</p>
+                      {gym.rate_floor_percentage != null && (
+                        <p className={`text-xs font-medium ${gym.rate_floor_percentage <= 60 ? 'text-green-600' : gym.rate_floor_percentage <= 75 ? 'text-amber-600' : 'text-red-500'}`}>
+                          {gym.rate_floor_percentage}% of drop-in
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-gray-400">Not negotiated</span>
+                  )}
                 </td>
                 <td className="px-5 py-4">
                   <button onClick={() => toggleActive(gym)}

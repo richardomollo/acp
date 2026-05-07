@@ -108,9 +108,10 @@ export default async function SessionDetailPage({ params }: Props) {
               </div>
             )}
             {session.credits_required != null && (
-              <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm">
-                <p className="text-xs text-gray-400 mb-0.5">Credits</p>
-                <p className="font-medium text-gray-900">{session.credits_required}</p>
+              <div className="flex items-center">
+                <span className="border border-blue-500 text-blue-500 rounded-lg px-4 py-2 text-sm font-medium whitespace-nowrap">
+                  {session.credits_required} credit{session.credits_required !== 1 ? "s" : ""}
+                </span>
               </div>
             )}
           </div>

@@ -119,8 +119,10 @@ export default function VenueSessionsFilter({
                   {session.spots_left != null ? ` · ${session.spots_left} spots left` : ""}
                 </p>
               </div>
-              <div className="text-right flex-shrink-0">
-                <p className="text-sm font-semibold text-gray-900">{session.credits_required} credit{session.credits_required !== 1 ? "s" : ""}</p>
+              <div className="flex-shrink-0 self-center">
+                <span className="border border-blue-500 text-blue-500 rounded-lg px-3 py-1 text-xs font-medium whitespace-nowrap">
+                  {session.credits_required} credit{session.credits_required !== 1 ? "s" : ""}
+                </span>
               </div>
             </Link>
           ))}

@@ -26,6 +26,8 @@ type Gym = {
   contact_phone: string;
   is_active: boolean;
   rating: number;
+  rate_floor: number | null;
+  rate_floor_percentage: number | null;
   created_at: string;
 };
 
@@ -38,6 +40,7 @@ type Session = {
   date: string;
   duration_minutes: number;
   credits_required: number;
+  drop_in_price: number | null;
   max_capacity: number;
   spots_left: number;
   is_active: boolean;
@@ -197,6 +200,8 @@ export default function PartnerDashboard() {
   const [switching, setSwitching]         = useState(false);
   const [emailVerified, setEmailVerified] = useState(true);
   const [showVenuePicker, setShowVenuePicker] = useState(false);
+  const [targetMargin, setTargetMargin]     = useState(0.20);
+  const [creditUnitValue, setCreditUnitValue] = useState(99);
 
   useEffect(() => { init(); }, []);
 
@@ -206,16 +211,30 @@ export default function PartnerDashboard() {
     setUser(user);
     setEmailVerified(!!user.email_confirmed_at);
 
-    const { data: gymsData } = await supabase
-      .from("gyms")
-      .select("*")
-      .eq("contact_email", user.email)
-      .order("name");
+    const [gymsRes, settingsRes] = await Promise.all([
+      supabase.from("gyms")
+        .select("*, rate_floor, rate_floor_percentage")
+        .eq("contact_email", user.email)
+        .order("name"),
+      supabase.from("app_settings")
+        .select("key, value")
+        .in("key", ["target_margin", "credit_unit_value"]),
+    ]);
 
-    if (gymsData && gymsData.length > 0) {
-      setGyms(gymsData);
-      setActiveGym(gymsData[0]);
-      await Promise.all([loadSessions(gymsData[0].id), loadBookings(gymsData[0].id)]);
+    if (settingsRes.data) {
+      for (const row of settingsRes.data) {
+        const v = parseFloat(row.value);
+        if (!isNaN(v)) {
+          if (row.key === "target_margin") setTargetMargin(v);
+          if (row.key === "credit_unit_value") setCreditUnitValue(v);
+        }
+      }
+    }
+
+    if (gymsRes.data && gymsRes.data.length > 0) {
+      setGyms(gymsRes.data);
+      setActiveGym(gymsRes.data[0]);
+      await Promise.all([loadSessions(gymsRes.data[0].id), loadBookings(gymsRes.data[0].id)]);
     }
     setLoading(false);
   }
@@ -453,7 +472,7 @@ export default function PartnerDashboard() {
               <VenueSection gym={gym} gyms={gyms} onSaved={handleGymSaved} />
             )}
             {section === "sessions" && (
-              <SessionsSection gym={gym} sessions={sessions} onRefresh={() => loadSessions(gym.id)} />
+              <SessionsSection gym={gym} sessions={sessions} targetMargin={targetMargin} creditUnitValue={creditUnitValue} onRefresh={() => loadSessions(gym.id)} />
             )}
             {section === "revenue" && (
               <RevenueSection bookings={bookings} />
@@ -774,13 +793,17 @@ function VenueSection({ gym, gyms, onSaved }: { gym: Gym; gyms: Gym[]; onSaved: 
 
 // ─── Sessions ─────────────────────────────────────────────────────────────────
 
-const EMPTY: Omit<Session, "id" | "gym_id" | "spots_left" | "is_active"> = {
+function computeCredits(payout: number, margin: number, creditUnit: number): number {
+  return Math.ceil((payout / creditUnit) / (1 - margin));
+}
+
+const EMPTY: Omit<Session, "id" | "gym_id" | "spots_left" | "is_active" | "credits_required"> = {
   name: "", description: "", time: "", date: "", duration_minutes: 60,
-  credits_required: 1, max_capacity: 20, category: "strength", instructor: "", image_url: null,
+  max_capacity: 20, category: "strength", instructor: "", image_url: null, drop_in_price: null,
 };
 
-function SessionsSection({ gym, sessions, onRefresh }: {
-  gym: Gym; sessions: Session[]; onRefresh: () => void;
+function SessionsSection({ gym, sessions, targetMargin, creditUnitValue, onRefresh }: {
+  gym: Gym; sessions: Session[]; targetMargin: number; creditUnitValue: number; onRefresh: () => void;
 }) {
   const [filter,       setFilter]       = useState<"upcoming" | "all" | "past">("upcoming");
   const [showForm,     setShowForm]     = useState(false);
@@ -832,9 +855,9 @@ function SessionsSection({ gym, sessions, onRefresh }: {
   function openEdit(s: Session) {
     setForm({
       name: s.name, description: s.description, time: s.time, date: s.date,
-      duration_minutes: s.duration_minutes, credits_required: s.credits_required,
+      duration_minutes: s.duration_minutes,
       max_capacity: s.max_capacity, category: s.category, instructor: s.instructor,
-      image_url: s.image_url,
+      image_url: s.image_url, drop_in_price: s.drop_in_price,
     });
     setEditId(s.id); setEditGroupIds(null); resetRecurring(); setShowForm(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -843,9 +866,9 @@ function SessionsSection({ gym, sessions, onRefresh }: {
   function openEditGroup(rep: Session, all: Session[]) {
     setForm({
       name: rep.name, description: rep.description, time: rep.time, date: rep.date,
-      duration_minutes: rep.duration_minutes, credits_required: rep.credits_required,
+      duration_minutes: rep.duration_minutes,
       max_capacity: rep.max_capacity, category: rep.category, instructor: rep.instructor,
-      image_url: rep.image_url,
+      image_url: rep.image_url, drop_in_price: rep.drop_in_price,
     });
     setEditId(null); setEditGroupIds(all.map(s => s.id)); resetRecurring(); setShowForm(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -875,13 +898,17 @@ function SessionsSection({ gym, sessions, onRefresh }: {
     }
     setSaving(true);
 
+    const payout = form.drop_in_price != null && gym.rate_floor_percentage != null
+      ? Number(form.drop_in_price) * (gym.rate_floor_percentage / 100)
+      : (gym.rate_floor ?? 0);
+    const credits = payout > 0 ? computeCredits(payout, targetMargin, creditUnitValue) : 0;
     let error: any;
 
     if (editGroupIds) {
       ({ error } = await supabase.from("sessions").update({
         name: form.name, description: form.description, time: form.time,
         duration_minutes: Number(form.duration_minutes),
-        credits_required: Number(form.credits_required),
+        credits_required: credits,
         max_capacity: Number(form.max_capacity),
         category: form.category, instructor: form.instructor, image_url: form.image_url || null,
       }).in("id", editGroupIds));
@@ -891,7 +918,7 @@ function SessionsSection({ gym, sessions, onRefresh }: {
       if (dates.length === 0) { setSaving(false); alert("No sessions fall on the selected days in that date range."); return; }
       const base = {
         gym_id: gym.id, name: form.name, description: form.description, time: form.time,
-        duration_minutes: Number(form.duration_minutes), credits_required: Number(form.credits_required),
+        duration_minutes: Number(form.duration_minutes), credits_required: credits,
         max_capacity: Number(form.max_capacity), spots_left: Number(form.max_capacity),
         category: form.category, instructor: form.instructor, image_url: form.image_url || null,
         is_active: true, recurring: true,
@@ -902,7 +929,7 @@ function SessionsSection({ gym, sessions, onRefresh }: {
       const payload = {
         gym_id: gym.id, ...form,
         duration_minutes: Number(form.duration_minutes),
-        credits_required: Number(form.credits_required),
+        credits_required: credits,
         max_capacity: Number(form.max_capacity),
         spots_left: Number(form.max_capacity),
         image_url: form.image_url || null,
@@ -1069,9 +1096,43 @@ function SessionsSection({ gym, sessions, onRefresh }: {
                 onChange={e => setF("max_capacity", e.target.value)} className={inp} />
             </div>
             <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Walk-in / Drop-in price (KES)</label>
+              <input
+                type="number" min={0} step={50}
+                value={form.drop_in_price ?? ""}
+                onChange={e => setF("drop_in_price", e.target.value === "" ? null : Number(e.target.value))}
+                className={inp} placeholder="e.g. 1500" />
+            </div>
+            <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1.5">Credits required</label>
-              <input type="number" min={1} value={form.credits_required}
-                onChange={e => setF("credits_required", e.target.value)} className={inp} />
+              {(() => {
+                const hasFloor = gym.rate_floor_percentage != null;
+                const hasPrice = form.drop_in_price != null && Number(form.drop_in_price) > 0;
+                if (hasFloor && hasPrice) {
+                  const payout  = Number(form.drop_in_price) * (gym.rate_floor_percentage! / 100);
+                  const credits = computeCredits(payout, targetMargin, creditUnitValue);
+                  return (
+                    <div className="flex items-center gap-3 px-4 py-2.5 bg-blue-50 border border-blue-100 rounded-xl">
+                      <span className="border border-blue-500 text-blue-600 rounded-lg px-3 py-1 text-sm font-medium">
+                        {credits} credit{credits !== 1 ? "s" : ""}
+                      </span>
+                      <span className="text-xs text-blue-500">
+                        Partner payout: KES {Math.round(payout).toLocaleString()}
+                      </span>
+                    </div>
+                  );
+                }
+                if (!hasFloor) return (
+                  <div className="px-4 py-2.5 bg-amber-50 border border-amber-100 rounded-xl text-xs text-amber-700">
+                    ⚠ No wholesale rate agreed yet — credits will be set once admin finalises the rate floor.
+                  </div>
+                );
+                return (
+                  <div className="px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-500">
+                    Enter the walk-in price above to see credits and payout.
+                  </div>
+                );
+              })()}
             </div>
             <div className="md:col-span-2">
               <label className="block text-xs font-semibold text-gray-600 mb-1.5">Description</label>
@@ -1151,6 +1212,9 @@ function SessionsSection({ gym, sessions, onRefresh }: {
                   <p className="text-xs text-gray-400">
                     {nextDate ? `Next: ${fmtDate(nextDate)}` : `Ended ${fmtDate(endDate)}`}
                     {" · "}{rep.credits_required} credits
+                    {rep.drop_in_price != null && gym.rate_floor_percentage != null && (
+                      <span className="text-green-600"> · KES {Math.round(rep.drop_in_price * (gym.rate_floor_percentage / 100)).toLocaleString()} payout</span>
+                    )}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
@@ -1190,7 +1254,12 @@ function SessionsSection({ gym, sessions, onRefresh }: {
                   {fmtDate(s.date)} · {s.time?.slice(0, 5)} · {s.duration_minutes}min
                   {s.instructor && ` · ${s.instructor}`}
                 </p>
-                <p className="text-xs text-gray-400">{s.spots_left}/{s.max_capacity} spots · {s.credits_required} credits</p>
+                <p className="text-xs text-gray-400">
+                  {s.spots_left}/{s.max_capacity} spots · {s.credits_required} credits
+                  {s.drop_in_price != null && gym.rate_floor_percentage != null && (
+                    <span className="text-green-600"> · KES {Math.round(s.drop_in_price * (gym.rate_floor_percentage / 100)).toLocaleString()} payout</span>
+                  )}
+                </p>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 <button onClick={() => handleToggle(s)}

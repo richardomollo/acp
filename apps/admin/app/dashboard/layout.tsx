@@ -50,6 +50,7 @@ export default function DashboardLayout({
     { name: '📊 Analytics', href: '/dashboard/analytics' },
     { name: '🏢 Venues', href: '/dashboard/venues' },
     { name: '👥 Partners', href: '/dashboard/partners' },
+    { name: '🧑‍💻 Users', href: '/dashboard/users' },
   ];
 
   return (

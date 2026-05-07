@@ -347,7 +347,9 @@ export default function SessionsPage() {
                     </div>
                     {s.credits_required != null && (
                       <div className="flex-shrink-0 self-center">
-                        <span className="text-xs text-gray-400">{s.credits_required} cr</span>
+                        <span className="border border-blue-500 text-blue-500 rounded-lg px-3 py-1 text-xs font-medium whitespace-nowrap">
+                          {s.credits_required} credit{s.credits_required !== 1 ? "s" : ""}
+                        </span>
                       </div>
                     )}
                   </Link>
