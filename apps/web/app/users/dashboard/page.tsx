@@ -139,10 +139,10 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="w-full px-6 md:px-16 lg:px-24 xl:px-32 py-12 flex gap-16">
+      <div className="w-full px-4 md:px-16 lg:px-24 xl:px-32 py-6 md:py-12 flex flex-col md:flex-row md:gap-16">
 
-        {/* ── Sidebar ── */}
-        <aside className="w-44 flex-shrink-0">
+        {/* ── Desktop sidebar ── */}
+        <aside className="hidden md:block w-44 flex-shrink-0">
           {/* Avatar */}
           <div className="mb-8">
             <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mb-4">
@@ -171,6 +171,33 @@ export default function DashboardPage() {
           </nav>
         </aside>
 
+        {/* ── Mobile header + tab strip ── */}
+        <div className="md:hidden mb-5">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+              <svg className="w-6 h-6 text-blue-400" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
+              </svg>
+            </div>
+            <p className="text-sm font-medium text-gray-700 truncate">{profile?.name || user?.email}</p>
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4">
+            {navItems.map(item => (
+              <button
+                key={item.id}
+                onClick={() => setTab(item.id)}
+                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition whitespace-nowrap ${
+                  tab === item.id
+                    ? 'bg-gray-900 text-white'
+                    : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-400'
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* ── Main content ── */}
         <main className="flex-1 min-w-0">
 
@@ -181,7 +208,7 @@ export default function DashboardPage() {
               <div className="grid md:grid-cols-2 gap-4">
 
                 {/* Credits card */}
-                <div className="bg-white rounded-2xl border border-gray-200 p-6">
+                <div className="bg-white rounded-2xl border border-gray-200 p-4 md:p-6">
                   {/* Top row */}
                   <div className="flex items-start gap-4 mb-5">
                     <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center flex-shrink-0">
@@ -241,7 +268,7 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Account balance card */}
-                <div className="bg-white rounded-2xl border border-gray-200 p-6 flex flex-col justify-between">
+                <div className="bg-white rounded-2xl border border-gray-200 p-4 md:p-6 flex flex-col justify-between">
                   <div>
                     <h2 className="text-base font-bold text-gray-900 mb-4">Account Balance</h2>
                     <div className="space-y-3 text-sm">
@@ -285,7 +312,7 @@ export default function DashboardPage() {
           {tab === 'billing' && (
             <div>
               <h1 className="text-2xl font-semibold text-gray-900 mb-6">Billing</h1>
-              <div className="bg-white rounded-2xl border border-gray-200 p-6 mb-4">
+              <div className="bg-white rounded-2xl border border-gray-200 p-4 md:p-6 mb-4">
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Current Plan</p>
@@ -300,7 +327,7 @@ export default function DashboardPage() {
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 text-sm mb-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm mb-6">
                   <div>
                     <p className="text-gray-400 mb-0.5">Credits remaining</p>
                     <p className="font-semibold text-gray-900">{profile?.credits ?? 0}</p>
@@ -326,7 +353,7 @@ export default function DashboardPage() {
                 </Link>
               </div>
 
-              <div className="bg-white rounded-2xl border border-gray-200 p-6">
+              <div className="bg-white rounded-2xl border border-gray-200 p-4 md:p-6">
                 <h2 className="text-base font-semibold text-gray-900 mb-1">Need more credits?</h2>
                 <p className="text-sm text-gray-500 mb-4">Top up your account to keep booking classes and activities.</p>
                 <Link href="/subscriptions">
@@ -348,16 +375,16 @@ export default function DashboardPage() {
                 ) : (
                   <div className="divide-y divide-gray-100">
                     {transactions.map(tx => (
-                      <div key={tx.id} className="flex items-center justify-between px-6 py-4">
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{tx.description || tx.transaction_type}</p>
+                      <div key={tx.id} className="flex items-center justify-between px-4 md:px-6 py-4 gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">{tx.description || tx.transaction_type}</p>
                           <p className="text-xs text-gray-400 mt-0.5">
                             {new Date(tx.created_at).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' })}
                             {' · '}
                             {new Date(tx.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </p>
                         </div>
-                        <div className="text-right">
+                        <div className="text-right flex-shrink-0">
                           <p className={`text-sm font-semibold ${
                             tx.transaction_type === 'debit' ? 'text-red-500' : 'text-green-600'
                           }`}>
@@ -376,10 +403,10 @@ export default function DashboardPage() {
           {/* ── BOOKINGS ── */}
           {tab === 'bookings' && (
             <div>
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center justify-between mb-6 gap-3">
                 <h1 className="text-2xl font-semibold text-gray-900">My Bookings</h1>
-                <Link href="/sessions">
-                  <button className="text-sm bg-gray-900 text-white px-5 py-2 rounded-full hover:bg-gray-700 transition font-medium">
+                <Link href="/sessions" className="flex-shrink-0">
+                  <button className="text-sm bg-gray-900 text-white px-5 py-2 rounded-full hover:bg-gray-700 transition font-medium whitespace-nowrap">
                     Book a class
                   </button>
                 </Link>
@@ -395,19 +422,19 @@ export default function DashboardPage() {
                 ) : (
                   <div className="divide-y divide-gray-100">
                     {bookings.map(b => (
-                      <div key={b.id} className="flex items-center justify-between px-6 py-4">
-                        <div>
-                          <p className="text-sm font-semibold text-gray-900">{b.sessions?.name ?? '—'}</p>
-                          <p className="text-xs text-gray-500 mt-0.5">
+                      <div key={b.id} className="flex items-start justify-between px-4 md:px-6 py-4 gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 truncate">{b.sessions?.name ?? '—'}</p>
+                          <p className="text-xs text-gray-500 mt-0.5 truncate">
                             {b.sessions?.instructor && `with ${b.sessions.instructor} · `}
                             {fmtDate(b.booking_date)} · {b.booking_time?.slice(0, 5)}
                           </p>
                           <p className="text-xs text-gray-400 mt-0.5 font-mono">
-                            Code: {b.confirmation_code}
+                            {b.confirmation_code}
                           </p>
                         </div>
-                        <div className="flex flex-col items-end gap-1">
-                          <span className="text-xs bg-green-100 text-green-700 px-2.5 py-0.5 rounded-full font-medium">
+                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                          <span className="text-xs bg-green-100 text-green-700 px-2.5 py-0.5 rounded-full font-medium whitespace-nowrap">
                             Confirmed
                           </span>
                           <span className="text-xs text-gray-400">{b.credits_used} cr</span>
@@ -425,7 +452,7 @@ export default function DashboardPage() {
             <div>
               <h1 className="text-2xl font-semibold text-gray-900 mb-6">Settings</h1>
 
-              <div className="bg-white rounded-2xl border border-gray-200 p-6 mb-4">
+              <div className="bg-white rounded-2xl border border-gray-200 p-4 md:p-6 mb-4">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-sm font-semibold text-gray-700">Profile</h2>
                   {!editing && (
@@ -447,7 +474,7 @@ export default function DashboardPage() {
 
                 {editing ? (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-xs text-gray-400 mb-1">Name</label>
                         <input
@@ -496,7 +523,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 text-sm">
                     <div>
                       <p className="text-gray-400 mb-0.5">Name</p>
                       <p className="font-medium text-gray-900">{profile?.name || '—'}</p>
@@ -517,7 +544,7 @@ export default function DashboardPage() {
                 )}
               </div>
 
-              <div className="bg-white rounded-2xl border border-gray-200 p-6 mb-4">
+              <div className="bg-white rounded-2xl border border-gray-200 p-4 md:p-6 mb-4">
                 <h2 className="text-sm font-semibold text-gray-700 mb-1">Password</h2>
                 <p className="text-sm text-gray-500 mb-4">Change your account password via email reset.</p>
                 <button
@@ -533,7 +560,7 @@ export default function DashboardPage() {
                 </button>
               </div>
 
-              <div className="bg-white rounded-2xl border border-gray-200 p-6">
+              <div className="bg-white rounded-2xl border border-gray-200 p-4 md:p-6">
                 <h2 className="text-sm font-semibold text-gray-700 mb-1">Sign out</h2>
                 <p className="text-sm text-gray-500 mb-4">You'll be redirected to the login page.</p>
                 <button
