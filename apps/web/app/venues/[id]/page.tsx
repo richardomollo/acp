@@ -52,15 +52,15 @@ export default async function GymDetailPage({ params }: Props) {
   return (
     <div className="w-full px-6 md:px-16 lg:px-24 xl:px-32 py-12">
       <Link href="/venues" className="text-sm text-gray-500 hover:underline mb-6 inline-block">
-        ← Back to all venues
+        Back to all venues
       </Link>
 
       <div className="flex gap-10 items-start">
         {/* ── Left: main content ── */}
         <div className="flex-1 min-w-0">
           <h1 className="text-3xl font-semibold mb-1">{gym.name}</h1>
-          <p className="text-sm text-gray-500 mb-0.5 capitalize">{gym.type}</p>
-          <p className="text-sm text-gray-500 mb-4">📍 {gym.location}{gym.area ? `, ${gym.area}` : ""}</p>
+          <p className="text-sm text-gray-500 mb-0.5 capitalize">{gym.type}, {gym.location}{gym.area ? `, ${gym.area}` : ""}</p>
+          <p className="text-sm text-gray-500 mb-4"></p>
 
           <GymGallery
             name={gym.name}
