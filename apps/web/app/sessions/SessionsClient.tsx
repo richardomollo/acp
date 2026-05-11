@@ -227,11 +227,11 @@ export default function SessionsPage() {
                 }`}
               >
                 <span className={`text-xs ${isSelected ? "text-gray-300" : "text-gray-400"}`}>
-                  {isToday ? "Today" : d.toLocaleDateString("en-US", { weekday: "short" })}
+                  {isToday ? "Today" : d.toLocaleDateString("en-US", { weekday: "short" })}  {d.toLocaleDateString("en-US", {  day: "numeric" })}
                 </span>
-                <span className="font-semibold">
-                  {d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                </span>
+                {/* <span className="font-semibold">
+                  {d.toLocaleDateString("en-US", {  day: "numeric" })}
+                </span> */}
               </button>
             );
           })}
