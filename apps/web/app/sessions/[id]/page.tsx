@@ -61,7 +61,7 @@ export default async function SessionDetailPage({ params }: Props) {
   return (
     <div className="w-full px-6 md:px-16 lg:px-24 xl:px-32 py-12">
       <Link href={`/venues/${session.gym_id}`} className="text-sm text-gray-500 hover:underline mb-6 inline-block">
-        ← Back to venue
+        Back to venue
       </Link>
 
       <div className="flex gap-10 items-start">
@@ -85,22 +85,22 @@ export default async function SessionDetailPage({ params }: Props) {
 
           {/* Detail pills */}
           <div className="flex flex-wrap gap-3 mb-6">
-            <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm">
+            <div className=" text-sm">
               <p className="text-xs text-gray-400 mb-0.5">Date</p>
               <p className="font-medium text-gray-900">{fmtDate(session.date)}</p>
             </div>
-            <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm">
+            <div className="text-sm">
               <p className="text-xs text-gray-400 mb-0.5">Time</p>
               <p className="font-medium text-gray-900">{session.time?.slice(0, 5)}</p>
             </div>
             {session.duration_minutes && (
-              <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm">
+              <div className=" text-sm">
                 <p className="text-xs text-gray-400 mb-0.5">Duration</p>
                 <p className="font-medium text-gray-900">{session.duration_minutes} min</p>
               </div>
             )}
             {session.spots_left != null && (
-              <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm">
+              <div className=" text-sm">
                 <p className="text-xs text-gray-400 mb-0.5">Spots left</p>
                 <p className={`font-medium ${session.spots_left > 0 ? "text-green-600" : "text-red-500"}`}>
                   {session.spots_left > 0 ? session.spots_left : "Full"}
@@ -183,7 +183,7 @@ export default async function SessionDetailPage({ params }: Props) {
                   href={`/venues/${session.gym_id}`}
                   className="block text-sm text-blue-600 hover:underline font-medium pt-1 border-t border-gray-100"
                 >
-                  View venue →
+                  View venue 
                 </Link>
               </div>
             </div>

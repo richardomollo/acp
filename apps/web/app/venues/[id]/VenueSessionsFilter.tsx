@@ -63,7 +63,7 @@ export default function VenueSessionsFilter({
           const isToday = ds === todayStr;
           const dayLabel = isToday
             ? "Today"
-            : d.toLocaleDateString("en-US", { weekday: "short" });
+            : d.toLocaleDateString("en-US", { weekday: "short" }) + " " + d.toLocaleDateString("en-US", { day: "numeric" });
           const dateLabel = d.toLocaleDateString("en-US", {
             month: "short",
             day: "numeric",
@@ -82,7 +82,7 @@ export default function VenueSessionsFilter({
               <span className={`text-xs ${isSelected ? "text-blue-200" : "text-gray-400"}`}>
                 {dayLabel}
               </span>
-              <span className="font-semibold">{dateLabel}</span>
+              {/* <span className="font-semibold">{dateLabel}</span> */}
             </button>
           );
         })}

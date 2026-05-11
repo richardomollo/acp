@@ -67,7 +67,7 @@ export default async function GymDetailPage({ params }: Props) {
             images={[gym.image_url].filter(Boolean)}
           />
 
-          <p className="mt-6 text-sm text-gray-600 leading-relaxed">{gym.description}</p>
+          {/* <p className="mt-6 text-sm text-gray-600 leading-relaxed">{gym.description}</p> */}
 
           {/* Sessions */}
           {sessions && sessions.length > 0 ? (
