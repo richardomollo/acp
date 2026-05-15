@@ -2,90 +2,114 @@ import { StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator, Aler
 import { ThemedText } from '@/components/themed-text';
 import { useRouter } from 'expo-router';
 import { useState, useEffect } from 'react';
-import { authService } from '../services/auth';
-import { supabase } from '../lib/supabase';
+import { authService } from '@/services/auth';
+import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
+
+// ─── Interfaces ──────────────────────────────────────────────────────────────
 
 interface UserProfile {
   id: string;
   email: string;
-  name: string;
-  phone: string;
+  name: string | null;
+  phone: string | null;
   credits: number;
   subscription_tier: string | null;
   subscription_status: string | null;
+  trial_credits_used: number | null;
+  trial_start_date: string | null;
+  trial_end_date: string | null;
+  subscription_start_date: string | null;
+  subscription_end_date: string | null;
   created_at: string;
 }
 
-interface UpcomingClass {
+interface UpcomingBooking {
   id: string;
   booking_date: string;
+  booking_time: string;
   status: string;
   session_id: string;
-  gym_class: {
-    name: string;
-    start_time: string;
-    gym: {
-      name: string;
-      location: string;
-    };
-  } | null;
+  session_name: string;
+  gym_name: string;
+  gym_location: string;
 }
+
+// ─── Component ───────────────────────────────────────────────────────────────
 
 export default function ProfileScreen() {
   const router = useRouter();
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [upcomingClasses, setUpcomingClasses] = useState<UpcomingClass[]>([]);
+  const [upcomingBookings, setUpcomingBookings] = useState<UpcomingBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [isGuest, setIsGuest] = useState(false);
 
   useEffect(() => {
     loadUserProfile();
-    loadUpcomingClasses();
+    loadUpcomingBookings();
   }, []);
 
+  // ── Load profile from `users` table ────────────────────────────────────────
   const loadUserProfile = async () => {
     try {
       setLoading(true);
-      
+
       const session = await authService.getSession();
-      if (!session) {
+      if (!session || !session.user) {
         setIsGuest(true);
         setLoading(false);
         return;
       }
 
-      const { data, error } = await supabase
+      // Use maybeSingle() to avoid PGRST116 error if row is missing
+      const { data: profileData, error: profileError } = await supabase
         .from('users')
         .select('*')
         .eq('id', session.user.id)
-        .single();
+        .maybeSingle();
 
-      if (error) {
-        console.error('Error loading profile:', error);
-        Alert.alert('Error', 'Failed to load profile');
-        return;
+      if (profileError) {
+        console.error('Error loading profile:', profileError);
+        // We don't alert here because we can still show basic session info
       }
 
-      setUser(data);
+      if (profileData) {
+        setUser(profileData as UserProfile);
+      } else {
+        // FALLBACK: If user exists in Auth but not in public.users table
+        setUser({
+          id: session.user.id,
+          email: session.user.email || '',
+          name: session.user.user_metadata?.full_name || 'User',
+          phone: session.user.phone || null,
+          credits: 0,
+          subscription_tier: 'free_trial',
+          subscription_status: 'active',
+          trial_credits_used: 0,
+          trial_start_date: null,
+          trial_end_date: null,
+          subscription_start_date: null,
+          subscription_end_date: null,
+          created_at: new Date().toISOString(),
+        });
+      }
+      
       setIsGuest(false);
-    } catch (error) {
-      console.error('Profile error:', error);
+    } catch (err) {
+      console.error('Profile error:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  // --- Updated loadUpcomingClasses function ---
-  const loadUpcomingClasses = async () => {
+  // ── Load upcoming bookings via bookings → sessions → gyms ──────────────────
+  const loadUpcomingBookings = async () => {
     try {
       const session = await authService.getSession();
-      if (!session) return;
+      if (!session || !session.user) return;
 
-      // Get today's date in YYYY-MM-DD format
       const today = new Date().toISOString().split('T')[0];
 
-      // Fetch bookings with session and gym data in one query
       const { data: bookingsData, error: bookingsError } = await supabase
         .from('bookings')
         .select(`
@@ -93,11 +117,10 @@ export default function ProfileScreen() {
           booking_date,
           booking_time,
           status,
+          session_id,
           sessions (
             id,
             name,
-            date,
-            time,
             gyms (
               name,
               location
@@ -117,69 +140,89 @@ export default function ProfileScreen() {
       }
 
       if (!bookingsData || bookingsData.length === 0) {
-        setUpcomingClasses([]);
+        setUpcomingBookings([]);
         return;
       }
 
-      // Transform data to match the interface
-      const transformedData = bookingsData.map(booking => ({
-        id: booking.id,
-        booking_date: booking.booking_date,
-        status: booking.status,
-        session_id: booking.sessions?.id || '',
-        gym_class: booking.sessions ? {
-          name: booking.sessions.name,
-          start_time: `${booking.sessions.date}T${booking.sessions.time}`,
-          gym: booking.sessions.gyms || { name: 'Unknown', location: '' }
-        } : null
+      const transformed: UpcomingBooking[] = bookingsData.map((b: any) => ({
+        id: b.id,
+        booking_date: b.booking_date,
+        booking_time: b.booking_time,
+        status: b.status,
+        session_id: b.session_id,
+        session_name: b.sessions?.name ?? 'Session',
+        gym_name: b.sessions?.gyms?.name ?? 'Gym',
+        gym_location: b.sessions?.gyms?.location ?? '',
       }));
 
-      setUpcomingClasses(transformedData);
-    } catch (error) {
-      console.error('Classes error:', error);
+      setUpcomingBookings(transformed);
+    } catch (err) {
+      console.error('Bookings error:', err);
     }
   };
 
-  const getInitials = (name: string | null | undefined) => {
+  // ── Helpers ─────────────────────────────────────────────────────────────────
+
+  const getInitials = (name: string | null | undefined): string => {
     if (!name || typeof name !== 'string') return 'U';
-    
-    return name
-      .trim()
-      .split(' ')
-      .filter(n => n.length > 0)
-      .map(n => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2) || 'U';
+    return (
+      name
+        .trim()
+        .split(' ')
+        .filter((n) => n.length > 0)
+        .map((n) => n[0])
+        .join('')
+        .toUpperCase()
+        .slice(0, 2) || 'U'
+    );
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+  const formatDate = (dateString: string): string =>
+    new Date(dateString).toLocaleDateString('en-US', {
       weekday: 'short',
       month: 'short',
       day: 'numeric',
     });
+
+  const formatTime = (timeString: string): string => {
+    if (!timeString) return '';
+    const parts = timeString.split(':');
+    if (parts.length < 2) return timeString;
+    
+    const hours = parseInt(parts[0], 10);
+    const minutes = parseInt(parts[1], 10);
+    const date = new Date();
+    date.setHours(hours, minutes, 0, 0);
+    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   };
 
-  const formatTime = (timeString: string) => {
-    return new Date(timeString).toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-    });
+  const getSubscriptionLabel = (tier: string | null, status: string | null): string => {
+    if (!tier) return '';
+    const tierMap: Record<string, string> = {
+      free_trial: 'Free Trial',
+      basic: 'Basic',
+      standard: 'Standard',
+      premium: 'Premium',
+    };
+    const label = tierMap[tier] ?? tier.replace(/_/g, ' ');
+    return status ? `${label} · ${status.charAt(0).toUpperCase() + status.slice(1)}` : label;
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case 'confirmed':
+  const getSubscriptionBadgeColor = (tier: string | null): string => {
+    switch (tier) {
+      case 'premium':
+        return '#6a0dad';
+      case 'standard':
+        return '#002fff';
+      case 'basic':
         return '#4caf50';
-      case 'pending':
-        return '#ff9800';
-      case 'cancelled':
-        return '#f44336';
+      case 'free_trial':
       default:
-        return '#999';
+        return '#ff9800';
     }
   };
+
+  // ── Loading state ────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -189,52 +232,78 @@ export default function ProfileScreen() {
     );
   }
 
+  // ── Guest state ──────────────────────────────────────────────────────────────
+
   if (isGuest) {
     return (
       <ScrollView style={styles.container}>
         <View style={styles.emptyStateSignIn}>
-                      <Ionicons name="person-circle-outline" size={64} color="#ccc" />
-                    
-                       <View style={styles.gettingStartedCard}>
-                           <ThemedText style={styles.gettingStartedTitle}>
-                              You need be be signed in
-                          </ThemedText>
-                           <ThemedText style={styles.gettingStartedDescription}>
-                              Sign in to view your account settings, manage your bookings, vedit your subscriptiond and manager your payment details. 
-                          </ThemedText>
-                              <TouchableOpacity 
-                                style={styles.exploreButt}
-                                 onPress={() => router.push('/login')}
-                              >
-                                <ThemedText style={styles.exploreButtText}>Sign In or Create Your Account</ThemedText>
-                                  <Ionicons name="arrow-forward" size={20} color="#fff" />
-                                </TouchableOpacity>
-                          </View>
-                    </View>
+          <Ionicons name="person-circle-outline" size={64} color="#ccc" />
+          <View style={styles.gettingStartedCard}>
+            <ThemedText style={styles.gettingStartedTitle}>
+              You need to be signed in
+            </ThemedText>
+            <ThemedText style={styles.gettingStartedDescription}>
+              Sign in to view your account settings, manage your bookings, edit your
+              subscription and manage your payment details.
+            </ThemedText>
+            <TouchableOpacity
+              style={styles.exploreButt}
+              onPress={() => router.push('/login')}
+            >
+              <ThemedText style={styles.exploreButtText}>
+                Sign In or Create Your Account
+              </ThemedText>
+              <Ionicons name="arrow-forward" size={20} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        </View>
       </ScrollView>
     );
   }
 
+  // ── Authenticated state ──────────────────────────────────────────────────────
+
   return (
     <ScrollView style={styles.container}>
-      {/* Header with Settings Icon */}
+
+      {/* ── Header ── */}
       <View style={styles.headerContainer}>
         <View style={styles.header}>
-          
-          <ThemedText type="title" style={styles.name}>{user?.name}</ThemedText>
+
+          {/* Avatar with initials */}
+          <View style={styles.avatar}>
+            <ThemedText style={styles.avatarText}>
+              {getInitials(user?.name)}
+            </ThemedText>
+          </View>
+
+          <ThemedText type="title" style={styles.name}>
+            {user?.name ?? 'User'}
+          </ThemedText>
           <ThemedText style={styles.email}>{user?.email}</ThemedText>
-          
-          {user?.subscription_status && (
-            <View style={[styles.statusBadge, { backgroundColor: '#4caf50' }]}>
+
+          {user?.phone ? (
+            <ThemedText style={styles.phone}>{user.phone}</ThemedText>
+          ) : null}
+
+          {/* Subscription badge */}
+          {user?.subscription_tier && (
+            <View
+              style={[
+                styles.statusBadge,
+                { backgroundColor: getSubscriptionBadgeColor(user.subscription_tier) },
+              ]}
+            >
               <ThemedText style={styles.statusBadgeText}>
-                {user.subscription_status.toUpperCase()}
+                {getSubscriptionLabel(user.subscription_tier, user.subscription_status)}
               </ThemedText>
             </View>
           )}
         </View>
-        
-        {/* Settings Icon */}
-        <TouchableOpacity 
+
+        {/* Settings icon */}
+        <TouchableOpacity
           style={styles.settingsIcon}
           onPress={() => router.push('/settings')}
         >
@@ -242,74 +311,100 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Credits Card (Logged In Users) */}
-            {!isGuest && user && (
-              <View style={styles.creditsCard}>
-                <View style={styles.creditsContent}>
-                  <Ionicons name="wallet-outline" size={32} color="#666" />
-                  <View style={styles.creditsInfo}>
-                    <ThemedText style={styles.creditsLabel}>Available Credits</ThemedText>
-                    <ThemedText style={styles.creditsValue}>{user.credits}</ThemedText>
-                  </View>
-                </View>
-                <TouchableOpacity style={styles.creditsButton}>
-                  <ThemedText style={styles.creditsButtonText}>Add Credits</ThemedText>
-                </TouchableOpacity>
-              </View>
-            )}
-      
+      {/* ── Credits card ── */}
+      <View style={styles.creditsCard}>
+        <View style={styles.creditsContent}>
+          <Ionicons name="wallet-outline" size={32} color="#666" />
+          <View style={styles.creditsInfo}>
+            <ThemedText style={styles.creditsLabel}>Available Credits</ThemedText>
+            <ThemedText style={styles.creditsValue}>{user?.credits ?? 0}</ThemedText>
+          </View>
+        </View>
+        <TouchableOpacity
+          style={styles.creditsButton}
+          onPress={() => router.push('/add-credits')}
+        >
+          <ThemedText style={styles.creditsButtonText}>Add Credits</ThemedText>
+        </TouchableOpacity>
+      </View>
 
-      {/* Upcoming Classes */}
+      {/* ── Subscription info (trial expiry / renewal date) ── */}
+      {user?.subscription_tier === 'free_trial' && user.trial_end_date && (
+        <View style={styles.infoCard}>
+          <Ionicons name="information-circle-outline" size={20} color="#ff9800" />
+          <ThemedText style={styles.infoCardText}>
+            Trial ends on {formatDate(user.trial_end_date)}
+          </ThemedText>
+        </View>
+      )}
+
+      {user?.subscription_tier !== 'free_trial' && user?.subscription_end_date && (
+        <View style={styles.infoCard}>
+          <Ionicons name="refresh-circle-outline" size={20} color="#002fff" />
+          <ThemedText style={styles.infoCardText}>
+            Subscription renews on {formatDate(user.subscription_end_date)}
+          </ThemedText>
+        </View>
+      )}
+
+      {/* ── Upcoming sessions ── */}
       <View style={styles.section}>
         <ThemedText style={styles.sectionTitle}>Upcoming Sessions</ThemedText>
-        
-        {upcomingClasses.length === 0 ? (
+
+        {upcomingBookings.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="calendar-outline" size={48} color="#ccc" />
             <ThemedText style={styles.emptyText}>No upcoming sessions</ThemedText>
-             {/* Getting Started Card */}
-                  <View style={styles.gettingStartedCard}>
-                    <ThemedText style={styles.gettingStartedTitle}>
-                     Let's get you moving
-                    </ThemedText>
-                    <ThemedText style={styles.gettingStartedDescription}>
-                      Discover hundreds of activities and start your fitness journey today
-                    </ThemedText>
-                    <TouchableOpacity 
-                      style={styles.exploreButt}
-                      onPress={() => router.push('/(tabs)/classes')}
-                    >
-                      <ThemedText style={styles.exploreButtText}>Explore Classes</ThemedText>
-                      <Ionicons name="arrow-forward" size={20} color="#fff" />
-                    </TouchableOpacity>
-                  </View>
+            <View style={styles.gettingStartedCard}>
+              <ThemedText style={styles.gettingStartedTitle}>
+                Let's get you moving
+              </ThemedText>
+              <ThemedText style={styles.gettingStartedDescription}>
+                Discover hundreds of activities and start your fitness journey today
+              </ThemedText>
+              <TouchableOpacity
+                style={styles.exploreButt}
+                onPress={() => router.push('/(tabs)/classes')}
+              >
+                <ThemedText style={styles.exploreButtText}>Explore Classes</ThemedText>
+                <Ionicons name="arrow-forward" size={20} color="#fff" />
+              </TouchableOpacity>
+            </View>
           </View>
         ) : (
-          upcomingClasses.map((booking) => (
-            <TouchableOpacity 
-              key={booking.id} 
+          upcomingBookings.map((booking) => (
+            <TouchableOpacity
+              key={booking.id}
               style={styles.classCard}
-              onPress={() => router.push(`/session-details?sessionId=${booking.session_id}`)}
+              onPress={() =>
+                router.push(`/session-details?sessionId=${booking.session_id}`)
+              }
               activeOpacity={0.7}
             >
               <View style={styles.classHeader}>
                 <View style={styles.classInfo}>
                   <ThemedText style={styles.className}>
-                    {booking.gym_class?.name || 'Class'}
+                    {booking.session_name}
                   </ThemedText>
                   <View style={styles.classLocation}>
                     <Ionicons name="location-outline" size={16} color="#666" />
                     <ThemedText style={styles.locationText}>
-                      {booking.gym_class?.gym?.name || 'Gym'}
+                      {booking.gym_name}
+                      {booking.gym_location ? ` · ${booking.gym_location}` : ''}
                     </ThemedText>
                   </View>
                 </View>
                 <View style={styles.classStatusContainer}>
-                  <View style={[styles.statusDot, { backgroundColor: getStatusColor(booking.status) }]} />
+                  <View
+                    style={[
+                      styles.statusDot,
+                      { backgroundColor: booking.status === 'confirmed' ? '#4caf50' : '#ff9800' },
+                    ]}
+                  />
                   <Ionicons name="chevron-forward" size={20} color="#999" />
                 </View>
               </View>
-              
+
               <View style={styles.classDetails}>
                 <View style={styles.classDetailItem}>
                   <Ionicons name="calendar-outline" size={18} color="#666" />
@@ -320,7 +415,7 @@ export default function ProfileScreen() {
                 <View style={styles.classDetailItem}>
                   <Ionicons name="time-outline" size={18} color="#666" />
                   <ThemedText style={styles.detailText}>
-                    {formatTime(booking.gym_class?.start_time || booking.booking_date)}
+                    {formatTime(booking.booking_time)}
                   </ThemedText>
                 </View>
               </View>
@@ -332,8 +427,9 @@ export default function ProfileScreen() {
   );
 }
 
-// --- Styles remain unchanged ---
-const styles = StyleSheet.create({ 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
+const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
@@ -342,6 +438,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+
+  // Header
   headerContainer: {
     position: 'relative',
   },
@@ -377,6 +475,11 @@ const styles = StyleSheet.create({
   },
   email: {
     color: '#666',
+    marginBottom: 4,
+  },
+  phone: {
+    color: '#666',
+    fontSize: 14,
     marginBottom: 10,
   },
   statusBadge: {
@@ -390,7 +493,67 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
   },
-  
+
+  // Info card (trial / renewal notice)
+  infoCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#fffbf0',
+    marginHorizontal: 20,
+    marginBottom: 12,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#ffe0b2',
+  },
+  infoCardText: {
+    fontSize: 13,
+    color: '#555',
+    flex: 1,
+  },
+
+  // Credits card
+  creditsCard: {
+    backgroundColor: '#f8f8f8',
+    marginHorizontal: 20,
+    marginBottom: 20,
+    padding: 20,
+    borderRadius: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  creditsContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  creditsInfo: {
+    gap: 4,
+  },
+  creditsLabel: {
+    fontSize: 13,
+    color: '#666',
+  },
+  creditsValue: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#000',
+  },
+  creditsButton: {
+    backgroundColor: '#000',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+  },
+  creditsButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  // Section
   section: {
     padding: 20,
     paddingTop: 0,
@@ -401,6 +564,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     color: '#000',
   },
+
+  // Booking card
   classCard: {
     backgroundColor: '#f8f8f8',
     borderRadius: 12,
@@ -457,6 +622,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
   },
+
+  // Empty / guest states
   emptyState: {
     alignItems: 'center',
     paddingVertical: 40,
@@ -473,6 +640,8 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 20,
   },
+
+  // Getting started / CTA card
   gettingStartedCard: {
     padding: 24,
     borderRadius: 16,
@@ -493,92 +662,6 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     lineHeight: 22,
   },
-  exploreButton: {
-    backgroundColor: '#000000',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    paddingHorizontal: 28,
-    borderRadius: 25,
-  },
-  exploreButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  bookButton: {
-    backgroundColor: '#000',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 25,
-  },
-  bookButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  guestPrompt: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f0f4ff',
-    padding: 16,
-    margin: 20,
-    borderRadius: 12,
-    gap: 12,
-  },
-  guestText: {
-    flex: 1,
-    color: '#002fff',
-    fontSize: 14,
-  },
-  primaryButton: {
-    backgroundColor: '#000',
-    paddingVertical: 16,
-    borderRadius: 25,
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  primaryButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  secondaryButton: {
-    borderWidth: 2,
-    borderColor: '#000',
-    paddingVertical: 16,
-    borderRadius: 25,
-    alignItems: 'center',
-  },
-  secondaryButtonText: {
-    color: '#000',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-   emptyState: {
-    alignItems: 'center',
-    paddingVertical: 80,
-    paddingHorizontal: 40,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#999',
-    marginTop: 16,
-    marginBottom: 24,
-  },
-  exploreButton: {
-    backgroundColor: '#002fff',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 25,
-  },
-  exploreButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
   exploreButt: {
     backgroundColor: '#000000',
     flexDirection: 'row',
@@ -591,45 +674,6 @@ const styles = StyleSheet.create({
   exploreButtText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
-  },
-  creditsCard: {
-    backgroundColor: '#f8f8f8',
-    marginHorizontal: 20,
-    marginBottom:20,
-    padding: 20,
-    borderRadius: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  creditsContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  creditsInfo: {
-    gap: 4,
-  },
-  creditsLabel: {
-    fontSize: 13,
-    color: '#666',
-  },
-  creditsValue: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#000',
-    
-  },
-  creditsButton: {
-    backgroundColor: '#000',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-  },
-  creditsButtonText: {
-    color: '#fff',
-    fontSize: 14,
     fontWeight: '600',
   },
 });

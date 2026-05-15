@@ -32,6 +32,10 @@ export default function Layout() {
         name="account-details"
         options={{ headerShown: false }}
       />
+      <Stack.Screen
+        name="walkthrough"
+        options={{ headerShown: false }}
+      />
     </Stack>
   );
 }

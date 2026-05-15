@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { useState } from 'react';
-import { authService } from './services/auth';
+import { authService } from '@/services/auth';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();

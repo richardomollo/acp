@@ -13,7 +13,7 @@ import {
 import { ThemedText } from '@/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { authService } from './services/auth';
+import { authService } from '@/services/auth';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -69,7 +69,7 @@ export default function LoginScreen() {
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Ionicons name="arrow-back" size={24} color="#000" />
+          {/* <Ionicons name="arrow-back" size={24} color="#000" /> */}
         </TouchableOpacity>
         
         <View style={styles.placeholder} />

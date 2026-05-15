@@ -1,8 +1,8 @@
-import { StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator, TextInput, Image } from 'react-native';
+import { StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator, TextInput, Image, Modal, FlatList } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
-import { useRouter } from 'expo-router';
-import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useState, useEffect, useMemo } from 'react';
+import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 
 interface Session {
@@ -18,35 +18,71 @@ interface Session {
   spots_left: number;
   image_url: string | null;
   gym_id: string;
+  category: string | null;
   gyms: {
     name: string;
     location: string;
   } | null;
 }
 
-type FilterType = 'all' | 'today' | 'week' | 'available';
-
 export default function ExploreScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const initialCategory = params.category as string;
+
   const [sessions, setSessions] = useState<Session[]>([]);
   const [filteredSessions, setFilteredSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState<FilterType>('all');
+  
+  // Dynamic categories from DB
+  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
+  const [isCategoryModalVisible, setIsCategoryModalVisible] = useState(false);
+
+  // Generate the next 7 days for filters
+  const dateFilters = useMemo(() => {
+    const filters = [];
+    const today = new Date();
+    
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(today);
+      date.setDate(today.getDate() + i);
+      
+      const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+      const dayNum = date.getDate();
+      const dateString = date.toISOString().split('T')[0];
+      
+      filters.push({
+        label: i === 0 ? 'Today' : `${dayName}, ${dayNum}`,
+        value: dateString
+      });
+    }
+    return filters;
+  }, []);
+
+  const [activeDate, setActiveDate] = useState(dateFilters[0].value);
+  const [activeCategory, setActiveCategory] = useState<string | null>(initialCategory || null);
 
   useEffect(() => {
-    loadSessions();
+    loadData();
   }, []);
 
   useEffect(() => {
-    applyFilters();
-  }, [sessions, searchQuery, activeFilter]);
+    if (initialCategory) {
+      setActiveCategory(initialCategory);
+    }
+  }, [initialCategory]);
 
-  const loadSessions = async () => {
+  useEffect(() => {
+    applyFilters();
+  }, [sessions, searchQuery, activeDate, activeCategory]);
+
+  const loadData = async () => {
     try {
       setLoading(true);
 
-      const { data, error } = await supabase
+      // 1. Load sessions
+      const { data: sessionsData, error: sessionsError } = await supabase
         .from('sessions')
         .select(`
           *,
@@ -59,11 +95,15 @@ export default function ExploreScreen() {
         .order('date', { ascending: true })
         .order('time', { ascending: true });
 
-      if (error) throw error;
+      if (sessionsError) throw sessionsError;
+      setSessions(sessionsData || []);
 
-      setSessions(data || []);
+      // 2. Extract unique categories
+      const categories = Array.from(new Set(sessionsData?.map(s => s.category).filter(Boolean))) as string[];
+      setAvailableCategories(categories);
+
     } catch (error) {
-      console.error('Error loading sessions:', error);
+      console.error('Error loading data:', error);
     } finally {
       setLoading(false);
     }
@@ -81,42 +121,19 @@ export default function ExploreScreen() {
       );
     }
 
-    // Date/availability filters
-    const today = new Date().toISOString().split('T')[0];
-    const weekFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    // Date filter
+    if (activeDate !== 'all') {
+      filtered = filtered.filter(session => session.date === activeDate);
+    }
 
-    switch (activeFilter) {
-      case 'today':
-        filtered = filtered.filter(session => session.date === today);
-        break;
-      case 'week':
-        filtered = filtered.filter(session => session.date >= today && session.date <= weekFromNow);
-        break;
-      case 'available':
-        filtered = filtered.filter(session => session.spots_left > 0);
-        break;
+    // Category filter
+    if (activeCategory) {
+      filtered = filtered.filter(session => 
+        session.category?.toLowerCase() === activeCategory.toLowerCase()
+      );
     }
 
     setFilteredSessions(filtered);
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    if (dateString === today.toISOString().split('T')[0]) {
-      return 'Today';
-    } else if (dateString === tomorrow.toISOString().split('T')[0]) {
-      return 'Tomorrow';
-    } else {
-      return date.toLocaleDateString('en-US', {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric',
-      });
-    }
   };
 
   const getStatusColor = (spotsLeft: number, maxCapacity: number) => {
@@ -127,17 +144,11 @@ export default function ExploreScreen() {
     return '#4caf50';
   };
 
-  const getStatusText = (spotsLeft: number) => {
-    if (spotsLeft === 0) return 'Full';
-    if (spotsLeft <= 3) return 'Almost Full';
-    return `${spotsLeft} spots`;
-  };
-
   if (loading) {
     return (
       <View style={[styles.container, styles.centerContent]}>
         <ActivityIndicator size="large" color="#002fff" />
-        <ThemedText style={{ marginTop: 16 }}>Loading classes...</ThemedText>
+        <ThemedText style={styles.loadingText}>Loading sessions...</ThemedText>
       </View>
     );
   }
@@ -162,56 +173,107 @@ export default function ExploreScreen() {
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')}>
+        {(searchQuery.length > 0 || activeCategory || activeDate !== dateFilters[0].value) && (
+          <TouchableOpacity onPress={() => {
+            setSearchQuery('');
+            setActiveCategory(null);
+            setActiveDate(dateFilters[0].value);
+          }}>
             <Ionicons name="close-circle" size={20} color="#999" />
           </TouchableOpacity>
         )}
       </View>
 
-      {/* Filters */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.filtersContainer}
-        contentContainerStyle={styles.filtersContent}
+      {/* Filters Section */}
+      <View style={styles.filtersWrapper}>
+        {/* Date Filters */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filtersContent}
+          style={styles.filterRow}
+        >
+          {dateFilters.map((filter) => (
+            <TouchableOpacity
+              key={filter.value}
+              style={[
+                styles.filterChip,
+                activeDate === filter.value && styles.filterChipActive
+              ]}
+              onPress={() => setActiveDate(filter.value)}
+            >
+              <ThemedText style={[
+                styles.filterText,
+                activeDate === filter.value && styles.filterTextActive
+              ]}>
+                {filter.label}
+              </ThemedText>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {/* Category Dropdown Trigger */}
+        <View style={styles.dropdownWrapper}>
+          <TouchableOpacity 
+            style={styles.dropdownTrigger}
+            onPress={() => setIsCategoryModalVisible(true)}
+          >
+            <View style={styles.dropdownContent}>
+              <Ionicons name="apps-outline" size={18} color={activeCategory ? "#002fff" : "#666"} />
+              <ThemedText style={[styles.dropdownText, activeCategory && styles.dropdownTextActive]}>
+                {activeCategory || "All Categories"}
+              </ThemedText>
+            </View>
+            <Ionicons name="chevron-down" size={18} color="#666" />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Category Selection Modal */}
+      <Modal
+        visible={isCategoryModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsCategoryModalVisible(false)}
       >
-        <TouchableOpacity
-          style={[styles.filterChip, activeFilter === 'all' && styles.filterChipActive]}
-          onPress={() => setActiveFilter('all')}
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setIsCategoryModalVisible(false)}
         >
-          <ThemedText style={[styles.filterText, activeFilter === 'all' && styles.filterTextActive]}>
-            All Classes
-          </ThemedText>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>Select Category</ThemedText>
+              <TouchableOpacity onPress={() => setIsCategoryModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#000" />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={["All Categories", ...availableCategories]}
+              keyExtractor={(item) => item}
+              renderItem={({ item }) => (
+                <TouchableOpacity 
+                  style={styles.modalItem}
+                  onPress={() => {
+                    setActiveCategory(item === "All Categories" ? null : item);
+                    setIsCategoryModalVisible(false);
+                  }}
+                >
+                  <ThemedText style={[
+                    styles.modalItemText,
+                    ((item === "All Categories" && !activeCategory) || item === activeCategory) && styles.modalItemTextActive
+                  ]}>
+                    {item}
+                  </ThemedText>
+                  {((item === "All Categories" && !activeCategory) || item === activeCategory) && (
+                    <Ionicons name="checkmark" size={20} color="#002fff" />
+                  )}
+                </TouchableOpacity>
+              )}
+            />
+          </View>
         </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.filterChip, activeFilter === 'today' && styles.filterChipActive]}
-          onPress={() => setActiveFilter('today')}
-        >
-          <ThemedText style={[styles.filterText, activeFilter === 'today' && styles.filterTextActive]}>
-            Today
-          </ThemedText>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.filterChip, activeFilter === 'week' && styles.filterChipActive]}
-          onPress={() => setActiveFilter('week')}
-        >
-          <ThemedText style={[styles.filterText, activeFilter === 'week' && styles.filterTextActive]}>
-            This Week
-          </ThemedText>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.filterChip, activeFilter === 'available' && styles.filterChipActive]}
-          onPress={() => setActiveFilter('available')}
-        >
-          <ThemedText style={[styles.filterText, activeFilter === 'available' && styles.filterTextActive]}>
-            Available
-          </ThemedText>
-        </TouchableOpacity>
-      </ScrollView>
+      </Modal>
 
       {/* Classes List */}
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -220,16 +282,17 @@ export default function ExploreScreen() {
             <Ionicons name="calendar-outline" size={64} color="#ccc" />
             <ThemedText style={styles.emptyText}>No classes found</ThemedText>
             <ThemedText style={styles.emptySubtext}>
-              Try adjusting your filters or search
+              Try adjusting your filters or search query
             </ThemedText>
             <TouchableOpacity 
               style={styles.resetButton}
               onPress={() => {
                 setSearchQuery('');
-                setActiveFilter('all');
+                setActiveDate(dateFilters[0].value);
+                setActiveCategory(null);
               }}
             >
-              <ThemedText style={styles.resetButtonText}>Reset Filters</ThemedText>
+              <ThemedText style={styles.resetButtonText}>Reset All Filters</ThemedText>
             </TouchableOpacity>
           </View>
         ) : (
@@ -256,22 +319,9 @@ export default function ExploreScreen() {
                     />
                   ) : (
                     <View style={styles.sessionImagePlaceholder}>
-                      <Ionicons name="barbell-outline" size={40} color="#002fff" />
+                      <Ionicons name="barbell-outline" size={30} color="#002fff" />
                     </View>
                   )}
-
-                  {/* Credits Badge */}
-                 
-
-                  {/* Status Badge */}
-                  <View style={[
-                    styles.statusBadge,
-                    { backgroundColor: getStatusColor(session.spots_left, session.max_capacity) }
-                  ]}>
-                    <ThemedText style={styles.statusBadgeText}>
-                      {getStatusText(session.spots_left)}
-                    </ThemedText>
-                  </View>
                 </View>
 
                 {/* Session Info */}
@@ -281,51 +331,40 @@ export default function ExploreScreen() {
                       <ThemedText style={styles.sessionName} numberOfLines={1}>
                         {session.name}
                       </ThemedText>
-                      <ThemedText style={styles.classInstructorText} numberOfLines={1}>
-                           {session.description}
+                      <ThemedText style={styles.gymText} numberOfLines={1}>
+                        {session.gyms?.name || 'Unknown Gym'}
                       </ThemedText>
-                      {session.instructor && (
-                        <View style={styles.instructorRow}>
-                          <Ionicons name="person-outline" size={14} color="#666" />
-                          <ThemedText style={styles.instructorText} numberOfLines={1}>
-                            {session.instructor}
-                          </ThemedText>
-                        </View>
-                      )}
                     </View>
-                    <Ionicons name="chevron-forward" size={24} color="#ccc" />
-                  </View>
-
-                  <View style={styles.gymRow}>
-                    <Ionicons name="location-outline" size={16} color="#666" />
-                    <ThemedText style={styles.gymText} numberOfLines={1}>
-                      {session.gyms?.name || 'Unknown Gym'}
-                    </ThemedText>
+                    
+                    {session.credits_required > 0 && (
+                      <View style={styles.creditsContainer}>
+                        <Ionicons name="flash" size={12} color="#002fff" />
+                        <ThemedText style={styles.creditsText}>
+                          {session.credits_required}
+                        </ThemedText>
+                      </View>
+                    )}
                   </View>
 
                   <View style={styles.sessionMeta}>
                     <View style={styles.metaItem}>
-                      <Ionicons name="calendar-outline" size={14} color="#666" />
+                      <Ionicons name="time-outline" size={12} color="#666" />
                       <ThemedText style={styles.metaText}>
-                        {formatDate(session.date)}
-                      </ThemedText>
-                    </View>
-                    <View style={styles.metaItem}>
-                      <Ionicons name="time-outline" size={14} color="#666" />
-                      <ThemedText style={styles.metaText}>
-                        {session.time}
-                      </ThemedText>
-                    </View>
-                    <View style={styles.metaItem}>
-                      <Ionicons name="hourglass-outline" size={14} color="#666" />
-                      <ThemedText style={styles.metaText}>
-                        {session.duration_minutes}m
+                        {session.time} • {session.duration_minutes}m
                       </ThemedText>
                     </View>
                   </View>
-                  <ThemedText style={styles.classSpotsLeft} numberOfLines={1}>
-                      {session.credits_required} credits required to book
-                  </ThemedText>
+
+                  <View style={styles.sessionFooter}>
+                    <View style={[
+                      styles.statusIndicator,
+                      { backgroundColor: getStatusColor(session.spots_left, session.max_capacity) }
+                    ]} />
+                    <ThemedText style={styles.classSpotsLeft}>
+                      {session.spots_left > 0 ? `${session.spots_left} spots left` : 'Fully booked'}
+                    </ThemedText>
+                    <Ionicons name="chevron-forward" size={16} color="#ccc" />
+                  </View>
                 </View>
               </TouchableOpacity>
             ))}
@@ -347,21 +386,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  classSpotsLeft: {
-    fontSize: 13,
-    color: '#00a63e',
-    flex: 1,
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#666',
+    fontWeight: '500',
   },
   header: {
     paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 20,
     backgroundColor: '#ffffff',
-  },
-  classInstructorText: {
-    fontSize: 13,
-    color: '#666',
-    flex: 1,
   },
   headerTitle: {
     fontSize: 28,
@@ -378,7 +413,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#f8f8f8',
-    marginHorizontal: 10,
+    marginHorizontal: 20,
     marginTop: 10,
     paddingHorizontal: 16,
     borderRadius: 12,
@@ -390,21 +425,23 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    padding: 16,
+    paddingVertical: 12,
     fontSize: 16,
   },
-  filtersContainer: {
+  filtersWrapper: {
     marginTop: 16,
-    maxHeight: 50,
+    gap: 12,
+  },
+  filterRow: {
+    maxHeight: 44,
   },
   filtersContent: {
     paddingHorizontal: 20,
-    paddingRight: 20,
   },
   filterChip: {
-    paddingHorizontal: 20,
-    paddingVertical: 5,
-    borderRadius: 30,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
     backgroundColor: '#f8f8f8',
     borderWidth: 1,
     borderColor: '#e0e0e0',
@@ -415,40 +452,102 @@ const styles = StyleSheet.create({
   },
   filterChipActive: {
     backgroundColor: '#000000',
+    borderColor: '#000000',
   },
   filterText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: '#666',
-    textAlign: 'center',
   },
   filterTextActive: {
     color: '#fff',
   },
+  dropdownWrapper: {
+    paddingHorizontal: 20,
+  },
+  dropdownTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f8f8f8',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  dropdownContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  dropdownText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+  },
+  dropdownTextActive: {
+    color: '#002fff',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingBottom: 40,
+    maxHeight: '70%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  modalItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f8f8f8',
+  },
+  modalItemText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  modalItemTextActive: {
+    color: '#002fff',
+    fontWeight: 'bold',
+  },
   content: {
     flex: 1,
-    marginTop: 20,
+    marginTop: 10,
   },
   sessionsList: {
     paddingHorizontal: 20,
   },
   sessionCard: {
+    flexDirection: 'row',
     backgroundColor: '#fff',
-    borderRadius: 16,
-    marginBottom: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
   },
   sessionImageContainer: {
-    position: 'relative',
-    width: '100%',
-    height: 200,
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    overflow: 'hidden',
   },
   sessionImage: {
     width: '100%',
@@ -461,79 +560,46 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  creditsBadge: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    backgroundColor: '#002fff',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  creditsBadgeText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: 'bold',
-  },
-  statusBadge: {
-    position: 'absolute',
-    bottom: 12,
-    left: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  statusBadgeText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
   sessionInfo: {
-    padding: 16,
+    flex: 1,
+    marginLeft: 12,
+    justifyContent: 'space-between',
   },
   sessionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 8,
   },
   sessionTitleContainer: {
     flex: 1,
+    marginRight: 8,
   },
   sessionName: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '700',
     color: '#000',
-    marginBottom: 4,
-  },
-  instructorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  instructorText: {
-    fontSize: 13,
-    color: '#666',
-    flex: 1,
-  },
-  gymRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginBottom: 12,
+    marginBottom: 2,
   },
   gymText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#666',
-    flex: 1,
+  },
+  creditsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#eef0ff',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  creditsText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#002fff',
+    marginLeft: 2,
   },
   sessionMeta: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 16,
+    marginVertical: 4,
   },
   metaItem: {
     flexDirection: 'row',
@@ -541,8 +607,24 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   metaText: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#666',
+  },
+  sessionFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  statusIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  classSpotsLeft: {
+    fontSize: 12,
+    color: '#666',
+    flex: 1,
   },
   emptyState: {
     alignItems: 'center',

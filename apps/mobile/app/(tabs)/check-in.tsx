@@ -2,13 +2,16 @@ import { StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator, Aler
 import { ThemedText } from '@/components/themed-text';
 import { useRouter } from 'expo-router';
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
-import { authService } from '../services/auth';
+import { supabase } from '@/lib/supabase';
+import { authService } from '@/services/auth';
 import { Ionicons } from '@expo/vector-icons';
+
+// ─── Interfaces ──────────────────────────────────────────────────────────────
 
 interface Booking {
   id: string;
   booking_date: string;
+  booking_time: string;
   status: string;
   confirmation_code: string | null;
   checked_in: boolean;
@@ -31,7 +34,9 @@ interface UserProfile {
 
 type TabType = 'upcoming' | 'past';
 
-export default function ProfileScreen() {
+// ─── Component ───────────────────────────────────────────────────────────────
+
+export default function BookingsScreen() {
   const router = useRouter();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [upcomingBookings, setUpcomingBookings] = useState<Booking[]>([]);
@@ -52,9 +57,9 @@ export default function ProfileScreen() {
     try {
       setLoading(true);
       
-      const session = await authService.getSession();
+      const authSession = await authService.getSession();
       
-      if (!session) {
+      if (!authSession || !authSession.user) {
         setIsGuest(true);
         setLoading(false);
         return;
@@ -62,20 +67,27 @@ export default function ProfileScreen() {
 
       setIsGuest(false);
 
-      // Load user profile
-      const { data: userData } = await supabase
+      // 1. Load user profile
+      const { data: userData, error: userError } = await supabase
         .from('users')
         .select('name, email')
-        .eq('id', session.user.id)
-        .single();
+        .eq('id', authSession.user.id)
+        .maybeSingle();
 
-      if (userData) setUser(userData);
+      if (userData) {
+        setUser(userData);
+      } else {
+        setUser({
+          name: authSession.user.user_metadata?.full_name || 'User',
+          email: authSession.user.email || ''
+        });
+      }
 
-      // Load bookings
+      // 2. Load bookings
       const today = new Date().toISOString().split('T')[0];
 
       // Upcoming bookings
-      const { data: upcomingData } = await supabase
+      const { data: upcomingData, error: upcomingError } = await supabase
         .from('bookings')
         .select(`
           *,
@@ -89,15 +101,15 @@ export default function ProfileScreen() {
             )
           )
         `)
-        .eq('user_id', session.user.id)
+        .eq('user_id', authSession.user.id)
         .eq('status', 'confirmed')
         .gte('booking_date', today)
         .order('booking_date', { ascending: true });
 
-      if (upcomingData) setUpcomingBookings(upcomingData);
+      if (upcomingData) setUpcomingBookings(upcomingData as Booking[]);
 
       // Past bookings
-      const { data: pastData } = await supabase
+      const { data: pastData, error: pastError } = await supabase
         .from('bookings')
         .select(`
           *,
@@ -111,26 +123,25 @@ export default function ProfileScreen() {
             )
           )
         `)
-        .eq('user_id', session.user.id)
+        .eq('user_id', authSession.user.id)
         .lt('booking_date', today)
         .order('booking_date', { ascending: false })
         .limit(10);
 
-      if (pastData) setPastBookings(pastData);
+      if (pastData) setPastBookings(pastData as Booking[]);
+
     } catch (error) {
-      console.error('Error loading data:', error);
+      console.error('Error loading bookings data:', error);
     } finally {
       setLoading(false);
     }
   };
 
   const generateConfirmationCode = () => {
-    // Generate a 6-digit confirmation code
     return Math.floor(100000 + Math.random() * 900000).toString();
   };
 
   const handleCheckInPress = async (booking: Booking) => {
-    // If no confirmation code exists, generate one
     if (!booking.confirmation_code) {
       const code = generateConfirmationCode();
       
@@ -154,14 +165,12 @@ export default function ProfileScreen() {
     setCheckingIn(true);
 
     try {
-      // Verify confirmation code
       if (confirmationCode !== selectedBooking.confirmation_code) {
         Alert.alert('Error', 'Invalid confirmation code');
         setCheckingIn(false);
         return;
       }
 
-      // Update booking to checked in
       const { error } = await supabase
         .from('bookings')
         .update({
@@ -175,7 +184,7 @@ export default function ProfileScreen() {
       Alert.alert('Success', 'You have successfully checked in!');
       setCheckInModalVisible(false);
       setConfirmationCode('');
-      loadData(); // Reload bookings
+      loadData();
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to check in');
     } finally {
@@ -184,24 +193,26 @@ export default function ProfileScreen() {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-    });
+    if (!dateString) return '';
+    try {
+      return new Date(dateString).toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+      });
+    } catch {
+      return dateString;
+    }
   };
 
-  const getInitials = (name: string | null | undefined) => {
-    if (!name || typeof name !== 'string') return 'U';
-    
-    return name
-      .trim()
-      .split(' ')
-      .filter(n => n.length > 0)
-      .map(n => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2) || 'U';
+  const formatTime = (timeString: string) => {
+    if (!timeString) return '';
+    try {
+      const parts = timeString.split(':');
+      const hour = parseInt(parts[0], 10);
+      const minutes = parts[1];
+      return `${hour % 12 || 12}:${minutes} ${hour >= 12 ? 'PM' : 'AM'}`;
+    } catch { return timeString; }
   };
 
   if (loading) {
@@ -215,29 +226,20 @@ export default function ProfileScreen() {
   if (isGuest) {
     return (
       <ScrollView style={styles.LoggedOutContainer}>
-        {/* <View style={styles.header}>
-          <View style={styles.avatar}>
-            <Ionicons name="person-outline" size={40} color="#fff" />
-          </View>
-          <ThemedText type="title" style={styles.name}>Guest User</ThemedText>
-          <ThemedText style={styles.email}>Not signed in</ThemedText>
-        </View> */}
-
           <View style={styles.emptyState}>
               <Ionicons name="qr-code-outline" size={64} color="#ccc" />
-            
                <View style={styles.gettingStartedCard}>
                    <ThemedText style={styles.gettingStartedTitle}>
                       Let's get checked in
                   </ThemedText>
                    <ThemedText style={styles.gettingStartedDescription}>
-                      Sign in to view your bookings and check in to classed to continue wellness journey today
+                      Sign in to view your bookings and check in to classes to continue your wellness journey today
                   </ThemedText>
                       <TouchableOpacity 
                         style={styles.exploreButt}
                          onPress={() => router.push('/login')}
                       >
-                        <ThemedText style={styles.exploreButtText}> Sign In or Create Your Account</ThemedText>
+                        <ThemedText style={styles.exploreButtText}>Sign In or Create Your Account</ThemedText>
                           <Ionicons name="arrow-forward" size={20} color="#fff" />
                         </TouchableOpacity>
                   </View>
@@ -316,43 +318,27 @@ export default function ProfileScreen() {
                   </View>
                   {booking.checked_in ? (
                     <View style={styles.checkedInBadge}>
-                      <Ionicons name="checkmark-circle" size={20} color="#4caf50" />
+                      <Ionicons name="checkmark-circle" size={16} color="#4caf50" />
                       <ThemedText style={styles.checkedInText}>Checked In</ThemedText>
                     </View>
                   ) : (
-                    <TouchableOpacity
+                    <TouchableOpacity 
                       style={styles.checkInButton}
                       onPress={() => handleCheckInPress(booking)}
                     >
-                      <Ionicons name="qr-code-outline" size={20} color="#002fff" />
                       <ThemedText style={styles.checkInButtonText}>Check In</ThemedText>
                     </TouchableOpacity>
                   )}
                 </View>
-
+                
                 <View style={styles.bookingDetails}>
-                  <View style={styles.detailItem}>
+                  <View style={styles.bookingDetailItem}>
                     <Ionicons name="calendar-outline" size={16} color="#666" />
-                    <ThemedText style={styles.detailText}>
-                      {formatDate(booking.sessions?.date || booking.booking_date)}
-                    </ThemedText>
-                  </View>
-                  <View style={styles.detailItem}>
-                    <Ionicons name="time-outline" size={16} color="#666" />
-                    <ThemedText style={styles.detailText}>
-                      {booking.sessions?.time || 'TBD'}
+                    <ThemedText style={styles.bookingDetailText}>
+                      {formatDate(booking.sessions?.date || booking.booking_date)} • {formatTime(booking.sessions?.time || booking.booking_time)}
                     </ThemedText>
                   </View>
                 </View>
-
-                {booking.confirmation_code && !booking.checked_in && (
-                  <View style={styles.confirmationCodeContainer}>
-                    <ThemedText style={styles.confirmationCodeLabel}>Confirmation Code:</ThemedText>
-                    <ThemedText style={styles.confirmationCodeText}>
-                      {booking.confirmation_code}
-                    </ThemedText>
-                  </View>
-                )}
               </View>
             ))
           )
@@ -364,35 +350,29 @@ export default function ProfileScreen() {
             </View>
           ) : (
             pastBookings.map((booking) => (
-              <View key={booking.id} style={styles.bookingCard}>
+              <View key={booking.id} style={[styles.bookingCard, styles.pastBookingCard]}>
                 <View style={styles.bookingHeader}>
                   <View style={styles.bookingInfo}>
-                    <ThemedText style={styles.bookingName}>
+                    <ThemedText style={[styles.bookingName, styles.pastBookingText]}>
                       {booking.sessions?.name || 'Class'}
                     </ThemedText>
                     <View style={styles.bookingMeta}>
-                      <Ionicons name="location-outline" size={14} color="#666" />
-                      <ThemedText style={styles.bookingMetaText}>
+                      <Ionicons name="location-outline" size={14} color="#999" />
+                      <ThemedText style={[styles.bookingMetaText, styles.pastBookingText]}>
                         {booking.sessions?.gyms?.name || 'Gym'}
                       </ThemedText>
                     </View>
                   </View>
-                  {booking.checked_in && (
-                    <Ionicons name="checkmark-circle" size={28} color="#4caf50" />
-                  )}
-                </View>
-
-                <View style={styles.bookingDetails}>
-                  <View style={styles.detailItem}>
-                    <Ionicons name="calendar-outline" size={16} color="#666" />
-                    <ThemedText style={styles.detailText}>
-                      {formatDate(booking.sessions?.date || booking.booking_date)}
-                    </ThemedText>
+                  <View style={styles.pastBadge}>
+                    <ThemedText style={styles.pastBadgeText}>Completed</ThemedText>
                   </View>
-                  <View style={styles.detailItem}>
-                    <Ionicons name="time-outline" size={16} color="#666" />
-                    <ThemedText style={styles.detailText}>
-                      {booking.sessions?.time || 'TBD'}
+                </View>
+                
+                <View style={styles.bookingDetails}>
+                  <View style={styles.bookingDetailItem}>
+                    <Ionicons name="calendar-outline" size={16} color="#999" />
+                    <ThemedText style={[styles.bookingDetailText, styles.pastBookingText]}>
+                      {formatDate(booking.sessions?.date || booking.booking_date)}
                     </ThemedText>
                   </View>
                 </View>
@@ -402,10 +382,10 @@ export default function ProfileScreen() {
         )}
       </ScrollView>
 
-      {/* Check-In Modal */}
+      {/* Check-in Modal */}
       <Modal
         visible={checkInModalVisible}
-        transparent
+        transparent={true}
         animationType="slide"
         onRequestClose={() => setCheckInModalVisible(false)}
       >
@@ -414,66 +394,41 @@ export default function ProfileScreen() {
             <View style={styles.modalHeader}>
               <ThemedText style={styles.modalTitle}>Check In</ThemedText>
               <TouchableOpacity onPress={() => setCheckInModalVisible(false)}>
-                <Ionicons name="close" size={28} color="#000" />
+                <Ionicons name="close" size={24} color="#000" />
               </TouchableOpacity>
             </View>
 
-            <ThemedText style={styles.modalClassName}>
-              {selectedBooking?.sessions?.name}
-            </ThemedText>
-
-            {/* QR Code Placeholder */}
-            <View style={styles.qrCodePlaceholder}>
-              <Ionicons name="qr-code" size={120} color="#ccc" />
-              <ThemedText style={styles.qrCodeText}>
-                QR Code Check-In
+            <View style={styles.modalBody}>
+              <ThemedText style={styles.modalSubtitle}>
+                Please enter the confirmation code provided by the gym staff.
               </ThemedText>
-              <ThemedText style={styles.qrCodeSubtext}>
-                Feature not available
-              </ThemedText>
-            </View>
+              
+              <View style={styles.codeDisplay}>
+                <ThemedText style={styles.codeLabel}>Your Code:</ThemedText>
+                <ThemedText style={styles.codeValue}>{selectedBooking?.confirmation_code}</ThemedText>
+              </View>
 
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <ThemedText style={styles.dividerText}>OR</ThemedText>
-              <View style={styles.dividerLine} />
-            </View>
-
-            {/* Confirmation Code Input */}
-            <View style={styles.confirmationSection}>
-              <ThemedText style={styles.confirmationLabel}>
-                Enter Confirmation Code
-              </ThemedText>
-              {selectedBooking?.confirmation_code && (
-                <View style={styles.codeHint}>
-                  <Ionicons name="information-circle-outline" size={16} color="#002fff" />
-                  <ThemedText style={styles.codeHintText}>
-                    Your code: {selectedBooking.confirmation_code}
-                  </ThemedText>
-                </View>
-              )}
               <TextInput
                 style={styles.codeInput}
-                placeholder="Enter 6-digit code"
-                placeholderTextColor="#999"
+                placeholder="Enter Code"
                 value={confirmationCode}
                 onChangeText={setConfirmationCode}
                 keyboardType="number-pad"
                 maxLength={6}
               />
-            </View>
 
-            <TouchableOpacity
-              style={[styles.confirmButton, checkingIn && styles.confirmButtonDisabled]}
-              onPress={handleCheckIn}
-              disabled={checkingIn || confirmationCode.length !== 6}
-            >
-              {checkingIn ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <ThemedText style={styles.confirmButtonText}>Confirm Check-In</ThemedText>
-              )}
-            </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.modalButton, checkingIn && styles.modalButtonDisabled]}
+                onPress={handleCheckIn}
+                disabled={checkingIn}
+              >
+                {checkingIn ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <ThemedText style={styles.modalButtonText}>Confirm Check In</ThemedText>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -486,10 +441,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
-   LoggedOutContainer: {
+  LoggedOutContainer: {
     flex: 1,
     backgroundColor: '#fff',
-    paddingTop: '70%',
   },
   centerContent: {
     justifyContent: 'center',
@@ -498,112 +452,60 @@ const styles = StyleSheet.create({
   header: {
     padding: 20,
     paddingTop: 60,
-    alignItems: 'center',
-    position: 'relative',
-  },
-  settingsIcon: {
-    position: 'absolute',
-    top: 60,
-    right: 20,
-    padding: 8,
-  },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#002fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 15,
-  },
-  avatarText: {
-    color: '#fff',
-    fontSize: 28,
-    fontWeight: 'bold',
+    backgroundColor: '#fff',
   },
   name: {
-    marginBottom: 5,
-    color: '#000',
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 4,
   },
   email: {
+    fontSize: 16,
     color: '#666',
-    marginBottom: 20,
-  },
-  guestPrompt: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f0f4ff',
-    padding: 16,
-    margin: 20,
-    borderRadius: 12,
-    gap: 12,
-  },
-  guestText: {
-    flex: 1,
-    color: '#002fff',
-    fontSize: 14,
-  },
-  section: {
-    padding: 20,
-  },
-  primaryButton: {
-    backgroundColor: '#000',
-    paddingVertical: 16,
-    borderRadius: 25,
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  primaryButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  secondaryButton: {
-    borderWidth: 2,
-    borderColor: '#000',
-    paddingVertical: 16,
-    borderRadius: 25,
-    alignItems: 'center',
-  },
-  secondaryButtonText: {
-    color: '#000',
-    fontSize: 16,
-    fontWeight: '600',
   },
   tabs: {
     flexDirection: 'row',
+    paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: '#f0f0f0',
   },
   tab: {
-    flex: 1,
-    paddingVertical: 16,
-    alignItems: 'center',
+    paddingVertical: 15,
+    marginRight: 25,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
   },
   tabActive: {
-    borderBottomWidth: 3,
     borderBottomColor: '#002fff',
   },
   tabText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#999',
+    color: '#666',
   },
   tabTextActive: {
     color: '#002fff',
   },
   content: {
     flex: 1,
+    padding: 20,
   },
   bookingCard: {
     backgroundColor: '#fff',
-    marginHorizontal: 20,
-    marginTop: 16,
+    borderRadius: 16,
     padding: 16,
-    borderRadius: 12,
+    marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
-    
+    borderColor: '#f0f0f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  pastBookingCard: {
+    backgroundColor: '#fcfcfc',
+    borderColor: '#f5f5f5',
   },
   bookingHeader: {
     flexDirection: 'row',
@@ -616,14 +518,83 @@ const styles = StyleSheet.create({
   },
   bookingName: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 6,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  pastBookingText: {
+    color: '#999',
   },
   bookingMeta: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+  },
+  bookingMetaText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  checkInButton: {
+    backgroundColor: '#002fff',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  checkInButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  checkedInBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#e8f5e9',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  checkedInText: {
+    color: '#4caf50',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  pastBadge: {
+    backgroundColor: '#f0f0f0',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  pastBadgeText: {
+    color: '#999',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  bookingDetails: {
+    flexDirection: 'row',
+    gap: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  bookingDetailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  bookingDetailText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  emptyText: {
+    fontSize: 18,
+    color: '#999',
+    marginTop: 16,
+    marginBottom: 24,
   },
   gettingStartedCard: {
     padding: 24,
@@ -659,104 +630,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  bookButton: {
-    backgroundColor: '#000',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 25,
-  },
-  bookButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  bookingMetaText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  checkInButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#f0f4ff',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  checkInButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#002fff',
-  },
-  checkedInBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  checkedInText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#4caf50',
-  },
-  bookingDetails: {
-    flexDirection: 'row',
-    gap: 16,
-    marginBottom: 8,
-  },
-  detailItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  detailText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  confirmationCodeContainer: {
-    backgroundColor: '#f0f4ff',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  confirmationCodeLabel: {
-    fontSize: 13,
-    color: '#666',
-  },
-  confirmationCodeText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#002fff',
-    letterSpacing: 2,
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 80,
-    paddingHorizontal: 40,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#999',
-    marginTop: 16,
-    marginBottom: 24,
-  },
-  exploreButton: {
-    backgroundColor: '#002fff',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 25,
-  },
-  exploreButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
   modalContent: {
@@ -764,103 +640,68 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
-    maxHeight: '85%',
+    minHeight: 400,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 24,
   },
   modalTitle: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: '#000',
   },
-  modalClassName: {
-    fontSize: 18,
-    color: '#666',
-    marginBottom: 24,
+  modalBody: {
+    gap: 20,
   },
-  qrCodePlaceholder: {
-    alignItems: 'center',
-    padding: 32,
-    backgroundColor: '#f8f8f8',
-    borderRadius: 16,
-    marginBottom: 24,
-  },
-  qrCodeText: {
+  modalSubtitle: {
     fontSize: 16,
-    fontWeight: '600',
     color: '#666',
-    marginTop: 16,
+    lineHeight: 24,
   },
-  qrCodeSubtext: {
-    fontSize: 13,
-    color: '#999',
-    marginTop: 4,
-  },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#e0e0e0',
-  },
-  dividerText: {
-    paddingHorizontal: 16,
-    fontSize: 14,
-    color: '#999',
-  },
-  confirmationSection: {
-    marginBottom: 24,
-  },
-  confirmationLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 8,
-  },
-  codeHint: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+  codeDisplay: {
     backgroundColor: '#f0f4ff',
-    padding: 10,
-    borderRadius: 8,
-    marginBottom: 12,
+    padding: 20,
+    borderRadius: 16,
+    alignItems: 'center',
+    gap: 8,
   },
-  codeHintText: {
+  codeLabel: {
     fontSize: 14,
     color: '#002fff',
     fontWeight: '600',
   },
+  codeValue: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#002fff',
+    letterSpacing: 4,
+  },
   codeInput: {
     backgroundColor: '#f8f8f8',
+    height: 56,
     borderRadius: 12,
-    padding: 16,
-    fontSize: 24,
-    fontWeight: 'bold',
+    paddingHorizontal: 16,
+    fontSize: 18,
     textAlign: 'center',
-    letterSpacing: 4,
     borderWidth: 1,
     borderColor: '#e0e0e0',
   },
-  confirmButton: {
+  modalButton: {
     backgroundColor: '#002fff',
-    paddingVertical: 16,
-    borderRadius: 25,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
     alignItems: 'center',
+    marginTop: 10,
   },
-  confirmButtonDisabled: {
-    opacity: 0.5,
+  modalButtonDisabled: {
+    backgroundColor: '#ccc',
   },
-  confirmButtonText: {
+  modalButtonText: {
     color: '#fff',
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: 'bold',
   },
 });

@@ -2,7 +2,7 @@ import { StyleSheet, View, ScrollView, TouchableOpacity } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { authService } from './services/auth';
+import { authService } from '@/services/auth';
 import { Alert } from 'react-native';
 
 export default function SettingsScreen() {

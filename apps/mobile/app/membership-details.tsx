@@ -3,8 +3,8 @@ import { ThemedText } from '@/components/themed-text';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect } from 'react';
-import { authService } from './services/auth';
-import { supabase } from './lib/supabase';
+import { authService } from '@/services/auth';
+import { supabase } from '@/lib/supabase';
 
 interface MembershipData {
   credits: number;
