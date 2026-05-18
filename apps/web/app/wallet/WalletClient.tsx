@@ -393,7 +393,7 @@ export default function WalletClient({
             {summary.transactions.map((transaction) => (
               <div
                 key={transaction.id}
-                className="grid gap-3 px-6 py-4 md:grid-cols-[1.4fr_0.9fr_0.7fr]"
+                className="grid gap-3 px-6 py-4 md:grid-cols-[1.6fr_1fr]"
               >
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
@@ -428,13 +428,6 @@ export default function WalletClient({
                     {typeof transaction.metadata?.phone === 'string'
                       ? transaction.metadata.phone
                       : '—'}
-                  </p>
-                </div>
-
-                <div className="text-sm text-gray-600">
-                  <p className="font-medium text-gray-900">Idempotency</p>
-                  <p className="mt-1 break-all text-xs text-gray-400">
-                    {transaction.idempotencyKey ?? '—'}
                   </p>
                 </div>
               </div>

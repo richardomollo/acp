@@ -39,6 +39,22 @@ export interface MpesaTopupResponse {
   message: string;
 }
 
+export interface WalletPaymentInput {
+  walletId: string;
+  amount: number | string;
+  description: string;
+  reference: string;
+}
+
+export interface WalletPaymentResponse {
+  transactionId?: string;
+  paymentId?: string;
+  status?: string;
+  reference?: string;
+  message?: string;
+  [key: string]: unknown;
+}
+
 export interface WalletSummary {
   wallet: WalletRecord;
   balance: WalletBalance;
@@ -348,6 +364,34 @@ async function topupMpesaForEmail({
   };
 }
 
+async function payWallet({
+  walletId,
+  amount,
+  description,
+  reference,
+}: WalletPaymentInput): Promise<WalletPaymentResponse> {
+  if (!walletId.trim()) {
+    throw new WalletServiceError('Wallet ID is required.');
+  }
+
+  if (!description.trim()) {
+    throw new WalletServiceError('Payment description is required.');
+  }
+
+  if (!reference.trim()) {
+    throw new WalletServiceError('Payment reference is required.');
+  }
+
+  return walletRequest<WalletPaymentResponse>(`/wallets/${walletId}/pay`, {
+    method: 'POST',
+    body: JSON.stringify({
+      amount: normaliseAmount(amount),
+      description: description.trim(),
+      reference: reference.trim(),
+    }),
+  });
+}
+
 export const walletService = {
   createWallet,
   createWalletForNewUser,
@@ -358,6 +402,7 @@ export const walletService = {
   getOrCreateWalletByEmail,
   getWalletSummaryIfExistsByEmail,
   getWalletSummaryByEmail,
+  payWallet,
   topupMpesaForEmail,
 };
 

@@ -7,6 +7,8 @@
 import { createClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
 
+import { walletService } from '@/app/lib/wallet/service'
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -331,6 +333,47 @@ export async function purchaseCredits(userId: string, tier: string) {
       return { success: false, error: 'User not found' }
     }
 
+    if (!user.email) {
+      return { success: false, error: 'User email is required to charge the wallet.' }
+    }
+
+    const walletSummary = await walletService.getWalletSummaryIfExistsByEmail(user.email)
+
+    if (!walletSummary) {
+      return {
+        success: false,
+        error: 'No wallet found. Top up your wallet first before buying a plan.',
+        needsTopup: true,
+      }
+    }
+
+    const availableBalance = Number(walletSummary.balance.balance)
+    const planPrice = Number(plan.price)
+
+    if (!Number.isFinite(availableBalance) || availableBalance < planPrice) {
+      return {
+        success: false,
+        error: `Insufficient wallet balance. You need KES ${planPrice.toLocaleString()} but have KES ${Number.isFinite(availableBalance) ? availableBalance.toLocaleString() : '0'}.`,
+        needsTopup: true,
+      }
+    }
+
+    const paymentReference = `PLAN-${tier.toUpperCase()}-${userId.slice(0, 8)}-${Date.now()}`
+
+    const paymentResult = await walletService.payWallet({
+      walletId: walletSummary.wallet.walletId,
+      amount: plan.price,
+      description: `Purchase ${plan.name} plan`,
+      reference: paymentReference,
+    })
+
+    if (paymentResult.status && !['SUCCESS', 'COMPLETED', 'PAID'].includes(String(paymentResult.status).toUpperCase())) {
+      return {
+        success: false,
+        error: paymentResult.message || 'Wallet payment did not complete successfully.',
+      }
+    }
+
     const startDate = new Date()
     const endDate = new Date()
     endDate.setDate(endDate.getDate() + plan.duration_days)
@@ -380,7 +423,7 @@ export async function purchaseCredits(userId: string, tier: string) {
         transaction_type: 'credit',
         credits: plan.credits,
         balance_after: newCredits,
-        description: `Purchased ${plan.name} - ${plan.credits} credits`
+        description: `Wallet purchase ${paymentReference} - ${plan.name} - ${plan.credits} credits`
       })
 
     revalidatePath('/subscriptions')
@@ -390,7 +433,8 @@ export async function purchaseCredits(userId: string, tier: string) {
       success: true, 
       message: `Successfully purchased ${plan.name}! ${plan.credits} credits added.`,
       creditsAdded: plan.credits,
-      totalCredits: newCredits
+      totalCredits: newCredits,
+      paymentReference
     }
 
   } catch (error) {

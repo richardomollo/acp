@@ -25,11 +25,30 @@ type UserProfile = {
   trial_end_date: string;
 };
 
+type WalletSummaryResponse = {
+  walletExists: boolean;
+  summary: {
+    balance: {
+      balance: string;
+      currency: string;
+    };
+  } | null;
+};
+
+const formatCurrency = (amount: number) =>
+  new Intl.NumberFormat("en-KE", {
+    style: "currency",
+    currency: "KES",
+    maximumFractionDigits: 2,
+  }).format(amount);
+
 export default function SubscriptionsPage() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [walletCurrency, setWalletCurrency] = useState("KES");
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState<string | null>(null);
 
@@ -40,13 +59,37 @@ export default function SubscriptionsPage() {
     if (!user) { router.push("/login"); return; }
     setUser(user);
 
-    const [profileRes, plansRes] = await Promise.all([
+    const { data: { session } } = await supabase.auth.getSession();
+    const accessToken = session?.access_token;
+
+    const walletPromise = accessToken
+      ? fetch("/api/wallet/summary", {
+          cache: "no-store",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        })
+          .then(async (response) => {
+            const data = (await response.json()) as WalletSummaryResponse | { error?: string };
+            if (!response.ok) return null;
+            if ("summary" in data && data.summary?.balance?.balance) {
+              return data.summary.balance;
+            }
+            return null;
+          })
+          .catch(() => null)
+      : Promise.resolve(null);
+
+    const [profileRes, plansRes, walletRes] = await Promise.all([
       supabase.from("users").select("credits, subscription_tier, trial_end_date").eq("id", user.id).single(),
       supabase.from("subscription_plans").select("*").eq("is_active", true).neq("tier", "free_trial").order("price", { ascending: true }),
+      walletPromise,
     ]);
 
     setUserProfile(profileRes.data);
     setPlans(plansRes.data || []);
+    setWalletBalance(walletRes ? Number(walletRes.balance) : null);
+    setWalletCurrency(walletRes?.currency || "KES");
     setLoading(false);
   };
 
@@ -104,14 +147,20 @@ export default function SubscriptionsPage() {
         <div className="bg-gray-900 text-white rounded-3xl p-6 mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.25em] text-gray-400">Wallet</p>
-            <h2 className="mt-2 text-xl font-semibold">Top up before you buy</h2>
+            <h2 className="mt-2 text-xl font-semibold">
+              {walletBalance !== null
+                ? `${walletCurrency} balance: ${formatCurrency(walletBalance)}`
+                : "Top up before you buy"}
+            </h2>
             <p className="mt-1 text-sm text-gray-300 max-w-2xl">
-              Use the wallet for M-Pesa top-ups, wallet balance checks, and transaction statement tracking.
+              {walletBalance !== null
+                ? "Plan purchases now check wallet balance first and deduct from wallet before adding credits."
+                : "Use the wallet for M-Pesa top-ups, wallet balance checks, and transaction statement tracking."}
             </p>
           </div>
           <Link href="/wallet" className="shrink-0">
             <button className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-gray-900 transition hover:bg-gray-100">
-              Open wallet
+              {walletBalance !== null ? "Manage wallet" : "Open wallet"}
             </button>
           </Link>
         </div>
@@ -131,6 +180,7 @@ export default function SubscriptionsPage() {
           {plans.map((plan) => {
             const isPopular = plan.tier === "flex";
             const costPerCredit = (plan.price / plan.credits).toFixed(0);
+            const canAfford = walletBalance !== null && walletBalance >= Number(plan.price);
             const savings =
               plan.tier === "power" ? "Save 29%" :
               plan.tier === "flex"  ? "Save 11%" : null;
@@ -162,21 +212,42 @@ export default function SubscriptionsPage() {
                   </p>
                   <p className="text-sm text-gray-500 mt-0.5">{plan.credits} credits</p>
                   <p className="text-xs text-gray-400">KES {costPerCredit} per credit</p>
+                  <p className={`text-xs mt-1 ${canAfford ? "text-green-600" : "text-amber-600"}`}>
+                    {walletBalance === null
+                      ? "Top up wallet to buy this plan"
+                      : canAfford
+                        ? "Wallet balance is enough for this plan"
+                        : `Need ${formatCurrency(Number(plan.price) - walletBalance)} more in wallet`}
+                  </p>
                   {savings && (
                     <p className="text-xs font-semibold text-green-600 mt-1">{savings}</p>
                   )}
 
-                  <button
-                    onClick={() => handlePurchase(plan.tier)}
-                    disabled={!!purchasing}
-                    className={`w-full mt-4 py-2.5 rounded-full text-sm font-semibold transition disabled:opacity-50 ${
-                      isPopular
-                        ? "bg-gray-900 text-white hover:bg-gray-700"
-                        : "bg-gray-100 text-gray-900 hover:bg-gray-200"
-                    }`}
-                  >
-                    {purchasing === plan.tier ? "Processing…" : "Get this plan"}
-                  </button>
+                  {canAfford ? (
+                    <button
+                      onClick={() => handlePurchase(plan.tier)}
+                      disabled={!!purchasing}
+                      className={`w-full mt-4 py-2.5 rounded-full text-sm font-semibold transition disabled:opacity-50 ${
+                        isPopular
+                          ? "bg-gray-900 text-white hover:bg-gray-700"
+                          : "bg-gray-100 text-gray-900 hover:bg-gray-200"
+                      }`}
+                    >
+                      {purchasing === plan.tier ? "Processing…" : "Buy with wallet"}
+                    </button>
+                  ) : (
+                    <Link href="/wallet" className="block mt-4">
+                      <button
+                        className={`w-full py-2.5 rounded-full text-sm font-semibold transition ${
+                          isPopular
+                            ? "bg-gray-900 text-white hover:bg-gray-700"
+                            : "bg-gray-100 text-gray-900 hover:bg-gray-200"
+                        }`}
+                      >
+                        Top up wallet
+                      </button>
+                    </Link>
+                  )}
                 </div>
               </div>
             );
