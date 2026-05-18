@@ -261,7 +261,9 @@ export default function WalletClient({
             </div>
 
             <button
-              onClick={refreshSummary}
+              onClick={() => {
+                void refreshSummary();
+              }}
               disabled={loadingSummary}
               className="rounded-full border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 transition hover:border-gray-300 hover:text-gray-900 disabled:opacity-50"
             >
