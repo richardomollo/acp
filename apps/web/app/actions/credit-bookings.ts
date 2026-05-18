@@ -367,7 +367,7 @@ export async function purchaseCredits(userId: string, tier: string) {
       reference: paymentReference,
     })
 
-    if (paymentResult.status && !['SUCCESS', 'COMPLETED', 'PAID'].includes(String(paymentResult.status).toUpperCase())) {
+    if (paymentResult.success !== true) {
       return {
         success: false,
         error: paymentResult.message || 'Wallet payment did not complete successfully.',

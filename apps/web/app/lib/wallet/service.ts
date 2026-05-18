@@ -47,9 +47,14 @@ export interface WalletPaymentInput {
 }
 
 export interface WalletPaymentResponse {
+  success?: boolean;
   transactionId?: string;
   paymentId?: string;
   status?: string;
+  amount?: string;
+  currency?: string;
+  balance?: string;
+  description?: string;
   reference?: string;
   message?: string;
   [key: string]: unknown;
@@ -382,7 +387,7 @@ async function payWallet({
     throw new WalletServiceError('Payment reference is required.');
   }
 
-  return walletRequest<WalletPaymentResponse>(`/wallets/${walletId}/pay`, {
+  return walletRequest<WalletPaymentResponse>(`/api/wallets/${walletId}/pay`, {
     method: 'POST',
     body: JSON.stringify({
       amount: normaliseAmount(amount),
