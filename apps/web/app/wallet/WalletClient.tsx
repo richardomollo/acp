@@ -1,6 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+
+import { supabase } from '@/app/lib/supabase';
 
 type WalletRecord = {
   walletId: string;
@@ -44,8 +47,8 @@ type SummaryResponse = {
 };
 
 type WalletClientProps = {
-  emailAddress: string;
-  initialSummary: WalletSummary | null;
+  emailAddress?: string;
+  initialSummary?: WalletSummary | null;
   initialError?: string;
 };
 
@@ -84,15 +87,18 @@ function getStatusClasses(status: string) {
 }
 
 export default function WalletClient({
-  emailAddress,
-  initialSummary,
+  emailAddress: initialEmailAddress = '',
+  initialSummary = null,
   initialError = '',
 }: WalletClientProps) {
+  const router = useRouter();
+  const [emailAddress, setEmailAddress] = useState(initialEmailAddress);
   const [summary, setSummary] = useState<WalletSummary | null>(initialSummary);
   const [amount, setAmount] = useState('500');
   const [phone, setPhone] = useState('');
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [booting, setBooting] = useState(!initialEmailAddress);
   const [error, setError] = useState(initialError);
   const [success, setSuccess] = useState('');
 
@@ -108,12 +114,54 @@ export default function WalletClient({
     };
   }, [summary]);
 
-  const refreshSummary = async () => {
+  const getAccessToken = async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    return session?.access_token ?? '';
+  };
+
+  useEffect(() => {
+    const init = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user?.email) {
+        router.replace('/login');
+        return;
+      }
+
+      setEmailAddress(user.email);
+
+      if (!initialSummary) {
+        await refreshSummary(user.email);
+      }
+
+      setBooting(false);
+    };
+
+    init();
+  }, [router, initialSummary]);
+
+  const refreshSummary = async (resolvedEmail?: string) => {
     setLoadingSummary(true);
     setError('');
 
     try {
-      const response = await fetch('/api/wallet/summary', { cache: 'no-store' });
+      const accessToken = await getAccessToken();
+      if (!accessToken) {
+        router.replace('/login');
+        return;
+      }
+
+      const response = await fetch('/api/wallet/summary', {
+        cache: 'no-store',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
       const data = (await response.json()) as SummaryResponse | { error?: string };
 
       if (!response.ok) {
@@ -122,6 +170,9 @@ export default function WalletClient({
 
       if ('summary' in data) {
         setSummary(data.summary);
+        if (resolvedEmail) {
+          setEmailAddress(resolvedEmail);
+        }
       }
     } catch (refreshError) {
       setError(
@@ -141,10 +192,17 @@ export default function WalletClient({
     setSuccess('');
 
     try {
+      const accessToken = await getAccessToken();
+      if (!accessToken) {
+        router.replace('/login');
+        return;
+      }
+
       const response = await fetch('/api/wallet/topup', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
           amount,
@@ -176,6 +234,14 @@ export default function WalletClient({
       setSubmitting(false);
     }
   };
+
+  if (booting) {
+    return (
+      <div className="rounded-3xl border border-gray-200 bg-white px-6 py-16 text-center">
+        <p className="text-sm text-gray-500">Loading wallet…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="grid gap-6">

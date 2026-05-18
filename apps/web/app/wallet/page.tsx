@@ -1,34 +1,6 @@
-import { redirect } from 'next/navigation';
-
-import { createClient } from '@/app/lib/supabase/server';
-import { WalletServiceError, walletService } from '@/app/lib/wallet/service';
-
 import WalletClient from './WalletClient';
 
-export default async function WalletPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user?.email) {
-    redirect('/login');
-  }
-
-  let initialSummary = null;
-  let initialError = '';
-
-  try {
-    initialSummary = await walletService.getWalletSummaryIfExistsByEmail(user.email);
-  } catch (error) {
-    initialError =
-      error instanceof WalletServiceError
-        ? error.message
-        : error instanceof Error
-          ? error.message
-          : 'Failed to load wallet.';
-  }
-
+export default function WalletPage() {
   return (
     <div className="min-h-screen bg-gray-50 py-10">
       <div className="mx-auto w-full max-w-7xl px-6 md:px-10 lg:px-16">
@@ -40,11 +12,7 @@ export default async function WalletPage() {
           </p>
         </div>
 
-        <WalletClient
-          emailAddress={user.email}
-          initialSummary={initialSummary}
-          initialError={initialError}
-        />
+        <WalletClient />
       </div>
     </div>
   );

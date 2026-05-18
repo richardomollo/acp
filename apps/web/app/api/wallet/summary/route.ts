@@ -1,15 +1,30 @@
+import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
-import { createClient } from '@/app/lib/supabase/server';
 import { WalletServiceError, walletService } from '@/app/lib/wallet/service';
 
-export async function GET() {
+const adminSupabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  { auth: { autoRefreshToken: false, persistSession: false } }
+);
+
+function getAccessToken(request: Request) {
+  return request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
+}
+
+export async function GET(request: Request) {
   try {
-    const supabase = await createClient();
+    const accessToken = getAccessToken(request);
+
+    if (!accessToken) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const {
       data: { user },
       error,
-    } = await supabase.auth.getUser();
+    } = await adminSupabase.auth.getUser(accessToken);
 
     if (error || !user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

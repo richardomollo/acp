@@ -67,11 +67,12 @@ class WalletServiceError extends Error {
 }
 
 function getWalletApiBaseUrl() {
-  const baseUrl = process.env.WALLET_API_URL;
+  const baseUrl =
+    process.env.WALLET_API_URL ?? process.env.NEXT_PUBLIC_WALLET_API_URL;
 
   if (!baseUrl) {
     throw new WalletServiceError(
-      'Missing WALLET_API_URL environment variable for wallet service.'
+      'Missing WALLET_API_URL or NEXT_PUBLIC_WALLET_API_URL environment variable for wallet service.'
     );
   }
 
