@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { purchaseCredits } from "../actions/credit-bookings";
 
 const supabase = createClient(
@@ -98,6 +99,21 @@ export default function SubscriptionsPage() {
             <p className="text-xs text-gray-400 mb-0.5">Available credits</p>
             <p className="text-2xl font-bold text-gray-900">{userProfile?.credits ?? 0}</p>
           </div>
+        </div>
+
+        <div className="bg-gray-900 text-white rounded-3xl p-6 mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.25em] text-gray-400">Wallet</p>
+            <h2 className="mt-2 text-xl font-semibold">Top up before you buy</h2>
+            <p className="mt-1 text-sm text-gray-300 max-w-2xl">
+              Use the wallet for M-Pesa top-ups, wallet balance checks, and transaction statement tracking.
+            </p>
+          </div>
+          <Link href="/wallet" className="shrink-0">
+            <button className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-gray-900 transition hover:bg-gray-100">
+              Open wallet
+            </button>
+          </Link>
         </div>
 
         {/* Trial notice */}

@@ -259,9 +259,9 @@ export default function DashboardPage() {
                         Manage plan
                       </button>
                     </Link>
-                    <Link href="/subscriptions" className="flex-1">
+                    <Link href="/wallet" className="flex-1">
                       <button className="w-full bg-gray-900 text-white text-sm font-semibold py-2.5 rounded-full hover:bg-gray-700 transition">
-                        Add credits
+                        Top up wallet
                       </button>
                     </Link>
                   </div>
@@ -270,7 +270,12 @@ export default function DashboardPage() {
                 {/* Account balance card */}
                 <div className="bg-white rounded-2xl border border-gray-200 p-4 md:p-6 flex flex-col justify-between">
                   <div>
-                    <h2 className="text-base font-bold text-gray-900 mb-4">Account Balance</h2>
+                    <div className="flex items-center justify-between gap-3 mb-4">
+                      <h2 className="text-base font-bold text-gray-900">Wallet & Credits</h2>
+                      <Link href="/wallet" className="text-xs font-medium text-blue-600 hover:underline">
+                        Open wallet
+                      </Link>
+                    </div>
                     <div className="space-y-3 text-sm">
                       <div className="flex justify-between text-gray-600">
                         <span>Available Credits</span>
@@ -285,17 +290,20 @@ export default function DashboardPage() {
                         <span>{profile?.credits ?? 0}</span>
                       </div>
                     </div>
+                    <p className="mt-4 text-sm text-gray-500">
+                      M-Pesa top-ups, wallet balance, and statement history now live in your wallet.
+                    </p>
                   </div>
 
-                  <button
-                    onClick={() => setTab('bookings')}
+                  <Link
+                    href="/wallet"
                     className="mt-6 flex items-center justify-between w-full text-sm text-gray-600 bg-amber-50 rounded-xl px-4 py-3 hover:bg-amber-100 transition"
                   >
-                    <span>View your upcoming bookings</span>
+                    <span>View wallet details and statement</span>
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                     </svg>
-                  </button>
+                  </Link>
                 </div>
               </div>
 
@@ -356,9 +364,9 @@ export default function DashboardPage() {
               <div className="bg-white rounded-2xl border border-gray-200 p-4 md:p-6">
                 <h2 className="text-base font-semibold text-gray-900 mb-1">Need more credits?</h2>
                 <p className="text-sm text-gray-500 mb-4">Top up your account to keep booking classes and activities.</p>
-                <Link href="/subscriptions">
+                <Link href="/wallet">
                   <button className="bg-blue-600 text-white text-sm font-semibold px-6 py-2.5 rounded-full hover:bg-blue-700 transition">
-                    Add credits
+                    Top up wallet
                   </button>
                 </Link>
               </div>
@@ -369,6 +377,13 @@ export default function DashboardPage() {
           {tab === 'charges' && (
             <div>
               <h1 className="text-2xl font-semibold text-gray-900 mb-6">Recent charges</h1>
+              <div className="mb-4 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+                Wallet top-ups and M-Pesa statement entries are available in{' '}
+                <Link href="/wallet" className="font-semibold underline">
+                  Wallet
+                </Link>
+                . This view still shows credit activity used for bookings.
+              </div>
               <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
                 {transactions.length === 0 ? (
                   <p className="text-center text-gray-400 text-sm py-12">No transactions yet.</p>
