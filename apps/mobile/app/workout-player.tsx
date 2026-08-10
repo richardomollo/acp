@@ -556,7 +556,7 @@ export default function WorkoutPlayerScreen() {
                 <ThemedText style={s.doneBtnText}>View My Journey</ThemedText>
                 <Ionicons name="arrow-forward" size={18} color={palette.ink900} />
               </TouchableOpacity>
-              <TouchableOpacity style={s.doneBtnGhost} onPress={() => router.replace('/(tabs)/fitness')}>
+              <TouchableOpacity style={s.doneBtnGhost} onPress={() => router.replace('/workout-hub' as any)}>
                 <ThemedText style={s.doneBtnGhostText}>Back to Workouts</ThemedText>
               </TouchableOpacity>
             </ScrollView>
