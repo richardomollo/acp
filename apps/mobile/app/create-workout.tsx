@@ -1066,6 +1066,15 @@ function CreateWorkoutForm() {
                 );
               })}
             </ScrollView>
+            {types.includes('cardio') && (
+              <View style={s.stravaHint}>
+                <Ionicons name="information-circle-outline" size={14} color={palette.gray300} />
+                <ThemedText style={s.stravaHintText}>
+                  "Cardio" here means machine-based exercises (treadmill, jump rope, etc). Tracking an
+                  outdoor run, walk or ride? Connect Strava from your Fitness Journey instead.
+                </ThemedText>
+              </View>
+            )}
 
             {/* ── Duration (for generating exercises) ── */}
             <View style={s.sectionHeader}>
@@ -1238,6 +1247,11 @@ const s = StyleSheet.create({
   typeIconWrapActive: { backgroundColor: palette.blue500 },
   typeLabel: { fontSize: 11.5, fontWeight: '700', color: palette.ink700, textAlign: 'center' },
   typeLabelActive: { color: palette.blue500 },
+  stravaHint: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 6,
+    paddingHorizontal: 4, paddingTop: 10, paddingBottom: 4,
+  },
+  stravaHintText: { flex: 1, fontSize: fontSize.xs, color: palette.gray300, lineHeight: 16 },
 
   // Duration (for generating exercises)
   durationRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingBottom: 8 },

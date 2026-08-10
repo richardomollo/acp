@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 import { useRouter } from "next/navigation";
+import { StravaConnectCard } from "@/app/components/strava/StravaConnectCard";
 
 const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -203,6 +204,10 @@ export default function TrainerDashboardPage() {
             </div>
           )}
         </div>
+      </div>
+
+      <div className="max-w-4xl mx-auto px-6 pb-8">
+        <StravaConnectCard returnTo="/trainer-dashboard" />
       </div>
     </div>
   );

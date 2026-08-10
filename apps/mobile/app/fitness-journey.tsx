@@ -10,8 +10,11 @@ import { supabase } from '@/lib/supabase';
 import { authService } from '@/services/auth';
 import { type Recurrence } from '@/services/notifications';
 import { computeStreak, buildAchievements, type Stats, type Achievement } from '@/services/fitnessStats';
+import { getStravaStatus } from '@/services/strava';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+const STRAVA_ORANGE = '#FC4C02';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -82,6 +85,44 @@ interface NutritionStats {
   avgHydration: number;
 }
 
+interface ActivityRow {
+  activity_type: 'run' | 'walk' | 'cycle' | 'strength' | 'mobility' | 'class' | 'other';
+  start_time: string;
+  duration_seconds: number | null;
+  moving_time_seconds: number | null;
+  distance_meters: number | null;
+}
+
+interface OutdoorStats {
+  runs: number;
+  walks: number;
+  rides: number;
+  distanceKm: number;
+  activeMinutes: number;
+}
+
+interface ChallengeRow {
+  id: string;
+  title: string;
+  description: string | null;
+  metric: 'distance_km' | 'activity_count' | 'days_active';
+  target_value: number;
+  activity_types: string[];
+  period_start: string;
+  period_end: string;
+}
+
+interface ChallengeProgress extends ChallengeRow {
+  value: number;
+}
+
+function formatActiveTime(minutes: number): string {
+  if (minutes < 60) return `${minutes}m`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
 const MOODS = [
   { value: 1, emoji: '😞' },
   { value: 2, emoji: '🙁' },
@@ -142,6 +183,9 @@ export default function FitnessJourneyScreen() {
   const [checkins, setCheckins] = useState<CheckinRow[]>([]);
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [nutrition, setNutrition] = useState<NutritionStats>({ streak: 0, mealsLogged: 0, avgProtein: 0, avgHydration: 0 });
+  const [stravaConnected, setStravaConnected] = useState(false);
+  const [outdoorStats, setOutdoorStats] = useState<OutdoorStats>({ runs: 0, walks: 0, rides: 0, distanceKm: 0, activeMinutes: 0 });
+  const [challenges, setChallenges] = useState<ChallengeProgress[]>([]);
 
   useFocusEffect(useCallback(() => {
     let active = true;
@@ -159,7 +203,11 @@ export default function FitnessJourneyScreen() {
       setIsLoggedIn(true);
       setUserId(session.user.id);
 
-      const [{ data }, { data: profileData }, { data: measurementData }, { data: checkinData }, { data: taskData }, { data: mealLogsData }] = await Promise.all([
+      const [
+        { data }, { data: profileData }, { data: measurementData }, { data: checkinData },
+        { data: taskData }, { data: mealLogsData }, { data: activitiesData }, { data: challengesData },
+        stravaStatus,
+      ] = await Promise.all([
         supabase
           .from('workout_history')
           .select('completed_at, duration_minutes')
@@ -196,7 +244,22 @@ export default function FitnessJourneyScreen() {
           .eq('status', 'eaten')
           .order('log_date', { ascending: false })
           .limit(500),
+        // Strava-imported (and future acp/partner-sourced) tracked activities —
+        // kept separate from workout_history (strength-training sessions).
+        supabase
+          .from('activities')
+          .select('activity_type, start_time, duration_seconds, moving_time_seconds, distance_meters')
+          .eq('user_id', session.user.id)
+          .order('start_time', { ascending: false })
+          .limit(500),
+        supabase
+          .from('challenges')
+          .select('id, title, description, metric, target_value, activity_types, period_start, period_end')
+          .eq('is_active', true),
+        getStravaStatus(),
       ]);
+
+      if (active) setStravaConnected(stravaStatus.connected);
 
       if (active) setGoals(profileData?.goals ?? []);
       if (active && profileData?.experience_level) setLevel(profileData.experience_level);
@@ -222,14 +285,49 @@ export default function FitnessJourneyScreen() {
 
       if (!active) return;
       const rows = (data as unknown as HistoryRow[]) ?? [];
+      const activityRows = (activitiesData as unknown as ActivityRow[]) ?? [];
 
-      const { current, longest } = computeStreak(rows);
+      // Streak counts a day once regardless of how many sources contributed
+      // to it (gym workout + a Strava run on the same day is still one day)
+      // — computeStreak already dedupes same-day entries via a Set, so
+      // merging both sources before calling it is all that's needed.
+      const { current, longest } = computeStreak([
+        ...rows.map(r => ({ completed_at: r.completed_at })),
+        ...activityRows.map(a => ({ completed_at: a.start_time })),
+      ]);
       setStats({
         totalWorkouts: rows.length,
         totalMinutes:  rows.reduce((a, r) => a + (r.duration_minutes ?? 0), 0),
         streakDays:    current,
         longestStreak: longest,
       });
+
+      const totalDistanceMeters = activityRows.reduce((sum, a) => sum + (a.distance_meters ?? 0), 0);
+      const totalActiveSeconds = activityRows.reduce((sum, a) => sum + (a.moving_time_seconds ?? a.duration_seconds ?? 0), 0);
+      setOutdoorStats({
+        runs: activityRows.filter(a => a.activity_type === 'run').length,
+        walks: activityRows.filter(a => a.activity_type === 'walk').length,
+        rides: activityRows.filter(a => a.activity_type === 'cycle').length,
+        distanceKm: totalDistanceMeters / 1000,
+        activeMinutes: Math.round(totalActiveSeconds / 60),
+      });
+
+      // Challenge progress is computed live from activities, not stored —
+      // no participants/leaderboard table for this first pass.
+      const challengeRows = (challengesData as unknown as ChallengeRow[]) ?? [];
+      setChallenges(challengeRows.map(c => {
+        const inWindow = activityRows.filter(a =>
+          c.activity_types.includes(a.activity_type) &&
+          a.start_time.slice(0, 10) >= c.period_start &&
+          a.start_time.slice(0, 10) <= c.period_end,
+        );
+        let value = 0;
+        if (c.metric === 'distance_km') value = inWindow.reduce((sum, a) => sum + (a.distance_meters ?? 0), 0) / 1000;
+        else if (c.metric === 'activity_count') value = inWindow.length;
+        else if (c.metric === 'days_active') value = new Set(inWindow.map(a => a.start_time.slice(0, 10))).size;
+        return { ...c, value };
+      }));
+
       setLoading(false);
     })();
     return () => { active = false; };
@@ -299,6 +397,66 @@ export default function FitnessJourneyScreen() {
               <StatCard value={`${stats.streakDays}d`} label="Streak" icon="flame-outline" />
               <StatCard value={`${stats.longestStreak}d`} label="Best" icon="trophy-outline" />
             </View>
+
+            {/* ── Outdoor Activities (Strava) ── */}
+            <ThemedText style={s.sectionTitle}>Outdoor Activities</ThemedText>
+            {stravaConnected && (outdoorStats.runs + outdoorStats.walks + outdoorStats.rides) > 0 && (
+              <>
+                <View style={s.statsGrid}>
+                  <StatCard value={String(outdoorStats.runs)} label="Runs" icon="walk-outline" color={STRAVA_ORANGE} />
+                  <StatCard value={String(outdoorStats.walks)} label="Walks" icon="footsteps-outline" color={STRAVA_ORANGE} />
+                  <StatCard value={String(outdoorStats.rides)} label="Rides" icon="bicycle-outline" color={STRAVA_ORANGE} />
+                </View>
+                <View style={s.statsGrid}>
+                  <StatCard value={`${outdoorStats.distanceKm.toFixed(1)} km`} label="Distance" icon="map-outline" color={STRAVA_ORANGE} />
+                  <StatCard value={formatActiveTime(outdoorStats.activeMinutes)} label="Active time" icon="time-outline" color={STRAVA_ORANGE} />
+                </View>
+              </>
+            )}
+            <TouchableOpacity
+              style={s.goalTeaserCard}
+              onPress={() => router.push('/strava-settings' as any)}
+              activeOpacity={0.85}
+            >
+              <View style={[s.goalTeaserIcon, { backgroundColor: '#fff1eb' }]}>
+                <Ionicons name={stravaConnected ? 'checkmark-circle' : 'walk'} size={20} color={STRAVA_ORANGE} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <ThemedText style={s.goalTeaserTitle}>
+                  {stravaConnected ? 'Strava Connected ✓' : 'Connect Strava'}
+                </ThemedText>
+                <ThemedText style={s.goalTeaserSub}>
+                  {stravaConnected
+                    ? 'Tap to sync now or manage your connection'
+                    : 'Bring your runs, walks & rides into your journey'}
+                </ThemedText>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={palette.gray300} />
+            </TouchableOpacity>
+
+            {/* ── Challenges ── */}
+            {challenges.length > 0 && (
+              <>
+                <ThemedText style={s.sectionTitle}>Challenges</ThemedText>
+                {challenges.map(c => {
+                  const pct = Math.min(100, Math.round((c.value / c.target_value) * 100));
+                  const unit = c.metric === 'distance_km' ? 'km' : c.metric === 'days_active' ? 'days' : 'activities';
+                  const displayValue = c.metric === 'distance_km' ? c.value.toFixed(1) : c.value;
+                  return (
+                    <View key={c.id} style={s.challengeCard}>
+                      <ThemedText style={s.challengeTitle}>{c.title}</ThemedText>
+                      {c.description && <ThemedText style={s.challengeDesc}>{c.description}</ThemedText>}
+                      <View style={s.challengeBarTrack}>
+                        <View style={[s.challengeBarFill, { width: `${pct}%` }]} />
+                      </View>
+                      <ThemedText style={s.challengeProgressText}>
+                        {displayValue} / {c.target_value} {unit}
+                      </ThemedText>
+                    </View>
+                  );
+                })}
+              </>
+            )}
 
             {/* ── Analytics ── */}
             <TouchableOpacity
@@ -642,6 +800,18 @@ const s = StyleSheet.create({
   goalChipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 5 },
   goalChip: { backgroundColor: palette.blue25, borderRadius: radii.pill, paddingHorizontal: 9, paddingVertical: 3 },
   goalChipText: { fontSize: 11.5, fontWeight: '700', color: palette.blue500 },
+
+  // Challenges (progress computed live from activities, not stored)
+  challengeCard: {
+    backgroundColor: palette.white, borderRadius: radii.lg,
+    borderWidth: 1, borderColor: palette.hairline,
+    padding: 16, marginBottom: 12, ...shadows.sm,
+  },
+  challengeTitle: { fontSize: 14, fontWeight: '800', color: palette.ink900 },
+  challengeDesc: { fontSize: 12, color: palette.gray300, marginTop: 2, marginBottom: 10 },
+  challengeBarTrack: { height: 8, borderRadius: 4, backgroundColor: palette.surfaceMuted, overflow: 'hidden', marginTop: 10 },
+  challengeBarFill: { height: 8, borderRadius: 4, backgroundColor: STRAVA_ORANGE },
+  challengeProgressText: { fontSize: 12, fontWeight: '700', color: palette.gray450, marginTop: 8 },
 
   // Achievements
   achievementsRow: { gap: 12, paddingBottom: 24, paddingRight: 20 },
