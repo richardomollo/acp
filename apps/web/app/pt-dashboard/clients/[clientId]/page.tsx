@@ -37,6 +37,10 @@ type MeasurementRow = {
   logged_by_pt_id: string | null;
 };
 type CheckinRow = { id: string; mood: number; checkin_date: string };
+type ActivityRow = {
+  id: string; activity_type: "run" | "walk" | "cycle" | "strength" | "mobility" | "class" | "other";
+  name: string | null; start_time: string; distance_meters: number | null;
+};
 type TaskRow = {
   id: string; title: string; due_date: string | null; status: "pending" | "done";
   recurrence: "once" | "daily" | "weekly"; weekdays: number[]; last_completed_date: string | null;
@@ -44,6 +48,9 @@ type TaskRow = {
 
 const MOOD_EMOJI: Record<number, string> = { 1: "😞", 2: "🙁", 3: "😐", 4: "🙂", 5: "😄" };
 const WEEKDAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const ACTIVITY_ICON: Record<string, string> = {
+  run: "🏃", walk: "🚶", cycle: "🚴", strength: "🏋️", mobility: "🧘", class: "👥", other: "⚡",
+};
 const GOAL_LABELS: Record<string, string> = {
   lose_weight: "Lose Weight", build_muscle: "Build Muscle",
   improve_mobility: "Mobility", general_fitness: "General Fitness",
@@ -125,6 +132,7 @@ export default function PTClientDetailPage({ params }: { params: Promise<{ clien
   const [measurements, setMeasurements] = useState<MeasurementRow[]>([]);
   const [progressStats, setProgressStats] = useState({ streak: 0, totalWorkouts: 0, totalMinutes: 0 });
   const [checkins, setCheckins] = useState<CheckinRow[]>([]);
+  const [activities, setActivities] = useState<ActivityRow[]>([]);
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [addingTask, setAddingTask] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
@@ -220,8 +228,20 @@ export default function PTClientDetailPage({ params }: { params: Promise<{ clien
         .order("checkin_date", { ascending: false })
         .limit(7);
       setCheckins((checkinRows as any) ?? []);
+
+      // RLS on `activities` grants trainers the same share_progress-gated
+      // read as workout_history/measurements — see
+      // 20260810000002_trainer_view_client_activities.sql.
+      const { data: activityRows } = await supabase
+        .from("activities")
+        .select("id, activity_type, name, start_time, distance_meters")
+        .eq("user_id", clientId)
+        .order("start_time", { ascending: false })
+        .limit(10);
+      setActivities((activityRows as any) ?? []);
     } else {
       setCheckins([]);
+      setActivities([]);
     }
 
     setLoading(false);
@@ -499,6 +519,30 @@ export default function PTClientDetailPage({ params }: { params: Promise<{ clien
               );
             })}
           </Card>
+
+          <ListHeader title="Strava Activity" />
+          {activities.length === 0 ? (
+            <EmptyState className="mb-8">No Strava activity yet</EmptyState>
+          ) : (
+            <div className="space-y-2 mb-8">
+              {activities.map(a => (
+                <Card key={a.id} radius="xl" className="flex items-center gap-3 p-4">
+                  <span className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center text-sm flex-shrink-0">
+                    {ACTIVITY_ICON[a.activity_type] ?? "⚡"}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-ink-900 text-sm truncate">
+                      {a.name ?? (a.activity_type.charAt(0).toUpperCase() + a.activity_type.slice(1))}
+                    </p>
+                    <p className="text-xs text-[--text-muted] mt-0.5">
+                      {new Date(a.start_time).toLocaleDateString("en-KE", { day: "numeric", month: "short" })}
+                      {a.distance_meters ? ` · ${(a.distance_meters / 1000).toFixed(1)} km` : ""}
+                    </p>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
         </>
       )}
 

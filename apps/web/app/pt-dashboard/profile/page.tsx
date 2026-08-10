@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 import { fetchPTSpecialisations } from "@/app/lib/lookups";
-import { StravaConnectCard } from "@/app/components/strava/StravaConnectCard";
 
 const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -456,10 +455,6 @@ export default function PTProfilePage() {
         >
           {saving ? "Saving…" : "Save Changes"}
         </button>
-      </div>
-
-      <div className="mt-6">
-        <StravaConnectCard returnTo="/pt-dashboard/profile" />
       </div>
     </div>
   );

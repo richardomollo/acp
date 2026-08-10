@@ -28,12 +28,21 @@ type MeasurementRow = {
   logged_by_pt_id: string | null;
 };
 type CheckinRow = { id: string; mood: number; checkin_date: string };
+type ActivityRow = {
+  id: string; activity_type: 'run' | 'walk' | 'cycle' | 'strength' | 'mobility' | 'class' | 'other';
+  name: string | null; start_time: string; distance_meters: number | null;
+};
 type TaskRow = {
   id: string; title: string; due_date: string | null; status: 'pending' | 'done';
   recurrence: 'once' | 'daily' | 'weekly'; weekdays: number[]; last_completed_date: string | null;
 };
 
 const MOOD_EMOJI: Record<number, string> = { 1: '😞', 2: '🙁', 3: '😐', 4: '🙂', 5: '😄' };
+const STRAVA_ORANGE = '#FC4C02';
+const ACTIVITY_ICON: Record<string, string> = {
+  run: 'walk-outline', walk: 'footsteps-outline', cycle: 'bicycle-outline',
+  strength: 'barbell-outline', mobility: 'body-outline', class: 'people-outline', other: 'fitness-outline',
+};
 
 function last7Days(): string[] {
   return Array.from({ length: 7 }, (_, i) => {
@@ -100,6 +109,7 @@ export default function PTClientDetailScreen() {
   const [measurements, setMeasurements] = useState<MeasurementRow[]>([]);
   const [progressStats, setProgressStats] = useState({ streak: 0, totalWorkouts: 0, totalMinutes: 0 });
   const [checkins, setCheckins] = useState<CheckinRow[]>([]);
+  const [activities, setActivities] = useState<ActivityRow[]>([]);
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [addingTask, setAddingTask] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
@@ -200,8 +210,20 @@ export default function PTClientDetailScreen() {
         .order('checkin_date', { ascending: false })
         .limit(7);
       setCheckins((checkinRows as any) ?? []);
+
+      // RLS on `activities` grants trainers the same share_progress-gated
+      // read as workout_history/measurements — see
+      // 20260810000002_trainer_view_client_activities.sql.
+      const { data: activityRows } = await supabase
+        .from('activities')
+        .select('id, activity_type, name, start_time, distance_meters')
+        .eq('user_id', clientId)
+        .order('start_time', { ascending: false })
+        .limit(10);
+      setActivities((activityRows as any) ?? []);
     } else {
       setCheckins([]);
+      setActivities([]);
     }
 
     setLoading(false);
@@ -555,6 +577,30 @@ export default function PTClientDetailScreen() {
                   );
                 })}
               </View>
+
+              <ThemedText style={styles.sectionTitle}>Strava Activity</ThemedText>
+              {activities.length === 0 ? (
+                <ThemedText style={styles.emptyText}>No Strava activity yet</ThemedText>
+              ) : (
+                <View style={styles.cardList}>
+                  {activities.map(a => (
+                    <View key={a.id} style={styles.activityRow}>
+                      <View style={styles.activityIconWrap}>
+                        <Ionicons name={(ACTIVITY_ICON[a.activity_type] ?? 'fitness-outline') as any} size={16} color={STRAVA_ORANGE} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <ThemedText style={styles.workoutTitle} numberOfLines={1}>
+                          {a.name ?? (a.activity_type.charAt(0).toUpperCase() + a.activity_type.slice(1))}
+                        </ThemedText>
+                        <ThemedText style={styles.workoutMeta}>
+                          {new Date(a.start_time).toLocaleDateString('en-KE', { day: 'numeric', month: 'short' })}
+                          {a.distance_meters ? ` · ${(a.distance_meters / 1000).toFixed(1)} km` : ''}
+                        </ThemedText>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
             </>
           )}
 
@@ -769,6 +815,14 @@ const styles = StyleSheet.create({
   bodyStatsDate: { fontSize: 11, color: '#9ca3af', marginTop: 4 },
 
   cardList: { gap: 10, marginBottom: 24 },
+  activityRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff',
+    borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#f0f0f0',
+  },
+  activityIconWrap: {
+    width: 30, height: 30, borderRadius: 15, backgroundColor: '#fff1eb',
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
   workoutCard: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff',
     borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#f0f0f0',

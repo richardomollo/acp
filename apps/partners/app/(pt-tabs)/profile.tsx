@@ -398,17 +398,6 @@ export default function PTProfileScreen() {
             <View style={styles.accountLinksCard}>
               <TouchableOpacity
                 style={styles.accountLinkRow}
-                onPress={() => router.push('/strava-settings' as any)}
-              >
-                <View style={styles.accountLinkIcon}>
-                  <Ionicons name="walk-outline" size={18} color="#000000" />
-                </View>
-                <ThemedText style={styles.accountLinkLabel}>Connect Strava</ThemedText>
-                <Ionicons name="chevron-forward" size={16} color="#9ca3af" />
-              </TouchableOpacity>
-              <View style={styles.accountLinkDivider} />
-              <TouchableOpacity
-                style={styles.accountLinkRow}
                 onPress={() => router.push('/partner/change-password' as any)}
               >
                 <View style={styles.accountLinkIcon}>
