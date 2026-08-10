@@ -77,6 +77,13 @@ const WORKOUT_TYPES = [
   },
 ];
 
+const NEW_APP_FEATURES = [
+  { emoji: "🏃", title: "Outdoor Activities", body: "Connect Strava and bring your runs, walks and rides straight into your fitness journey." },
+  { emoji: "🏆", title: "Challenges", body: "Take on monthly distance and activity challenges, with live progress tracking." },
+  { emoji: "🔥", title: "Fitness Journey", body: "Streaks, achievements, goals and body stats — all your progress in one place." },
+  { emoji: "🗓️", title: "Workout History", body: "Look back on every session you've completed, rated and logged." },
+];
+
 const STEPS = [
   {
     num: "1",
@@ -425,6 +432,23 @@ export default function WalkthroughPage() {
               </div>
             ))}
           </div>
+
+          {/* New in the app */}
+          <div className="mt-16">
+            <p className="text-xs tracking-widest uppercase text-gray-400 mb-2">New in the app</p>
+            <h3 className="text-xl lg:text-2xl font-black text-gray-900 mb-8 max-w-lg leading-tight">
+              Track outdoor runs, hit challenges, and see your whole journey.
+            </h3>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {NEW_APP_FEATURES.map((f) => (
+                <div key={f.title} className="bg-white rounded-2xl p-6 border border-gray-100">
+                  <span className="text-2xl mb-4 block">{f.emoji}</span>
+                  <h4 className="text-gray-900 font-bold text-sm mb-2">{f.title}</h4>
+                  <p className="text-gray-500 text-sm leading-relaxed">{f.body}</p>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
         <div className="relative z-10 max-w-7xl mx-auto px-6 r">
           <p className="text-black/50 text-xs font-bold tracking-widest uppercase py-4">Across Nairobi</p>
@@ -432,12 +456,15 @@ export default function WalkthroughPage() {
             Search and find  your favourite sports and wellness activities.
             In your area, your neighbourhood, and city-wide.
           </p>
-          <Link
-            href="/sessions"
-            className="inline-block px-8 py-4 bg-black text-white hover:text-black text-sm font-bold rounded-full hover:bg-gray-100 transition-colors"
-          >
-            Explore Sessions, classes and activities
-          </Link>
+          <div className="flex flex-wrap items-center gap-4">
+            <Link
+              href="/sessions"
+              className="inline-block px-8 py-4 bg-black text-white hover:text-black text-sm font-bold rounded-full hover:bg-gray-100 transition-colors"
+            >
+              Explore Sessions, classes and activities
+            </Link>
+            <AppStoreBadge href={CUSTOMER_APP_STORE_URL} variant="light" />
+          </div>
         </div>
       </section>
 
