@@ -44,11 +44,38 @@ serve(async (req) => {
       return Response.json({ status: 'pending', confirmationCode: null, cancellationReason: null }, { headers: CORS })
     }
     if (payment.status === 'success') {
-      const { data: booking } = await admin.from('bookings').select('confirmation_code').eq('id', body.bookingId).single()
+      const table = body.bookingType === 'community_event' ? 'community_event_attendees' : 'bookings'
+      const { data: booking } = await admin.from(table).select('confirmation_code').eq('id', body.bookingId).single()
       return Response.json({ status: 'confirmed', confirmationCode: booking?.confirmation_code ?? null, cancellationReason: null }, { headers: CORS })
     }
     // failed
     return Response.json({ status: 'cancelled', confirmationCode: null, cancellationReason: payment.cancellation_reason ?? 'mpesa_failed' }, { headers: CORS })
+  }
+
+  if (body.bookingType === 'community_event') {
+    const { data, error } = await admin
+      .from('community_event_attendees')
+      .select('status, confirmation_code')
+      .eq('id', body.bookingId)
+      .eq('user_id', user.id)
+      .single()
+
+    if (error || !data) {
+      console.error('booking-status error:', error)
+      return Response.json({ error: 'Booking not found' }, { status: 404, headers: CORS })
+    }
+
+    // community_event_attendees uses going/waitlisted/cancelled/pending_payment —
+    // normalise to the confirmed/cancelled/pending vocabulary checkout.tsx polls for.
+    const status = data.status === 'going' || data.status === 'waitlisted' ? 'confirmed'
+      : data.status === 'cancelled' ? 'cancelled'
+      : data.status
+
+    return Response.json({
+      status,
+      confirmationCode: data.confirmation_code,
+      cancellationReason: null,
+    }, { headers: CORS })
   }
 
   const isExperience = body.bookingType === 'experience'

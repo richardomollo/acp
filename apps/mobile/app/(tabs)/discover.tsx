@@ -17,13 +17,14 @@ import { useAuthModal } from '@/contexts/auth-modal-context';
 const W = Dimensions.get('window').width;
 const CW = W - 40; // content width (20px padding each side)
 
-type TabKey = 'venues' | 'classes' | 'trainers' | 'experiences';
+type TabKey = 'venues' | 'classes' | 'trainers' | 'experiences' | 'communities';
 
 const TABS: { key: TabKey; label: string; icon: string; route: string }[] = [
   { key: 'venues',      label: 'Venues',      icon: 'business-outline', route: '/(tabs)/venues'      },
   { key: 'classes',     label: 'Classes',     icon: 'calendar-outline', route: '/(tabs)/classes'     },
   { key: 'trainers',    label: 'Trainers',    icon: 'body-outline',     route: '/(tabs)/trainers'    },
   { key: 'experiences', label: 'Experiences', icon: 'sparkles-outline', route: '/(tabs)/experiences' },
+  { key: 'communities', label: 'Communities', icon: 'people-outline',   route: '/(tabs)/communities' },
 ];
 
 const BROWSE_CARD_BG: Record<TabKey, string> = {
@@ -31,6 +32,7 @@ const BROWSE_CARD_BG: Record<TabKey, string> = {
   classes:     palette.navy,
   trainers:    palette.success700,
   experiences: palette.warning700,
+  communities: '#7c3aed',
 };
 
 interface SessionCategory {
@@ -79,7 +81,7 @@ export default function DiscoverScreen() {
   const { showAuthModal } = useAuthModal();
   const { visible: tourVisible, dismiss: dismissTour } = useTour('discover');
   const [cardImages, setCardImages] = useState<Record<TabKey, string | null>>({
-    venues: null, classes: null, trainers: null, experiences: null,
+    venues: null, classes: null, trainers: null, experiences: null, communities: null,
   });
   const [categories, setCategories] = useState<SessionCategory[]>([]);
   const [isGuest, setIsGuest] = useState(true);
@@ -139,17 +141,19 @@ export default function DiscoverScreen() {
     })();
 
     (async () => {
-      const [{ data: gym }, { data: session }, { data: pt }, { data: exp }] = await Promise.all([
+      const [{ data: gym }, { data: session }, { data: pt }, { data: exp }, { data: community }] = await Promise.all([
         supabase.from('gyms').select('image_url').eq('is_active', true).not('image_url', 'is', null).limit(1).maybeSingle(),
         supabase.from('sessions').select('image_url').not('image_url', 'is', null).order('date', { ascending: true }).limit(1).maybeSingle(),
         supabase.from('personal_trainers').select('photo_url').eq('status', 'approved').not('photo_url', 'is', null).limit(1).maybeSingle(),
         supabase.from('experiences').select('image_url').not('image_url', 'is', null).order('date', { ascending: true }).limit(1).maybeSingle(),
+        supabase.from('communities').select('logo_url').eq('review_status', 'approved').eq('is_active', true).not('logo_url', 'is', null).limit(1).maybeSingle(),
       ]);
       setCardImages({
         venues: (gym as any)?.image_url ?? null,
         classes: (session as any)?.image_url ?? null,
         trainers: (pt as any)?.photo_url ?? null,
         experiences: (exp as any)?.image_url ?? null,
+        communities: (community as any)?.logo_url ?? null,
       });
     })();
 

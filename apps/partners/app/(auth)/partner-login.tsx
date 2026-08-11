@@ -58,10 +58,35 @@ export default function PartnerLoginScreen() {
       return;
     }
 
-    await supabase.auth.signOut();
+    // Community owner/admin — any logged-in user can become one via self-serve
+    // creation, so this is checked last (no existing partner/PT/gym role
+    // implies "not yet a community organiser either", not "reject").
+    const { data: membership } = await supabase
+      .from('community_members')
+      .select('community_id, role, communities(review_status)')
+      .eq('user_id', user.id)
+      .in('role', ['owner', 'admin'])
+      .eq('status', 'active')
+      .limit(1)
+      .maybeSingle();
+
+    if (membership) {
+      const reviewStatus = (membership.communities as any)?.review_status;
+      if (reviewStatus === 'approved') {
+        router.replace('/(community-tabs)' as any);
+      } else {
+        router.replace('/(community-onboarding)/pending' as any);
+      }
+      return;
+    }
+
     Alert.alert(
       'No Partner Account Found',
-      'This app is for venues and trainers only. If you believe this is a mistake, please reach out to your account contact.',
+      'This app is for venues, trainers, and community organisers. If you run a running club, gym class, or activity group, you can start a community here.',
+      [
+        { text: 'Cancel', style: 'cancel', onPress: () => supabase.auth.signOut() },
+        { text: 'Start a Community', onPress: () => router.replace('/(community-onboarding)/create' as any) },
+      ],
     );
   };
 

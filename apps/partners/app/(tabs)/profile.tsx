@@ -43,6 +43,7 @@ export default function ProfileScreen() {
   const [venues, setVenues] = useState<Venue[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [hasPTRole, setHasPTRole] = useState(false);
+  const [hasCommunityRole, setHasCommunityRole] = useState(false);
 
   // Editable fields
   const [businessName, setBusinessName] = useState('');
@@ -82,6 +83,11 @@ export default function ProfileScreen() {
       const { data: ptProfile } = await supabase
         .from('personal_trainers').select('id').eq('user_id', user.id).maybeSingle();
       setHasPTRole(!!ptProfile);
+
+      const { data: communityMembership } = await supabase
+        .from('community_members').select('id')
+        .eq('user_id', user.id).in('role', ['owner', 'admin']).eq('status', 'active').maybeSingle();
+      setHasCommunityRole(!!communityMembership);
     } catch (e) {
       Alert.alert('Error', 'Failed to load profile');
     } finally {
@@ -177,6 +183,9 @@ export default function ProfileScreen() {
     { icon: 'lock-closed-outline', label: 'Change password', badge: null, onPress: () => router.push('/partner/change-password' as any) },
     { icon: 'mail-outline', label: 'Change email', badge: null, onPress: () => router.push('/partner/change-email' as any) },
     ...(hasPTRole ? [{ icon: 'swap-horizontal-outline', label: 'Switch to PT Dashboard', badge: null, onPress: () => router.replace('/(pt-tabs)' as any) }] : []),
+    ...(hasCommunityRole
+      ? [{ icon: 'swap-horizontal-outline', label: 'Switch to Community Dashboard', badge: null, onPress: () => router.replace('/(community-tabs)' as any) }]
+      : [{ icon: 'people-outline', label: 'Start a Community', badge: null, onPress: () => router.push('/(community-onboarding)/create' as any) }]),
   ];
 
   return (

@@ -230,6 +230,15 @@ export default function CheckoutScreen() {
         setPhase('waiting');
         pollBookingStatus(data.bookingId, data.checkoutRequestId, 'experience');
 
+      } else if (bookingType === 'community_event') {
+        const { data, error: fnErr } = await supabase.functions.invoke('book-community-event', {
+          body: { eventId: itemId, phone: phone.trim() },
+        });
+        if (fnErr) throw new Error(fnErr.message ?? 'Payment initiation failed');
+        if (data.confirmationCode) setConfirmCode(data.confirmationCode);
+        setPhase('waiting');
+        pollBookingStatus(data.attendeeId, data.checkoutRequestId, 'community_event');
+
       } else if (bookingType === 'pt') {
         if (!ptId || !ptDate || !ptTime) throw new Error('Missing PT booking details');
         const { data: { user } } = await supabase.auth.getUser();
@@ -456,7 +465,16 @@ export default function CheckoutScreen() {
             </ThemedText>
           </View>
         ) : null}
-        <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace('/(tabs)/check-in' as any)}>
+        <TouchableOpacity
+          style={styles.doneBtn}
+          onPress={() => {
+            if (bookingType === 'community_event') {
+              router.canGoBack() ? router.back() : router.replace('/(tabs)/communities' as any);
+            } else {
+              router.replace('/(tabs)/check-in' as any);
+            }
+          }}
+        >
           <ThemedText style={styles.doneBtnText}>{isBalanceMode ? 'Go to Check In' : 'Done'}</ThemedText>
         </TouchableOpacity>
       </View>
@@ -571,7 +589,9 @@ export default function CheckoutScreen() {
                 <Ionicons name="phone-portrait-outline" size={18} color={method === 'mpesa' ? palette.ink900 : palette.gray450} />
                 <View style={{ flex: 1, gap: 6 }}>
                   <ThemedText style={[styles.radioLabel, method === 'mpesa' && styles.radioLabelActive]}>M-Pesa</ThemedText>
-                  {method === 'mpesa' ? (
+                  {bookingType === 'community_event' ? (
+                    <ThemedText style={styles.radioSub}>Instant STK push to your phone</ThemedText>
+                  ) : method === 'mpesa' ? (
                     <View style={styles.mpesaModeToggle}>
                       <TouchableOpacity
                         style={[styles.mpesaModeBtn, mpesaMode === 'stk' && styles.mpesaModeBtnActive]}
@@ -598,21 +618,23 @@ export default function CheckoutScreen() {
                 </View>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.radioRow, method === 'pesapal' && styles.radioRowActive, { borderBottomWidth: 0 }]}
-                onPress={() => setMethod('pesapal')}
-                disabled={isLoading || isWaiting}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.radioOuter, method === 'pesapal' && styles.radioOuterActive]}>
-                  {method === 'pesapal' && <View style={styles.radioInner} />}
-                </View>
-                <Ionicons name="card-outline" size={18} color={method === 'pesapal' ? palette.ink900 : palette.gray450} />
-                <View style={{ flex: 1 }}>
-                  <ThemedText style={[styles.radioLabel, method === 'pesapal' && styles.radioLabelActive]}>Card / Pesapal</ThemedText>
-                  <ThemedText style={styles.radioSub}>Visa, Mastercard & more</ThemedText>
-                </View>
-              </TouchableOpacity>
+              {bookingType !== 'community_event' && (
+                <TouchableOpacity
+                  style={[styles.radioRow, method === 'pesapal' && styles.radioRowActive, { borderBottomWidth: 0 }]}
+                  onPress={() => setMethod('pesapal')}
+                  disabled={isLoading || isWaiting}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.radioOuter, method === 'pesapal' && styles.radioOuterActive]}>
+                    {method === 'pesapal' && <View style={styles.radioInner} />}
+                  </View>
+                  <Ionicons name="card-outline" size={18} color={method === 'pesapal' ? palette.ink900 : palette.gray450} />
+                  <View style={{ flex: 1 }}>
+                    <ThemedText style={[styles.radioLabel, method === 'pesapal' && styles.radioLabelActive]}>Card / Pesapal</ThemedText>
+                    <ThemedText style={styles.radioSub}>Visa, Mastercard & more</ThemedText>
+                  </View>
+                </TouchableOpacity>
+              )}
             </View>
           </>
         )}

@@ -52,18 +52,22 @@ export default function PTProfileScreen() {
   const [uploadingCover, setUploadingCover] = useState(false);
   const [specialisations, setSpecialisations] = useState<string[]>([]);
   const [hasVenueRole, setHasVenueRole] = useState(false);
+  const [hasCommunityRole, setHasCommunityRole] = useState(false);
 
   useEffect(() => { fetchPTSpecialisations().then(setSpecialisations); }, []);
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    const [ptRes, gymRes] = await Promise.all([
+    const [ptRes, gymRes, communityRes] = await Promise.all([
       supabase.from('personal_trainers').select('*').eq('user_id', user.id).single(),
       supabase.from('gyms').select('id').ilike('contact_email', user.email ?? '').maybeSingle(),
+      supabase.from('community_members').select('id')
+        .eq('user_id', user.id).in('role', ['owner', 'admin']).eq('status', 'active').maybeSingle(),
     ]);
     if (ptRes.data) { setPt(ptRes.data as any); setForm(ptRes.data as any); }
     setHasVenueRole(!!gymRes.data);
+    setHasCommunityRole(!!communityRes.data);
     setLoading(false);
   }, []);
 
@@ -393,6 +397,23 @@ export default function PTProfileScreen() {
               >
                 <Ionicons name="swap-horizontal-outline" size={18} color="#000000" />
                 <ThemedText style={styles.switchText}>Switch to Venue Dashboard</ThemedText>
+              </TouchableOpacity>
+            )}
+            {hasCommunityRole ? (
+              <TouchableOpacity
+                style={styles.switchBtn}
+                onPress={() => router.replace('/(community-tabs)' as any)}
+              >
+                <Ionicons name="swap-horizontal-outline" size={18} color="#000000" />
+                <ThemedText style={styles.switchText}>Switch to Community Dashboard</ThemedText>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.switchBtn}
+                onPress={() => router.push('/(community-onboarding)/create' as any)}
+              >
+                <Ionicons name="people-outline" size={18} color="#000000" />
+                <ThemedText style={styles.switchText}>Start a Community</ThemedText>
               </TouchableOpacity>
             )}
             <View style={styles.accountLinksCard}>

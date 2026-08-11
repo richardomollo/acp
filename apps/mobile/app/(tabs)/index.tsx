@@ -30,6 +30,21 @@ interface Gym {
   description: string | null;
 }
 
+interface CommunityHome {
+  id: string;
+  name: string;
+  category: string;
+  location: string | null;
+  logo_url: string | null;
+  member_count: number;
+}
+
+const COMMUNITY_CATEGORY_LABEL: Record<string, string> = {
+  running: 'Running', walking: 'Walking', cycling: 'Cycling', strength: 'Strength',
+  boxing: 'Boxing', yoga: 'Yoga', pilates: 'Pilates', hiking: 'Hiking', dance: 'Dance',
+  outdoor_fitness: 'Outdoor Fitness', football: 'Football', other: 'Community',
+};
+
 interface Session {
   id: string;
   name: string;
@@ -449,6 +464,7 @@ export default function HomeScreen() {
   const [fitnessStats, setFitnessStats] = useState<Stats>({ totalWorkouts: 0, totalMinutes: 0, streakDays: 0, longestStreak: 0 });
   const [trainers, setTrainers] = useState<PTHome[]>([]);
   const [experiences, setExperiences] = useState<Experience[]>([]);
+  const [communities, setCommunities] = useState<CommunityHome[]>([]);
   const [loading, setLoading] = useState(true);
   const [calSelected, setCalSelected] = useState(() => new Date().toISOString().split('T')[0]);
   const [searchVisible, setSearchVisible] = useState(false);
@@ -732,6 +748,15 @@ export default function HomeScreen() {
         .order('date', { ascending: true })
         .limit(6);
       if (expData) setExperiences(expData as any);
+
+      const { data: communityData } = await supabase
+        .from('communities')
+        .select('id, name, category, location, logo_url, member_count')
+        .eq('review_status', 'approved')
+        .eq('is_active', true)
+        .order('member_count', { ascending: false })
+        .limit(8);
+      if (communityData) setCommunities(communityData as any);
 
     } catch (error) {
       console.error('Error loading home data:', error);
@@ -1104,6 +1129,46 @@ export default function HomeScreen() {
                   <Ionicons name="arrow-forward" size={28} color={palette.blue500} />
                 </View>
                 <ThemedText style={styles.seeAllTileText}>All Venues</ThemedText>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        )}
+
+        {/* ─── Communities & Clubs (guests + logged-in) ─── */}
+        {communities.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionPad}>
+              <SectionHeader
+                eyebrow="Find your people"
+                title="Communities & Clubs"
+                onSeeAll={() => router.push('/(tabs)/communities' as any)}
+              />
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.railPad, { alignItems: 'stretch' }]}>
+              {communities.map((c) => (
+                <StackedCard
+                  key={c.id}
+                  imageUrl={c.logo_url}
+                  fallbackIcon="people"
+                  fallbackBg={palette.blue500}
+                  catLabel={COMMUNITY_CATEGORY_LABEL[c.category] ?? c.category}
+                  catIcon="people-outline"
+                  rating={null}
+                  name={c.name}
+                  tagline={c.location}
+                  meta1={`${c.member_count} member${c.member_count === 1 ? '' : 's'}`}
+                  priceLabel="View Community"
+                  onPress={() => router.push({ pathname: '/community/[id]', params: { id: c.id } } as any)}
+                />
+              ))}
+              <TouchableOpacity
+                style={styles.seeAllTile}
+                onPress={() => router.push('/(tabs)/communities' as any)}
+              >
+                <View style={styles.seeAllTileIcon}>
+                  <Ionicons name="arrow-forward" size={28} color={palette.blue500} />
+                </View>
+                <ThemedText style={styles.seeAllTileText}>All Communities</ThemedText>
               </TouchableOpacity>
             </ScrollView>
           </View>

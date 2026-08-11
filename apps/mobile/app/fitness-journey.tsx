@@ -82,6 +82,15 @@ interface NutritionStats {
   avgHydration: number;
 }
 
+interface CommunityActivityRow {
+  id: string;
+  check_in_time: string | null;
+  community_events: {
+    id: string; title: string; date: string; community_id: string;
+    communities: { name: string; logo_url: string | null } | null;
+  } | null;
+}
+
 interface ActivityRow {
   activity_type: 'run' | 'walk' | 'cycle' | 'strength' | 'mobility' | 'class' | 'other';
   start_time: string;
@@ -150,6 +159,7 @@ export default function FitnessJourneyScreen() {
   const [checkins, setCheckins] = useState<CheckinRow[]>([]);
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [nutrition, setNutrition] = useState<NutritionStats>({ streak: 0, mealsLogged: 0, avgProtein: 0, avgHydration: 0 });
+  const [communityActivity, setCommunityActivity] = useState<CommunityActivityRow[]>([]);
 
   useFocusEffect(useCallback(() => {
     let active = true;
@@ -169,7 +179,7 @@ export default function FitnessJourneyScreen() {
 
       const [
         { data }, { data: profileData }, { data: measurementData }, { data: checkinData },
-        { data: taskData }, { data: mealLogsData }, { data: activitiesData },
+        { data: taskData }, { data: mealLogsData }, { data: activitiesData }, { data: communityActivityData },
       ] = await Promise.all([
         supabase
           .from('workout_history')
@@ -215,6 +225,12 @@ export default function FitnessJourneyScreen() {
           .eq('user_id', session.user.id)
           .order('start_time', { ascending: false })
           .limit(500),
+        supabase
+          .from('community_event_attendees')
+          .select('id, check_in_time, community_events(id, title, date, community_id, communities(name, logo_url))')
+          .eq('user_id', session.user.id).eq('checked_in', true)
+          .order('check_in_time', { ascending: false })
+          .limit(10),
       ]);
 
       if (active) setGoals(profileData?.goals ?? []);
@@ -224,6 +240,7 @@ export default function FitnessJourneyScreen() {
       if (active) setMeasurements((measurementData as unknown as MeasurementRow[]) ?? []);
       if (active) setCheckins((checkinData as unknown as CheckinRow[]) ?? []);
       if (active) setTasks((taskData as unknown as TaskRow[]) ?? []);
+      if (active) setCommunityActivity((communityActivityData as unknown as CommunityActivityRow[]) ?? []);
 
       if (active) {
         const logs = (mealLogsData as any[]) ?? [];
@@ -351,6 +368,35 @@ export default function FitnessJourneyScreen() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.achievementsRow}>
               {achievements.map(a => <AchievementBadge key={a.id} a={a} />)}
             </ScrollView>
+
+            {/* ── Community Activity ── */}
+            {communityActivity.length > 0 && (
+              <>
+                <ThemedText style={s.sectionTitle}>
+                  Community Activity · {communityActivity.filter(c => (c.check_in_time ?? '').slice(0, 7) === new Date().toISOString().slice(0, 7)).length} this month
+                </ThemedText>
+                {communityActivity.slice(0, 3).map(c => (
+                  <TouchableOpacity
+                    key={c.id}
+                    style={s.goalTeaserCard}
+                    activeOpacity={0.85}
+                    onPress={() => c.community_events?.community_id && router.push({ pathname: '/community/[id]', params: { id: c.community_events.community_id } } as any)}
+                  >
+                    <View style={s.goalTeaserIcon}>
+                      <Ionicons name="people-outline" size={20} color={palette.blue500} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <ThemedText style={s.goalTeaserTitle}>{c.community_events?.title ?? 'Community event'}</ThemedText>
+                      <ThemedText style={s.goalTeaserSub}>
+                        {c.community_events?.communities?.name ?? 'Community'}
+                        {c.community_events?.date ? ` · ${new Date(`${c.community_events.date}T00:00:00`).toLocaleDateString('en-KE', { day: 'numeric', month: 'short' })}` : ''}
+                      </ThemedText>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color={palette.gray300} />
+                  </TouchableOpacity>
+                ))}
+              </>
+            )}
 
             {/* ── Goals ── */}
             <ThemedText style={s.sectionTitle}>Goals</ThemedText>

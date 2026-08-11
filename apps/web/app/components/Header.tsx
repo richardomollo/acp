@@ -14,6 +14,7 @@ const CATEGORY_LINKS = [
   { label: "Classes and Sessions", href: "/classes" },
   { label: "Wellness Experiences", href: "/experiences" },
   { label: "Trainers, Coaches and Nutritionists", href: "/trainers" },
+  { label: "Community & Clubs", href: "/community" },
 ];
 
 export default function Header() {

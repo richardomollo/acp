@@ -133,6 +133,7 @@ export default function TabLayout() {
       <Tabs.Screen name="classes"     options={{ href: null }} />
       <Tabs.Screen name="trainers"    options={{ href: null }} />
       <Tabs.Screen name="experiences" options={{ href: null }} />
+      <Tabs.Screen name="communities" options={{ href: null }} />
     </Tabs>
   );
 }

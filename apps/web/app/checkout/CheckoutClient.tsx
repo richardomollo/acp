@@ -39,9 +39,9 @@ function phoneForDisplay(raw: string): string {
 }
 
 type DepositProps = {
-  type: "session" | "experience";
+  type: "session" | "experience" | "community_event";
   itemId: string;
-  gymId: string;
+  gymId?: string;
   title: string;
   subtitle: string;
   detail?: string;
@@ -277,6 +277,11 @@ function DepositFlow({
   const handleSubmit = async () => {
     setError(null);
 
+    if (p.type === "community_event" && !user) {
+      setError("Please sign in to book this event.");
+      return;
+    }
+
     if (!user && (!email.trim() || !email.includes("@"))) {
       setError("Please enter a valid email address.");
       return;
@@ -304,7 +309,7 @@ function DepositFlow({
             firstName: name.trim() || undefined,
             metadata: {
               itemId: p.itemId,
-              gymId: p.gymId,
+              gymId: p.gymId ?? null,
               userId: user?.id ?? null,
               guestEmail: !user ? email.trim() : undefined,
               guestName: !user ? name.trim() : undefined,
@@ -360,11 +365,14 @@ function DepositFlow({
     const token = authSession?.access_token;
     if (!token) { setError("Please log in again."); setPhase("idle"); return; }
 
-    const authEndpoint = p.type === "experience" ? "/api/book-experience" : "/api/book-session";
+    const authEndpoint =
+      p.type === "experience" ? "/api/book-experience" :
+      p.type === "community_event" ? "/api/book-community-event" :
+      "/api/book-session";
     const authBody =
-      p.type === "experience"
-        ? { experienceId: p.itemId, phone: normalizedPhone }
-        : { sessionId: p.itemId, phone: normalizedPhone };
+      p.type === "experience" ? { experienceId: p.itemId, phone: normalizedPhone } :
+      p.type === "community_event" ? { eventId: p.itemId, phone: normalizedPhone } :
+      { sessionId: p.itemId, phone: normalizedPhone };
     try {
       const res = await fetch(authEndpoint, {
         method: "POST",
@@ -601,7 +609,7 @@ function DepositFlow({
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Pay with</p>
         {[
           { id: "mpesa" as DepositPaymentMethod, label: "M-Pesa", sub: "STK push to your phone", icon: "📱" },
-          { id: "pesapal" as DepositPaymentMethod, label: "Card / PesaPal", sub: "Visa, Mastercard & more", icon: "💳" },
+          ...(p.type === "community_event" ? [] : [{ id: "pesapal" as DepositPaymentMethod, label: "Card / PesaPal", sub: "Visa, Mastercard & more", icon: "💳" }]),
         ].map((opt) => (
           <button
             key={opt.id}
@@ -619,58 +627,72 @@ function DepositFlow({
       </div>
 
       <div className="space-y-3">
-        {!user && (
-          <>
-            <input
-              type="text"
-              placeholder="Your name (optional)"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              disabled={submitting}
-              className="w-full px-4 py-2.5 text-sm rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-black/20 disabled:opacity-50"
-            />
-            <input
-              type="email"
-              placeholder="Email address *"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              disabled={submitting}
-              className="w-full px-4 py-2.5 text-sm rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-black/20 disabled:opacity-50"
-            />
-          </>
-        )}
-        <input
-          type="tel"
-          placeholder={depositPayMethod === "mpesa" ? "M-Pesa number (07XX XXX XXX)" : "WhatsApp number for booking updates"}
-          value={phone}
-          onChange={e => setPhone(e.target.value)}
-          disabled={submitting}
-          className="w-full px-4 py-2.5 text-sm rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-black/20 disabled:opacity-50"
-        />
-        {error && <p className="text-xs text-red-600">{error}</p>}
-        <button
-          onClick={handleSubmit}
-          disabled={submitting || checkingAuth}
-          className="w-full py-3 text-sm font-semibold rounded-xl bg-black text-white hover:bg-gray-800 transition disabled:opacity-50"
-        >
-          {submitting
-            ? "Processing…"
-            : depositPayMethod === "pesapal"
-            ? `Pay KES ${p.depositAmount.toLocaleString()} with PesaPal →`
-            : p.fullPayment
-            ? `Pay KES ${p.depositAmount.toLocaleString()} in Full`
-            : `Pay KES ${p.depositAmount.toLocaleString()} Deposit`}
-        </button>
-        {!user && !checkingAuth && (
-          <p className="text-xs text-gray-400 text-center">
-            Already have an account?{" "}
+        {!user && p.type === "community_event" ? (
+          <div className="text-center py-2">
+            <p className="text-sm text-gray-500 mb-3">Sign in to book this event.</p>
             <a
               href={`/login?redirect=${encodeURIComponent(`/checkout?type=${p.type}&id=${p.itemId}`)}`}
-              className="underline hover:text-black"
+              className="inline-block px-5 py-2.5 text-sm font-semibold rounded-xl bg-black text-white hover:bg-gray-800 transition"
             >
               Sign in
             </a>
-          </p>
+          </div>
+        ) : (
+          <>
+            {!user && (
+              <>
+                <input
+                  type="text"
+                  placeholder="Your name (optional)"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  disabled={submitting}
+                  className="w-full px-4 py-2.5 text-sm rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-black/20 disabled:opacity-50"
+                />
+                <input
+                  type="email"
+                  placeholder="Email address *"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  disabled={submitting}
+                  className="w-full px-4 py-2.5 text-sm rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-black/20 disabled:opacity-50"
+                />
+              </>
+            )}
+            <input
+              type="tel"
+              placeholder={depositPayMethod === "mpesa" ? "M-Pesa number (07XX XXX XXX)" : "WhatsApp number for booking updates"}
+              value={phone}
+              onChange={e => setPhone(e.target.value)}
+              disabled={submitting}
+              className="w-full px-4 py-2.5 text-sm rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-black/20 disabled:opacity-50"
+            />
+            {error && <p className="text-xs text-red-600">{error}</p>}
+            <button
+              onClick={handleSubmit}
+              disabled={submitting || checkingAuth}
+              className="w-full py-3 text-sm font-semibold rounded-xl bg-black text-white hover:bg-gray-800 transition disabled:opacity-50"
+            >
+              {submitting
+                ? "Processing…"
+                : depositPayMethod === "pesapal"
+                ? `Pay KES ${p.depositAmount.toLocaleString()} with PesaPal →`
+                : p.fullPayment
+                ? `Pay KES ${p.depositAmount.toLocaleString()} in Full`
+                : `Pay KES ${p.depositAmount.toLocaleString()} Deposit`}
+            </button>
+            {!user && !checkingAuth && (
+              <p className="text-xs text-gray-400 text-center">
+                Already have an account?{" "}
+                <a
+                  href={`/login?redirect=${encodeURIComponent(`/checkout?type=${p.type}&id=${p.itemId}`)}`}
+                  className="underline hover:text-black"
+                >
+                  Sign in
+                </a>
+              </p>
+            )}
+          </>
         )}
       </div>
     </div>

@@ -233,12 +233,103 @@ function TrainerCard({ trainer }: { trainer: any }) {
   );
 }
 
+// ─── Community Card ────────────────────────────────────────────────────────────
+
+const COMMUNITY_CATEGORY_LABEL: Record<string, string> = {
+  running: "Running", walking: "Walking", cycling: "Cycling", strength: "Strength",
+  boxing: "Boxing", yoga: "Yoga", pilates: "Pilates", hiking: "Hiking", dance: "Dance",
+  outdoor_fitness: "Outdoor Fitness", football: "Football", other: "Other",
+};
+
+function CommunityCard({ community }: { community: any }) {
+  const img = community.cover_url ?? community.logo_url;
+  return (
+    <Link
+      href={`/community/${community.slug ?? community.id}`}
+      className="group flex-shrink-0 w-56 rounded-2xl overflow-hidden bg-white border border-gray-100 shadow-sm hover:shadow-md transition-shadow block"
+    >
+      <div className="relative overflow-hidden" style={{ height: 156 }}>
+        {img ? (
+          <img
+            src={img}
+            alt={community.name}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+          />
+        ) : (
+          <div className="w-full h-full bg-gradient-to-br from-emerald-800 to-emerald-500 flex items-center justify-center">
+            <span className="text-4xl font-black text-white/30">{community.name?.[0] ?? "?"}</span>
+          </div>
+        )}
+        <span className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-full bg-black/55 text-white text-[10px] font-bold capitalize">
+          {COMMUNITY_CATEGORY_LABEL[community.category] ?? community.category}
+        </span>
+      </div>
+      <div className="p-3.5">
+        <p className="font-bold text-gray-900 text-sm leading-tight truncate">{community.name}</p>
+        {community.location && (
+          <p className="text-gray-400 text-xs mt-0.5 truncate">📍 {community.location}</p>
+        )}
+        <div className="mt-2.5 pt-2.5 border-t border-gray-100">
+          <p className="text-xs text-gray-400 font-medium">{community.member_count ?? 0} members</p>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+// ─── Community Event Card ──────────────────────────────────────────────────────
+
+function CommunityEventCard({ event }: { event: any }) {
+  const community = Array.isArray(event.communities) ? event.communities[0] : event.communities;
+  const mon = event.date ? new Date(`${event.date}T00:00:00`).toLocaleDateString("en-KE", { month: "short" }) : "";
+  const day = event.date ? new Date(`${event.date}T00:00:00`).getDate() : 0;
+
+  return (
+    <Link
+      href={`/community/${community?.slug ?? community?.id ?? ""}/event/${event.id}`}
+      className="group flex-shrink-0 w-44 rounded-2xl overflow-hidden bg-white border border-gray-100 shadow-sm hover:shadow-md transition-shadow block"
+    >
+      <div className="relative overflow-hidden" style={{ height: 140 }}>
+        {event.image_url ? (
+          <img
+            src={event.image_url}
+            alt={event.title}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+          />
+        ) : (
+          <div className="w-full h-full bg-emerald-900" />
+        )}
+        <div className="absolute top-2.5 left-2.5 right-2.5 flex items-start justify-between">
+          <span className="px-2 py-0.5 rounded-full bg-black/55 text-white text-[10px] font-bold capitalize">
+            {event.event_type === "free" ? "Free" : event.event_type === "paid" ? "Paid" : "Event"}
+          </span>
+          {day > 0 && (
+            <div className="bg-white rounded-xl px-2 py-1 text-center shadow-sm flex-shrink-0">
+              <div className="text-[9px] font-bold text-emerald-600 uppercase tracking-wide leading-none">{mon}</div>
+              <div className="text-sm font-black text-gray-900 leading-tight">{day}</div>
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="p-3.5">
+        <p className="font-bold text-gray-900 text-sm leading-tight truncate">{event.title}</p>
+        {community?.name && <p className="text-gray-400 text-xs italic mt-0.5 truncate">{community.name}</p>}
+        <div className="mt-2.5 pt-2.5 border-t border-gray-100">
+          <p className="text-sm font-bold text-gray-900">
+            {event.price_kes ? `KES ${Number(event.price_kes).toLocaleString()}` : "Free"}
+          </p>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
 // ─── Discover Page ─────────────────────────────────────────────────────────────
 
 export default async function DiscoverPage() {
   const todayStr = new Date().toISOString().split("T")[0];
 
-  const [gymsRes, sessRes, expRes, ptRes] = await Promise.all([
+  const [gymsRes, sessRes, expRes, ptRes, communitiesRes, communityEventsRes] = await Promise.all([
     supabase
       .from("gyms")
       .select("id, slug, name, location, area, image_url, type")
@@ -263,6 +354,20 @@ export default async function DiscoverPage() {
       .from("personal_trainers")
       .select("id, slug, full_name, professional_name, photo_url, specialisations, is_certified_verified")
       .eq("status", "approved")
+      .limit(8),
+    supabase
+      .from("communities")
+      .select("id, slug, name, location, category, logo_url, cover_url, member_count")
+      .eq("review_status", "approved")
+      .eq("is_active", true)
+      .order("member_count", { ascending: false })
+      .limit(8),
+    supabase
+      .from("community_events")
+      .select("id, title, date, event_type, price_kes, image_url, communities(id, slug, name)")
+      .eq("status", "active")
+      .gte("date", todayStr)
+      .order("date", { ascending: true })
       .limit(8),
   ]);
 
@@ -346,6 +451,24 @@ export default async function DiscoverPage() {
           <div className={scrollRow}>
             {trainers.map((t: any) => <TrainerCard key={t.id} trainer={t} />)}
             {!trainers.length && <p className="text-gray-400 text-sm py-4">No trainers found.</p>}
+          </div>
+        </section>
+
+        {/* Communities and Clubs */}
+        <section>
+          <SectionHeader eyebrow="Find your people" title="Communities and clubs" viewAllHref="/community" />
+          <div className={scrollRow}>
+            {(communitiesRes.data ?? []).map((c: any) => <CommunityCard key={c.id} community={c} />)}
+            {!communitiesRes.data?.length && <p className="text-gray-400 text-sm py-4">No communities found.</p>}
+          </div>
+        </section>
+
+        {/* Community Events */}
+        <section>
+          <SectionHeader eyebrow="Show up" title="Community events" viewAllHref="/community" />
+          <div className={scrollRow}>
+            {(communityEventsRes.data ?? []).map((e: any) => <CommunityEventCard key={e.id} event={e} />)}
+            {!communityEventsRes.data?.length && <p className="text-gray-400 text-sm py-4">No upcoming community events.</p>}
           </div>
         </section>
 

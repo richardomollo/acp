@@ -209,6 +209,47 @@ export function toActivityRow(userId: string, activity: StravaActivity, acpType:
   }
 }
 
+// ─── Community event auto-linkage (Phase 2) ────────────────────────────────
+// After an activity lands in `activities`, try to match it to an RSVP'd
+// community event of the same user so `community_event_attendees.activity_id`
+// gets populated automatically — no explicit "verify attendance" step needed.
+const EVENT_MATCH_WINDOW_MS = 4 * 60 * 60 * 1000 // ±4 hours
+
+export async function linkActivityToCommunityEvent(
+  admin: SupabaseClient,
+  activityRow: { id: string; user_id: string; start_time: string },
+): Promise<void> {
+  const { data: candidates, error } = await admin
+    .from('community_event_attendees')
+    .select('id, event_id, community_events!inner(date, start_time)')
+    .eq('user_id', activityRow.user_id)
+    .eq('status', 'going')
+    .is('activity_id', null)
+
+  if (error || !candidates?.length) return
+
+  const activityTime = new Date(activityRow.start_time).getTime()
+  let best: { id: string; diffMs: number } | null = null
+
+  for (const c of candidates as any[]) {
+    const event = c.community_events
+    if (!event?.date || !event?.start_time) continue
+    const eventTime = new Date(`${event.date}T${event.start_time}`).getTime()
+    const diffMs = Math.abs(activityTime - eventTime)
+    if (diffMs <= EVENT_MATCH_WINDOW_MS && (!best || diffMs < best.diffMs)) {
+      best = { id: c.id, diffMs }
+    }
+  }
+
+  if (!best) return
+
+  const { error: updateErr } = await admin
+    .from('community_event_attendees')
+    .update({ activity_id: activityRow.id })
+    .eq('id', best.id)
+  if (updateErr) console.error('[strava] community event linking failed:', updateErr.message)
+}
+
 /**
  * Fetches recent activities for a user and idempotently upserts the
  * prioritised types (run/walk/cycle) into `activities`. Used for both the
@@ -232,14 +273,17 @@ export async function syncActivitiesForUser(
     const acpType = mapSportType(activity.sport_type)
     if (!acpType) { skipped++; continue }
 
-    const { error } = await admin
+    const { data: row, error } = await admin
       .from('activities')
       .upsert(toActivityRow(userId, activity, acpType), { onConflict: 'source,external_id' })
-    if (error) {
-      console.error('[strava] upsert failed for activity', activity.id, error.message)
+      .select('id, user_id, start_time')
+      .single()
+    if (error || !row) {
+      console.error('[strava] upsert failed for activity', activity.id, error?.message)
       continue
     }
     imported++
+    await linkActivityToCommunityEvent(admin, row)
   }
 
   return { imported, skipped }
@@ -256,10 +300,16 @@ export async function syncSingleActivity(admin: SupabaseClient, userId: string, 
   const acpType = mapSportType(activity.sport_type)
   if (!acpType) return
 
-  const { error } = await admin
+  const { data: row, error } = await admin
     .from('activities')
     .upsert(toActivityRow(userId, activity, acpType), { onConflict: 'source,external_id' })
-  if (error) console.error('[strava] webhook upsert failed for activity', activityId, error.message)
+    .select('id, user_id, start_time')
+    .single()
+  if (error || !row) {
+    console.error('[strava] webhook upsert failed for activity', activityId, error?.message)
+    return
+  }
+  await linkActivityToCommunityEvent(admin, row)
 }
 
 export async function deleteActivity(admin: SupabaseClient, userId: string, externalId: string): Promise<void> {

@@ -403,6 +403,14 @@ verify_jwt = false
 enabled = true
 verify_jwt = false
 
+[functions.send-booking-reminders]
+enabled = true
+verify_jwt = false
+
+[functions.send-community-event-reminders]
+enabled = true
+verify_jwt = false
+
 [functions.notify-booking]
 enabled = true
 verify_jwt = false

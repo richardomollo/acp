@@ -58,5 +58,16 @@ export async function GET(request: Request) {
     result.remainderAmount = expBooking?.remainder_amount ?? null;
   }
 
+  const communityAttendeeId = (payment.metadata as any)?.community_event_attendee_id ?? null;
+  if (communityAttendeeId) {
+    const { data: attendee } = await admin
+      .from('community_event_attendees')
+      .select('confirmation_code')
+      .eq('id', communityAttendeeId)
+      .maybeSingle();
+    result.confirmationCode = attendee?.confirmation_code ?? null;
+    result.remainderAmount = 0;
+  }
+
   return NextResponse.json(result);
 }

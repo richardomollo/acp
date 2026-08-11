@@ -87,7 +87,26 @@ export default function PartnerLoginPage() {
         return;
       }
 
-      // 3. Not a trainer of any kind — send to partner dashboard (it handles "no venues" gracefully)
+      // 3. Community owner/admin — any logged-in user can become one via self-serve
+      // creation, so this is checked before falling through to the partner
+      // dashboard (no existing gym-trainer/PT role implies "not yet a partner
+      // either", not "reject").
+      const { data: membership } = await supabase
+        .from("community_members")
+        .select("community_id, role, communities(review_status)")
+        .eq("user_id", user.id)
+        .in("role", ["owner", "admin"])
+        .eq("status", "active")
+        .limit(1)
+        .maybeSingle();
+
+      if (membership) {
+        const reviewStatus = (membership.communities as any)?.review_status;
+        window.location.href = reviewStatus === "approved" ? (redirect || "/community-dashboard") : "/community-onboarding/pending";
+        return;
+      }
+
+      // 4. Not a trainer or community organiser — send to partner dashboard (it handles "no venues" gracefully)
       window.location.href = redirect || "/partner-dashboard";
     } catch (err: any) {
       setError(err.message || "Login failed. Please check your credentials and try again.");
@@ -238,6 +257,12 @@ export default function PartnerLoginPage() {
               Looking for member login?{" "}
               <Link href="/login" className="text-blue-500 hover:text-blue-600">
                 Member Login
+              </Link>
+            </p>
+            <p className="text-sm text-gray-600 text-center">
+              Run a club or activity group?{" "}
+              <Link href="/community-onboarding" className="text-blue-500 hover:text-blue-600">
+                Start a Community
               </Link>
             </p>
           </div>

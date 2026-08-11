@@ -98,6 +98,48 @@ export default async function CheckoutPage({
     );
   }
 
+  if (type === "community_event" && id) {
+    const { data: event } = await supabase
+      .from("community_events")
+      .select("*, communities(id, slug, name)")
+      .eq("id", id)
+      .single();
+
+    if (!event) notFound();
+    if (event.event_type !== "paid") notFound();
+
+    const community = Array.isArray(event.communities) ? event.communities[0] : event.communities;
+    const price = Number(event.price_kes);
+
+    let spotsLeft = 9999;
+    if (event.capacity != null) {
+      const { count: goingCount } = await supabase
+        .from("community_event_attendees")
+        .select("id", { count: "exact", head: true })
+        .eq("event_id", event.id)
+        .eq("status", "going");
+      spotsLeft = Math.max(0, event.capacity - (goingCount ?? 0));
+    }
+
+    return (
+      <CheckoutClient
+        type="community_event"
+        itemId={event.id}
+        title={event.title}
+        subtitle={`${event.date} · ${event.start_time?.slice(0, 5) ?? ""}`}
+        venueName={community?.name ?? ""}
+        spotsLeft={spotsLeft}
+        price={price}
+        depositPct={100}
+        depositAmount={price}
+        remainderAmount={0}
+        fullPayment
+        backUrl={`/community/${community?.slug ?? community?.id}/event/${event.id}`}
+        backLabel="Back to event"
+      />
+    );
+  }
+
   if (type === "pt" && ptId && offeringId) {
     if (!date || !time) notFound();
 

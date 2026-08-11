@@ -139,3 +139,103 @@ Deno.test('getValidAccessToken: returns null when the user has no connection', a
   const token = await getValidAccessToken(fakeClient, 'user-123')
   assertEquals(token, null)
 })
+
+// ─── linkActivityToCommunityEvent ──────────────────────────────────────────
+// A synced Strava activity should auto-populate community_event_attendees.activity_id
+// when it lines up with an RSVP'd ('going') event within a ±4h window — no explicit
+// "verify attendance" step. Fake client mimics the supabase-js query-builder shape
+// (chainable, awaitable at any point) used elsewhere in this test file.
+
+function makeFakeAdmin(candidates: any[], updateCalls: { id: string; payload: any }[]) {
+  return {
+    from(table: string) {
+      if (table !== 'community_event_attendees') throw new Error(`unexpected table ${table}`)
+      const builder: any = {
+        select() { return this },
+        eq() { return this },
+        is() { return this },
+        then(resolve: any) { resolve({ data: candidates, error: null }) },
+        update(payload: any) {
+          return {
+            eq(_col: string, id: string) {
+              updateCalls.push({ id, payload })
+              return Promise.resolve({ error: null })
+            },
+          }
+        },
+      }
+      return builder
+    },
+  } as any
+}
+
+Deno.test('linkActivityToCommunityEvent: links the matching attendee within the window', async () => {
+  const { linkActivityToCommunityEvent } = await import('./strava.ts')
+  const updateCalls: { id: string; payload: any }[] = []
+  const admin = makeFakeAdmin(
+    [{ id: 'attendee-1', event_id: 'event-1', community_events: { date: '2026-08-10', start_time: '06:00:00' } }],
+    updateCalls,
+  )
+
+  await linkActivityToCommunityEvent(admin, {
+    id: 'activity-1',
+    user_id: 'user-123',
+    start_time: '2026-08-10T06:15:00Z',
+  })
+
+  assertEquals(updateCalls.length, 1)
+  assertEquals(updateCalls[0].id, 'attendee-1')
+  assertEquals(updateCalls[0].payload, { activity_id: 'activity-1' })
+})
+
+Deno.test('linkActivityToCommunityEvent: does not link when outside the ±4h window', async () => {
+  const { linkActivityToCommunityEvent } = await import('./strava.ts')
+  const updateCalls: { id: string; payload: any }[] = []
+  const admin = makeFakeAdmin(
+    [{ id: 'attendee-1', event_id: 'event-1', community_events: { date: '2026-08-10', start_time: '06:00:00' } }],
+    updateCalls,
+  )
+
+  await linkActivityToCommunityEvent(admin, {
+    id: 'activity-1',
+    user_id: 'user-123',
+    start_time: '2026-08-10T14:00:00Z', // 8h after the event start
+  })
+
+  assertEquals(updateCalls.length, 0)
+})
+
+Deno.test('linkActivityToCommunityEvent: picks the closest candidate when multiple are in range', async () => {
+  const { linkActivityToCommunityEvent } = await import('./strava.ts')
+  const updateCalls: { id: string; payload: any }[] = []
+  const admin = makeFakeAdmin(
+    [
+      { id: 'attendee-far', event_id: 'event-far', community_events: { date: '2026-08-10', start_time: '04:00:00' } },
+      { id: 'attendee-close', event_id: 'event-close', community_events: { date: '2026-08-10', start_time: '06:10:00' } },
+    ],
+    updateCalls,
+  )
+
+  await linkActivityToCommunityEvent(admin, {
+    id: 'activity-1',
+    user_id: 'user-123',
+    start_time: '2026-08-10T06:15:00Z',
+  })
+
+  assertEquals(updateCalls.length, 1)
+  assertEquals(updateCalls[0].id, 'attendee-close')
+})
+
+Deno.test('linkActivityToCommunityEvent: no-ops when there are no candidates', async () => {
+  const { linkActivityToCommunityEvent } = await import('./strava.ts')
+  const updateCalls: { id: string; payload: any }[] = []
+  const admin = makeFakeAdmin([], updateCalls)
+
+  await linkActivityToCommunityEvent(admin, {
+    id: 'activity-1',
+    user_id: 'user-123',
+    start_time: '2026-08-10T06:15:00Z',
+  })
+
+  assertEquals(updateCalls.length, 0)
+})

@@ -341,6 +341,35 @@ function bookingRescheduled(d: any) {
   `)
 }
 
+function bookingReminder(d: any) {
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`acp:booking:${d.bookingId ?? ''}:${d.confirmationCode}`)}`
+  const whenLabel = d.daysOut === 1 ? 'Tomorrow' : `In ${d.daysOut} days`
+  return wrap(`
+    <h1 style="${h1}">${whenLabel}: ${d.activityName} 👋</h1>
+    <p style="${p}">Hi ${d.customerName || 'there'},</p>
+    <p style="${p}">Just a reminder — your ${d.activityName} is coming up. Here are the details:</p>
+    <div style="${card}">
+      <p style="margin:0 0 6px;font-size:15px;font-weight:700;">${d.activityName}</p>
+      <p style="margin:0 0 4px;font-size:14px;color:#666;">📍 ${d.venueName}${d.venueLocation ? ', ' + d.venueLocation : ''}</p>
+      <p style="margin:0 0 4px;font-size:14px;color:#666;">🗓️ ${d.activityDate}</p>
+      <p style="margin:0;font-size:14px;color:#666;">⏰ ${d.activityTime}</p>
+    </div>
+    ${d.isDepositOnly ? `
+    <div style="${card}background:#fff8e6;border-color:#ffe4a3;">
+      <p style="margin:0;font-size:14px;color:#5a4a00;">💳 You still owe <strong>KES ${Number(d.remainderAmount).toLocaleString()}</strong> on this booking. Pay via the app or at the venue before check-in.</p>
+    </div>` : ''}
+    <p style="${p}"><strong>How to check in:</strong> open the app → My Bookings → tap this booking → show the QR code or your confirmation code at the venue.</p>
+    ${d.isGuest ? `
+    <div style="${card}text-align:center;">
+      <img src="${qrUrl}" alt="QR Code" width="180" height="180" style="margin-bottom:12px;" />
+      <p style="margin:0;font-size:13px;color:#666;">Check-in code</p>
+      <p style="margin:4px 0 0;font-family:monospace;font-size:26px;font-weight:700;letter-spacing:4px;color:#000;">${d.confirmationCode}</p>
+    </div>` : `<a href="https://activecitypass.com/bookings" style="${btn}">View My Bookings</a>`}
+    <div style="${foot}">Active CityPass | Nairobi, Kenya<br>
+      <a href="mailto:info@activecitypass.com" style="color:#aaa;">info@activecitypass.com</a></div>
+  `)
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -428,6 +457,12 @@ serve(async (req) => {
       case 'withdrawal_request':
         html = withdrawalRequest(data)
         subject = `Withdrawal request — KES ${Number(data.amount).toLocaleString()} from ${data.partnerEmail}`
+        break
+      case 'booking_reminder':
+        html = bookingReminder(data)
+        subject = data.daysOut === 1
+          ? `Tomorrow: ${data.activityName}`
+          : `Reminder: ${data.activityName} in ${data.daysOut} days`
         break
       default:
         throw new Error(`Unknown email type: ${type}`)

@@ -56,6 +56,7 @@ export default function DashboardLayout({
     { name: '👥 Partners', href: '/dashboard/partners' },
     { name: '🧑‍💻 Users', href: '/dashboard/users' },
     { name: '🏋️ Trainers', href: '/dashboard/trainers' },
+    { name: '🏃 Communities', href: '/dashboard/communities' },
     { name: '🏷️ Categories', href: '/dashboard/categories' },
   ];
 

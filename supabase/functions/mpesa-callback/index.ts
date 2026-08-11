@@ -63,8 +63,10 @@ serve(async (req) => {
   // experience bookings store null in booking_id and use metadata.experience_booking_id
   const experienceBookingId: string | null = (payment.metadata as any)?.experience_booking_id ?? null
   const ptBookingId: string | null = (payment.metadata as any)?.pt_booking_id ?? null
+  const communityEventAttendeeId: string | null = (payment.metadata as any)?.community_event_attendee_id ?? null
   const isExperienceBooking = !payment.booking_id && !!experienceBookingId
   const isPtBooking = !payment.booking_id && !!ptBookingId
+  const isCommunityEventAttendee = !payment.booking_id && !!communityEventAttendeeId
   const isBalancePayment = !!(payment.metadata as any)?.is_balance_payment
 
   if (success) {
@@ -104,6 +106,19 @@ serve(async (req) => {
           body: JSON.stringify({ record: ptRow }),
         }).catch(e => console.error('notify-pt-booking error:', e))
       }
+      return Response.json({ received: true }, { headers: CORS })
+    } else if (isCommunityEventAttendee) {
+      // Guard: only flip if still pending_payment. The capacity trigger
+      // (enforce_event_capacity, fires on UPDATE OF status too) auto-downgrades
+      // to 'waitlisted' if the event filled up while payment was in flight.
+      await admin.from('community_event_attendees').update({
+        status: 'going',
+        deposit_paid_at: new Date().toISOString(),
+        deposit_payment_id: receiptNumber ?? checkoutRequestId,
+        updated_at: new Date().toISOString(),
+      }).eq('id', communityEventAttendeeId).eq('status', 'pending_payment')
+
+      console.log('mpesa-callback: community event attendee confirmed', communityEventAttendeeId)
       return Response.json({ received: true }, { headers: CORS })
     } else if (isBalancePayment) {
       // Balance payment succeeded — mark booking as fully confirmed
@@ -261,6 +276,13 @@ serve(async (req) => {
         status: 'cancelled',
         updated_at: new Date().toISOString(),
       }).eq('id', experienceBookingId).eq('status', 'pending_payment')
+    } else if (isCommunityEventAttendee) {
+      // Only cancel if still pending_payment — don't overwrite a confirmed RSVP
+      await admin.from('community_event_attendees').update({
+        status: 'cancelled',
+        updated_at: new Date().toISOString(),
+      }).eq('id', communityEventAttendeeId).eq('status', 'pending_payment')
+      console.log('mpesa-callback: community event attendee payment failed', communityEventAttendeeId, cancellationReason)
     } else {
       // Only cancel if still pending_payment — a late success callback may have already confirmed it
       await admin.from('bookings').update({

@@ -15,6 +15,9 @@ import {
 } from '@/services/exercisedb';
 import { supabase } from '@/lib/supabase';
 import { authService } from '@/services/auth';
+import { getStravaStatus } from '@/services/strava';
+
+const STRAVA_ORANGE = '#FC4C02';
 
 const SCREEN_W = Dimensions.get('window').width;
 const GIF_SIZE = SCREEN_W - 64; // 16px outer + 16px card padding each side
@@ -112,9 +115,13 @@ export default function ExercisesByBodyPartScreen() {
   const [userId, setUserId]           = useState<string | null>(null);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [ratings, setRatings]         = useState<Record<string, number>>({});
+  const [stravaConnected, setStravaConnected] = useState(false);
 
   useEffect(() => {
     if (bodyPart) load(0);
+    if (bodyPart === 'cardio') {
+      getStravaStatus().then(s => setStravaConnected(s.connected));
+    }
     (async () => {
       const session = await authService.getSession();
       const uid = session?.user.id ?? null;
@@ -205,6 +212,28 @@ export default function ExercisesByBodyPartScreen() {
           </View>
         ) : (
           <ScrollView contentContainerStyle={s.list} showsVerticalScrollIndicator={false}>
+            {bodyPart === 'cardio' && (
+              <TouchableOpacity
+                style={s.stravaBanner}
+                onPress={() => router.push('/outdoor-activities' as any)}
+                activeOpacity={0.85}
+              >
+                <View style={s.stravaBannerIcon}>
+                  <Ionicons name={stravaConnected ? 'checkmark-circle' : 'walk'} size={20} color={STRAVA_ORANGE} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <ThemedText style={s.stravaBannerTitle}>
+                    Running, walking or cycling outdoors?
+                  </ThemedText>
+                  <ThemedText style={s.stravaBannerSub}>
+                    These exercises below are machine-based (treadmill, jump rope). For outdoor activity,
+                    {stravaConnected ? ' view your synced Strava stats.' : ' connect Strava to track it instead.'}
+                  </ThemedText>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={palette.gray300} />
+              </TouchableOpacity>
+            )}
+
             <ThemedText style={s.resultCount}>
               {exercises.length}{hasMore ? '+' : ''} exercises
             </ThemedText>
@@ -362,6 +391,18 @@ const s = StyleSheet.create({
     fontSize: fontSize.xs, fontWeight: '600', color: palette.gray300,
     textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 14,
   },
+
+  stravaBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#fff8f5', borderWidth: 1, borderColor: '#ffe0d0',
+    borderRadius: radii.xl, padding: 14, marginBottom: 16,
+  },
+  stravaBannerIcon: {
+    width: 38, height: 38, borderRadius: 19, backgroundColor: '#fff1eb',
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  stravaBannerTitle: { fontSize: 13.5, fontWeight: '800', color: palette.ink900 },
+  stravaBannerSub: { fontSize: 12, color: palette.gray450, marginTop: 2, lineHeight: 16 },
 
   // Card
   card: {
