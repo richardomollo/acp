@@ -1,4 +1,4 @@
-import { StyleSheet, View, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, View, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Image } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { palette, radii, fontSize } from '@/constants/theme';
@@ -10,6 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { TourOverlay, type TourStep } from '@/components/tour-overlay';
 import { useTour } from '@/hooks/use-tour';
 import { useAuthModal } from '@/contexts/auth-modal-context';
+import * as ImagePicker from 'expo-image-picker';
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 
@@ -19,6 +20,33 @@ interface UserProfile {
   name: string | null;
   phone: string | null;
   created_at: string;
+  avatar_url: string | null;
+}
+
+// ─── Avatar upload ────────────────────────────────────────────────────────────
+
+async function uploadAvatarImage(base64: string, uri: string): Promise<string | null> {
+  try {
+    const ext = uri.split('.').pop()?.toLowerCase() || 'jpg';
+    const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
+    const filename = `avatars/temp/${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
+
+    const binaryStr = atob(base64);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+
+    const { data, error } = await supabase.storage
+      .from('fitpass-images')
+      .upload(filename, bytes, { contentType: mimeType, upsert: true });
+    if (error) throw error;
+
+    const { data: urlData } = supabase.storage.from('fitpass-images').getPublicUrl(data.path);
+    return urlData.publicUrl;
+  } catch (error) {
+    console.error('Avatar upload error:', error);
+    Alert.alert('Error', 'Failed to upload photo');
+    return null;
+  }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -55,6 +83,27 @@ export default function ProfileScreen() {
   const [saving, setSaving] = useState(false);
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  const pickAvatar = async () => {
+    if (!user) return;
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow photo access to update your profile picture.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'], quality: 0.7, base64: true, allowsEditing: true, aspect: [1, 1],
+    });
+    if (result.canceled || !result.assets?.[0]?.base64) return;
+    setUploadingAvatar(true);
+    const url = await uploadAvatarImage(result.assets[0].base64, result.assets[0].uri);
+    if (url) {
+      const { error } = await supabase.from('users').update({ avatar_url: url }).eq('id', user.id);
+      if (!error) setUser(prev => prev ? { ...prev, avatar_url: url } : prev);
+    }
+    setUploadingAvatar(false);
+  };
 
   useFocusEffect(useCallback(() => { loadAll(); }, []));
 
@@ -70,7 +119,7 @@ export default function ProfileScreen() {
       if (!session?.user) { setIsGuest(true); return; }
       setIsGuest(false);
 
-      const { data } = await supabase.from('users').select('id, email, name, phone, created_at').eq('id', session.user.id).maybeSingle();
+      const { data } = await supabase.from('users').select('id, email, name, phone, created_at, avatar_url').eq('id', session.user.id).maybeSingle();
 
       const profile = data ?? {
         id: session.user.id,
@@ -78,6 +127,7 @@ export default function ProfileScreen() {
         name: session.user.user_metadata?.full_name || 'User',
         phone: null,
         created_at: new Date().toISOString(),
+        avatar_url: null,
       };
 
       setUser(profile);
@@ -187,9 +237,18 @@ export default function ProfileScreen() {
 
         {/* ── Hero ── */}
         <View style={styles.hero}>
-          <View style={styles.avatar}>
-            <ThemedText style={styles.avatarText}>{getInitials(user?.name)}</ThemedText>
-          </View>
+          <TouchableOpacity style={styles.avatar} onPress={pickAvatar} disabled={uploadingAvatar} activeOpacity={0.8}>
+            {uploadingAvatar ? (
+              <ActivityIndicator color={palette.white} />
+            ) : user?.avatar_url ? (
+              <Image source={{ uri: user.avatar_url }} style={styles.avatarImage} />
+            ) : (
+              <ThemedText style={styles.avatarText}>{getInitials(user?.name)}</ThemedText>
+            )}
+            <View style={styles.avatarEditBadge}>
+              <Ionicons name="camera" size={12} color="#fff" />
+            </View>
+          </TouchableOpacity>
           <ThemedText style={styles.heroName}>{user?.name ?? 'User'}</ThemedText>
           <ThemedText style={styles.heroEmail}>{user?.email}</ThemedText>
         </View>
@@ -381,9 +440,15 @@ const styles = StyleSheet.create({
     width: 80, height: 80, borderRadius: 40,
     backgroundColor: palette.blue500,
     justifyContent: 'center', alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 8, overflow: 'hidden',
   },
+  avatarImage: { width: 80, height: 80 },
   avatarText: { color: palette.white, fontSize: fontSize['3xl'], fontWeight: 'bold', paddingTop: 3 },
+  avatarEditBadge: {
+    position: 'absolute', bottom: 0, right: 0, width: 24, height: 24, borderRadius: 12,
+    backgroundColor: palette.ink900, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: palette.white,
+  },
   heroName: { fontSize: 22, fontWeight: 'bold', color: palette.ink900 },
   heroEmail: { fontSize: fontSize.base, color: palette.gray450 },
 

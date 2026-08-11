@@ -14,7 +14,7 @@ const INVITE_BASE_URL = "https://activecitypass.com/community/join";
 interface MemberRow {
   id: string; user_id: string; role: string; status: string; joined_at: string | null; created_at: string;
 }
-interface UserInfo { name: string | null; email: string | null }
+interface UserInfo { name: string | null; email: string | null; avatar_url: string | null }
 
 type Tab = "pending" | "active";
 
@@ -56,9 +56,9 @@ export default function CommunityDashboardMembersPage() {
 
     const userIds = [...new Set((memberRows ?? []).map((m) => m.user_id))];
     if (userIds.length > 0) {
-      const { data: userRows } = await supabase.from("users").select("id, name, email").in("id", userIds);
+      const { data: userRows } = await supabase.from("users").select("id, name, email, avatar_url").in("id", userIds);
       const map: Record<string, UserInfo> = {};
-      for (const u of userRows ?? []) map[u.id] = { name: u.name, email: u.email };
+      for (const u of userRows ?? []) map[u.id] = { name: u.name, email: u.email, avatar_url: u.avatar_url };
       setUsers(map);
     }
     setLoading(false);
@@ -147,9 +147,13 @@ export default function CommunityDashboardMembersPage() {
             const name = u?.name ?? u?.email ?? "Member";
             return (
               <div key={m.id} className="bg-white rounded-2xl border border-gray-100 p-4 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-700 flex items-center justify-center font-bold text-sm flex-shrink-0">
-                  {name[0]?.toUpperCase()}
-                </div>
+                {u?.avatar_url ? (
+                  <img src={u.avatar_url} alt={name} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-700 flex items-center justify-center font-bold text-sm flex-shrink-0">
+                    {name[0]?.toUpperCase()}
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-900">{name}</p>
                   <p className="text-xs text-gray-400">{u?.email ?? ""}{m.role !== "member" ? ` · ${m.role}` : ""}</p>

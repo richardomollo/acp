@@ -108,7 +108,12 @@ export default function CommunityEventsScreen() {
             <>
               <ThemedText style={styles.sectionLabel}>Upcoming</ThemedText>
               {upcoming.map(e => (
-                <View key={e.id} style={styles.eventCard}>
+                <TouchableOpacity
+                  key={e.id}
+                  style={styles.eventCard}
+                  activeOpacity={0.8}
+                  onPress={() => router.push({ pathname: '/(community-tabs)/create-event', params: { eventId: e.id } } as any)}
+                >
                   {e.image_url && <Image source={{ uri: e.image_url }} style={styles.eventThumb} />}
                   <View style={{ flex: 1 }}>
                     <ThemedText style={styles.eventTitle}>{e.title}</ThemedText>
@@ -123,7 +128,7 @@ export default function CommunityEventsScreen() {
                   <TouchableOpacity onPress={() => cancelEvent(e)} hitSlop={8}>
                     <Ionicons name="close-circle-outline" size={20} color="#d1d5db" />
                   </TouchableOpacity>
-                </View>
+                </TouchableOpacity>
               ))}
             </>
           )}

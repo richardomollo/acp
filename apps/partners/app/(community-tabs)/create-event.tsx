@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
   StyleSheet, TouchableOpacity, View, TextInput, KeyboardAvoidingView,
   Platform, ScrollView, Alert, ActivityIndicator, Image,
@@ -52,6 +52,9 @@ interface LinkedSession {
 
 export default function CreateCommunityEventScreen() {
   const router = useRouter();
+  const { eventId } = useLocalSearchParams<{ eventId?: string }>();
+  const isEditMode = !!eventId;
+  const [loadingEvent, setLoadingEvent] = useState(isEditMode);
   const [communityId, setCommunityId] = useState<string | null>(null);
 
   const [title, setTitle] = useState('');
@@ -99,6 +102,42 @@ export default function CreateCommunityEventScreen() {
         .eq('user_id', user.id).in('role', ['owner', 'admin']).eq('status', 'active')
         .order('created_at', { ascending: false }).limit(1).maybeSingle();
       setCommunityId(membership?.community_id ?? null);
+
+      if (eventId) {
+        const { data: event } = await supabase
+          .from('community_events')
+          .select('*')
+          .eq('id', eventId)
+          .single();
+        if (event) {
+          setTitle(event.title ?? '');
+          setDescription(event.description ?? '');
+          setEventType(event.event_type);
+          setActivityType(event.activity_type);
+          setDate(event.date ?? '');
+          setTime((event.start_time ?? '').slice(0, 5));
+          setLocation(event.location ?? '');
+          setCapacity(event.capacity != null ? String(event.capacity) : '');
+          setPriceKes(event.price_kes != null ? String(event.price_kes) : '');
+          setExternalUrl(event.external_url ?? '');
+          setDistanceKm(event.distance_km != null ? String(event.distance_km) : '');
+          setImageUrl(event.image_url ?? null);
+
+          if (event.event_type === 'partner_session' && event.session_id) {
+            const { data: session } = await supabase
+              .from('sessions').select('id, name, date, time, gym_id, gyms(name)')
+              .eq('id', event.session_id).maybeSingle();
+            if (session) {
+              setSelectedSession({
+                id: session.id, name: session.name, date: session.date, time: session.time,
+                gym_id: session.gym_id, gym_name: (session as any).gyms?.name ?? 'Venue',
+              });
+            }
+            loadLinkedSessions();
+          }
+        }
+        setLoadingEvent(false);
+      }
     })();
   }, []);
 
@@ -140,7 +179,7 @@ export default function CreateCommunityEventScreen() {
     if (!title.trim()) setTitle(s.name);
   };
 
-  const handleCreate = async () => {
+  const handleSave = async () => {
     if (!communityId) return;
     if (!title.trim()) { Alert.alert('Missing title', 'Give the event a title.'); return; }
     if (!date || !time) { Alert.alert('Missing date/time', 'Pick a date and start time.'); return; }
@@ -150,10 +189,8 @@ export default function CreateCommunityEventScreen() {
     if (eventType === 'external' && !externalUrl.trim()) { Alert.alert('Missing link', 'Add the external registration link.'); return; }
 
     setSaving(true);
-    const { data: { user } } = await supabase.auth.getUser();
 
-    const { error } = await supabase.from('community_events').insert({
-      community_id: communityId,
+    const payload = {
       title: title.trim(),
       description: description.trim() || null,
       event_type: eventType,
@@ -167,14 +204,29 @@ export default function CreateCommunityEventScreen() {
       distance_km: distanceKm ? Number(distanceKm) : null,
       gym_id: eventType === 'partner_session' ? selectedSession!.gym_id : null,
       session_id: eventType === 'partner_session' ? selectedSession!.id : null,
-      organiser_user_id: user?.id,
       image_url: imageUrl,
-    });
+    };
+
+    const { error } = isEditMode
+      ? await supabase.from('community_events').update(payload).eq('id', eventId)
+      : await supabase.from('community_events').insert({
+          ...payload,
+          community_id: communityId,
+          organiser_user_id: (await supabase.auth.getUser()).data.user?.id,
+        });
 
     setSaving(false);
-    if (error) { Alert.alert('Could not create event', error.message); return; }
+    if (error) { Alert.alert(isEditMode ? 'Could not update event' : 'Could not create event', error.message); return; }
     router.back();
   };
+
+  if (loadingEvent) {
+    return (
+      <View style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
+        <ActivityIndicator color="#000" />
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -182,7 +234,7 @@ export default function CreateCommunityEventScreen() {
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color="#000" />
         </TouchableOpacity>
-        <ThemedText style={styles.headerTitle}>Create Event</ThemedText>
+        <ThemedText style={styles.headerTitle}>{isEditMode ? 'Edit Event' : 'Create Event'}</ThemedText>
         <View style={styles.placeholder} />
       </View>
 
@@ -317,8 +369,8 @@ export default function CreateCommunityEventScreen() {
           />
         </View>
 
-        <TouchableOpacity style={[styles.submitBtn, saving && { opacity: 0.6 }]} onPress={handleCreate} disabled={saving}>
-          {saving ? <ActivityIndicator color="#fff" /> : <ThemedText style={styles.submitBtnText}>Create Event</ThemedText>}
+        <TouchableOpacity style={[styles.submitBtn, saving && { opacity: 0.6 }]} onPress={handleSave} disabled={saving}>
+          {saving ? <ActivityIndicator color="#fff" /> : <ThemedText style={styles.submitBtnText}>{isEditMode ? 'Save Changes' : 'Create Event'}</ThemedText>}
         </TouchableOpacity>
       </ScrollView>
 

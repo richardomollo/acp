@@ -1,5 +1,5 @@
 import {
-  StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator,
+  StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator, Image,
 } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
@@ -22,7 +22,7 @@ interface ActivityRow {
   activity_type: string; start_time: string; distance_meters: number | null;
 }
 interface LeaderboardRow {
-  user_id: string; name: string | null; metric_value: number; rank: number;
+  user_id: string; name: string | null; avatar_url: string | null; metric_value: number; rank: number;
 }
 
 const fmtDate = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString('en-KE', { day: 'numeric', month: 'short' });
@@ -119,6 +119,11 @@ export default function CommunityChallengeDetailScreen() {
             leaderboard.map(row => (
               <View key={row.user_id} style={[s.lbRow, row.user_id === userId && s.lbRowSelf]}>
                 <ThemedText style={s.lbRank}>#{row.rank}</ThemedText>
+                {row.avatar_url ? (
+                  <Image source={{ uri: row.avatar_url }} style={s.lbAvatar} />
+                ) : (
+                  <View style={s.lbAvatarFallback}><ThemedText style={s.lbAvatarFallbackText}>{(row.name ?? 'M')[0]?.toUpperCase()}</ThemedText></View>
+                )}
                 <ThemedText style={s.lbName} numberOfLines={1}>{row.name ?? 'Member'}{row.user_id === userId ? ' (you)' : ''}</ThemedText>
                 <ThemedText style={s.lbValue}>
                   {challenge.metric === 'distance_km' ? Number(row.metric_value).toFixed(1) : row.metric_value} {unit}
@@ -163,6 +168,9 @@ const s = StyleSheet.create({
   },
   lbRowSelf: { borderColor: palette.blue500, backgroundColor: palette.blue25 },
   lbRank: { fontSize: 13, fontWeight: '800', color: palette.gray300, width: 30 },
+  lbAvatar: { width: 28, height: 28, borderRadius: 14, backgroundColor: palette.surfaceMuted },
+  lbAvatarFallback: { width: 28, height: 28, borderRadius: 14, backgroundColor: palette.blue25, alignItems: 'center', justifyContent: 'center' },
+  lbAvatarFallbackText: { fontSize: 12, fontWeight: '800', color: palette.blue500 },
   lbName: { flex: 1, fontSize: 13.5, fontWeight: '600', color: palette.ink900 },
   lbValue: { fontSize: 13, fontWeight: '700', color: palette.ink700 },
 });

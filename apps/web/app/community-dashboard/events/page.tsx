@@ -87,21 +87,23 @@ export default function CommunityDashboardEventsPage() {
           <div className="space-y-3 mb-8">
             {upcoming.map((e) => (
               <div key={e.id} className="bg-white rounded-2xl border border-gray-100 p-4 flex items-center gap-4">
-                {e.image_url ? (
-                  <img src={e.image_url} alt={e.title} className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
-                ) : (
-                  <div className="w-14 h-14 rounded-xl bg-gray-100 flex-shrink-0" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-900 truncate">{e.title}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {new Date(`${e.date}T00:00:00`).toLocaleDateString("en-KE", { weekday: "short", day: "numeric", month: "short" })} · {e.start_time.slice(0, 5)} · {e.location}
-                  </p>
-                  <div className="flex items-center gap-2 mt-2">
-                    <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-bold">{TYPE_LABEL[e.event_type] ?? e.event_type}</span>
-                    <span className="text-xs text-gray-500">{attendeeCounts[e.id] ?? 0}{e.capacity ? `/${e.capacity}` : ""} going</span>
+                <Link href={`/community-dashboard/events/create?id=${e.id}`} className="flex items-center gap-4 flex-1 min-w-0">
+                  {e.image_url ? (
+                    <img src={e.image_url} alt={e.title} className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
+                  ) : (
+                    <div className="w-14 h-14 rounded-xl bg-gray-100 flex-shrink-0" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{e.title}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {new Date(`${e.date}T00:00:00`).toLocaleDateString("en-KE", { weekday: "short", day: "numeric", month: "short" })} · {e.start_time.slice(0, 5)} · {e.location}
+                    </p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-bold">{TYPE_LABEL[e.event_type] ?? e.event_type}</span>
+                      <span className="text-xs text-gray-500">{attendeeCounts[e.id] ?? 0}{e.capacity ? `/${e.capacity}` : ""} going</span>
+                    </div>
                   </div>
-                </div>
+                </Link>
                 <button onClick={() => cancelEvent(e)} className="text-xs text-gray-400 hover:text-red-600 transition flex-shrink-0">Cancel</button>
               </div>
             ))}

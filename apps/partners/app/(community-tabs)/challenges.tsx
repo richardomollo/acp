@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import {
-  StyleSheet, View, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator,
+  StyleSheet, View, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Image,
 } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,13 +18,20 @@ const METRICS = [
 
 const ACTIVITY_TYPES = ['run', 'walk', 'cycle'] as const;
 
+// Maps a community's own activity category to a sensible default set of
+// challenge activity types, so e.g. a cycling club's challenge doesn't
+// default to counting runs — organisers can still change it.
+const CATEGORY_DEFAULT_ACTIVITY_TYPES: Record<string, string[]> = {
+  running: ['run'], walking: ['walk'], cycling: ['cycle'], hiking: ['walk'],
+};
+
 interface ChallengeRow {
   id: string; title: string; description: string | null;
   metric: typeof METRICS[number]['key']; target_value: number;
   activity_types: string[]; period_start: string; period_end: string;
 }
 interface LeaderboardRow {
-  user_id: string; name: string | null; metric_value: number; rank: number;
+  user_id: string; name: string | null; avatar_url: string | null; metric_value: number; rank: number;
 }
 
 const fmtDate = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString('en-KE', { day: 'numeric', month: 'short' });
@@ -32,6 +39,7 @@ const fmtDate = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString('en-
 export default function CommunityChallengesScreen() {
   const router = useRouter();
   const [communityId, setCommunityId] = useState<string | null>(null);
+  const [defaultActivityTypes, setDefaultActivityTypes] = useState<string[]>(['run']);
   const [challenges, setChallenges] = useState<ChallengeRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -64,6 +72,11 @@ export default function CommunityChallengesScreen() {
     const cid = membership?.community_id ?? null;
     setCommunityId(cid);
     if (!cid) { setLoading(false); return; }
+
+    const { data: communityRow } = await supabase.from('communities').select('category').eq('id', cid).single();
+    const defaults = communityRow?.category ? (CATEGORY_DEFAULT_ACTIVITY_TYPES[communityRow.category] ?? ['run']) : ['run'];
+    setDefaultActivityTypes(defaults);
+    setActivityTypes(defaults);
 
     const { data: rows } = await supabase
       .from('challenges')
@@ -101,7 +114,7 @@ export default function CommunityChallengesScreen() {
     setSaving(false);
     if (error) { Alert.alert('Could not create challenge', error.message); return; }
 
-    setTitle(''); setDescription(''); setTargetValue(''); setActivityTypes(['run']);
+    setTitle(''); setDescription(''); setTargetValue(''); setActivityTypes(defaultActivityTypes);
     setPeriodStart(''); setPeriodEnd(''); setShowForm(false);
     load();
   };
@@ -217,6 +230,11 @@ export default function CommunityChallengesScreen() {
                       leaderboards[c.id].map(row => (
                         <View key={row.user_id} style={styles.lbRow}>
                           <ThemedText style={styles.lbRank}>#{row.rank}</ThemedText>
+                          {row.avatar_url ? (
+                            <Image source={{ uri: row.avatar_url }} style={styles.lbAvatar} />
+                          ) : (
+                            <View style={styles.lbAvatarFallback}><ThemedText style={styles.lbAvatarFallbackText}>{(row.name ?? 'M')[0]?.toUpperCase()}</ThemedText></View>
+                          )}
                           <ThemedText style={styles.lbName} numberOfLines={1}>{row.name ?? 'Member'}</ThemedText>
                           <ThemedText style={styles.lbValue}>
                             {c.metric === 'distance_km' ? Number(row.metric_value).toFixed(1) : row.metric_value} {unit}
@@ -284,6 +302,9 @@ const styles = StyleSheet.create({
   leaderboardBox: { borderTopWidth: 1, borderTopColor: '#f0f0f0', padding: 14 },
   lbRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
   lbRank: { fontSize: 12, fontWeight: '800', color: '#9ca3af', width: 26 },
+  lbAvatar: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#f0f0f0' },
+  lbAvatarFallback: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#f0f5ff', alignItems: 'center', justifyContent: 'center' },
+  lbAvatarFallbackText: { fontSize: 10.5, fontWeight: '800', color: '#1d3cb0' },
   lbName: { flex: 1, fontSize: 13, fontWeight: '600', color: '#000' },
   lbValue: { fontSize: 12, fontWeight: '700', color: '#444' },
 });

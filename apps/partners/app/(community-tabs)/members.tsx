@@ -1,4 +1,4 @@
-import { StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Clipboard } from 'react-native';
+import { StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Clipboard, Image } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useCallback } from 'react';
@@ -11,7 +11,7 @@ const INVITE_BASE_URL = 'https://activecitypass.com/community/join';
 interface MemberRow {
   id: string; user_id: string; role: string; status: string; joined_at: string | null; created_at: string;
 }
-interface UserInfo { name: string | null; email: string | null }
+interface UserInfo { name: string | null; email: string | null; avatar_url: string | null }
 
 type Tab = 'pending' | 'active';
 
@@ -53,9 +53,9 @@ export default function CommunityMembersScreen() {
 
     const userIds = [...new Set((memberRows ?? []).map(m => m.user_id))];
     if (userIds.length > 0) {
-      const { data: userRows } = await supabase.from('users').select('id, name, email').in('id', userIds);
+      const { data: userRows } = await supabase.from('users').select('id, name, email, avatar_url').in('id', userIds);
       const map: Record<string, UserInfo> = {};
-      for (const u of userRows ?? []) map[u.id] = { name: u.name, email: u.email };
+      for (const u of userRows ?? []) map[u.id] = { name: u.name, email: u.email, avatar_url: u.avatar_url };
       setUsers(map);
     }
     setLoading(false);
@@ -181,7 +181,11 @@ export default function CommunityMembersScreen() {
               const name = u?.name ?? u?.email ?? 'Member';
               return (
                 <View key={m.id} style={styles.memberRow}>
-                  <View style={styles.avatar}><ThemedText style={styles.avatarText}>{name[0]?.toUpperCase()}</ThemedText></View>
+                  {u?.avatar_url ? (
+                    <Image source={{ uri: u.avatar_url }} style={styles.avatar} />
+                  ) : (
+                    <View style={styles.avatar}><ThemedText style={styles.avatarText}>{name[0]?.toUpperCase()}</ThemedText></View>
+                  )}
                   <View style={{ flex: 1 }}>
                     <ThemedText style={styles.memberName}>{name}</ThemedText>
                     <ThemedText style={styles.memberSub}>
