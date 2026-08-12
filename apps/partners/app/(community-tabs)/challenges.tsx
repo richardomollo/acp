@@ -43,6 +43,7 @@ export default function CommunityChallengesScreen() {
   const [challenges, setChallenges] = useState<ChallengeRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const [title, setTitle] = useState('');
@@ -93,7 +94,25 @@ export default function CommunityChallengesScreen() {
     setActivityTypes(prev => prev.includes(a) ? prev.filter(x => x !== a) : [...prev, a]);
   };
 
-  const handleCreate = async () => {
+  const resetForm = () => {
+    setEditingId(null);
+    setTitle(''); setDescription(''); setTargetValue(''); setActivityTypes(defaultActivityTypes);
+    setMetric('distance_km'); setPeriodStart(''); setPeriodEnd(''); setShowForm(false);
+  };
+
+  const startEdit = (c: ChallengeRow) => {
+    setEditingId(c.id);
+    setTitle(c.title);
+    setDescription(c.description ?? '');
+    setMetric(c.metric);
+    setTargetValue(String(c.target_value));
+    setActivityTypes(c.activity_types);
+    setPeriodStart(c.period_start);
+    setPeriodEnd(c.period_end);
+    setShowForm(true);
+  };
+
+  const handleSave = async () => {
     if (!communityId) return;
     if (!title.trim()) { Alert.alert('Missing title', 'Give the challenge a title.'); return; }
     if (!targetValue || Number(targetValue) <= 0) { Alert.alert('Missing target', 'Set a target value.'); return; }
@@ -101,8 +120,7 @@ export default function CommunityChallengesScreen() {
     if (!periodStart || !periodEnd) { Alert.alert('Missing dates', 'Set a start and end date.'); return; }
 
     setSaving(true);
-    const { error } = await supabase.from('challenges').insert({
-      community_id: communityId,
+    const payload = {
       title: title.trim(),
       description: description.trim() || null,
       metric,
@@ -110,12 +128,14 @@ export default function CommunityChallengesScreen() {
       activity_types: activityTypes,
       period_start: periodStart,
       period_end: periodEnd,
-    });
+    };
+    const { error } = editingId
+      ? await supabase.from('challenges').update(payload).eq('id', editingId)
+      : await supabase.from('challenges').insert({ ...payload, community_id: communityId });
     setSaving(false);
-    if (error) { Alert.alert('Could not create challenge', error.message); return; }
+    if (error) { Alert.alert(editingId ? 'Could not update challenge' : 'Could not create challenge', error.message); return; }
 
-    setTitle(''); setDescription(''); setTargetValue(''); setActivityTypes(defaultActivityTypes);
-    setPeriodStart(''); setPeriodEnd(''); setShowForm(false);
+    resetForm();
     load();
   };
 
@@ -138,7 +158,7 @@ export default function CommunityChallengesScreen() {
             <Ionicons name="arrow-back" size={22} color="#000" />
           </TouchableOpacity>
           <ThemedText style={styles.headerTitle}>Challenges</ThemedText>
-          <TouchableOpacity style={styles.createBtn} onPress={() => setShowForm(v => !v)}>
+          <TouchableOpacity style={styles.createBtn} onPress={() => (showForm ? resetForm() : setShowForm(true))}>
             <Ionicons name={showForm ? 'close' : 'add'} size={18} color="#fff" />
           </TouchableOpacity>
         </View>
@@ -192,8 +212,8 @@ export default function CommunityChallengesScreen() {
                 </View>
               </View>
 
-              <TouchableOpacity style={[styles.submitBtn, saving && { opacity: 0.6 }]} onPress={handleCreate} disabled={saving}>
-                {saving ? <ActivityIndicator color="#fff" /> : <ThemedText style={styles.submitBtnText}>Create Challenge</ThemedText>}
+              <TouchableOpacity style={[styles.submitBtn, saving && { opacity: 0.6 }]} onPress={handleSave} disabled={saving}>
+                {saving ? <ActivityIndicator color="#fff" /> : <ThemedText style={styles.submitBtnText}>{editingId ? 'Save Changes' : 'Create Challenge'}</ThemedText>}
               </TouchableOpacity>
             </View>
           )}
@@ -218,6 +238,9 @@ export default function CommunityChallengesScreen() {
                       Target {c.target_value} {unit} · {fmtDate(c.period_start)} – {fmtDate(c.period_end)}
                     </ThemedText>
                   </View>
+                  <TouchableOpacity onPress={() => startEdit(c)} hitSlop={8} style={{ padding: 4 }}>
+                    <Ionicons name="pencil-outline" size={17} color="#9ca3af" />
+                  </TouchableOpacity>
                   <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color="#9ca3af" />
                 </TouchableOpacity>
                 {expanded && (

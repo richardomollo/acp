@@ -11,14 +11,16 @@ const supabase = createClient(
 );
 
 const DIFFICULTY_LABEL: Record<string, string> = { beginner: "Beginner", intermediate: "Intermediate", advanced: "Advanced" };
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type Props = { params: Promise<{ slug: string; eventId: string }> };
 
 async function fetchEvent(eventId: string) {
+  const col = UUID_RE.test(eventId) ? "id" : "slug";
   const { data } = await supabase
     .from("community_events")
     .select("*, communities(id, slug, name, logo_url)")
-    .eq("id", eventId)
+    .eq(col, eventId)
     .single();
   return data;
 }
@@ -39,7 +41,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     openGraph: {
       title: `${title} | Active CityPass`,
       description,
-      url: `https://activecitypass.com/community/${community?.slug ?? community?.id}/event/${eventId}`,
+      url: `https://activecitypass.com/community/${community?.slug ?? community?.id}/event/${event.slug ?? event.id}`,
       ...(event.image_url ? { images: [{ url: event.image_url, width: 1200, height: 630, alt: title }] } : {}),
     },
     twitter: {
@@ -130,7 +132,7 @@ export default async function CommunityEventDetailPage({ params }: Props) {
 
           <CommunityEventShareBar
             communitySlug={community?.slug ?? community?.id ?? ""}
-            eventId={event.id}
+            eventId={event.slug ?? event.id}
             title={event.title}
             communityName={community?.name ?? ""}
             date={event.date}

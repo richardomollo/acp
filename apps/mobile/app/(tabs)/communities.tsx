@@ -11,7 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { SearchTrigger, SearchModal, SearchResultRow, SearchEmpty } from '@/components/search-trigger-modal';
 
 interface CommunityRow {
-  id: string; name: string; category: string; location: string | null;
+  id: string; slug: string | null; name: string; category: string; location: string | null;
   logo_url: string | null; member_count: number;
 }
 
@@ -46,7 +46,7 @@ export default function CommunitiesScreen() {
     setLoading(true);
     let q = supabase
       .from('communities')
-      .select('id, name, category, location, logo_url, member_count')
+      .select('id, slug, name, category, location, logo_url, member_count')
       .eq('review_status', 'approved').eq('is_active', true)
       .order('member_count', { ascending: false });
     if (cat !== 'all') q = q.eq('category', cat);
@@ -62,7 +62,7 @@ export default function CommunitiesScreen() {
     setSearching(true);
     const { data } = await supabase
       .from('communities')
-      .select('id, name, category, location, logo_url, member_count')
+      .select('id, slug, name, category, location, logo_url, member_count')
       .eq('review_status', 'approved').eq('is_active', true)
       .ilike('name', `%${q.trim()}%`)
       .limit(20);
@@ -117,7 +117,7 @@ export default function CommunitiesScreen() {
                 key={c.id}
                 style={s.card}
                 activeOpacity={0.88}
-                onPress={() => router.push({ pathname: '/community/[id]', params: { id: c.id } } as any)}
+                onPress={() => router.push({ pathname: '/community/[id]', params: { id: c.slug ?? c.id } } as any)}
               >
                 {c.logo_url ? (
                   <Image source={{ uri: c.logo_url }} style={s.logo} />
@@ -153,7 +153,7 @@ export default function CommunitiesScreen() {
             name={c.name}
             subtitle={`${c.member_count} members${c.location ? ` · ${c.location}` : ''}`}
             rounded
-            onPress={() => { closeSearch(); router.push({ pathname: '/community/[id]', params: { id: c.id } } as any); }}
+            onPress={() => { closeSearch(); router.push({ pathname: '/community/[id]', params: { id: c.slug ?? c.id } } as any); }}
           />
         ))}
       </SearchModal>

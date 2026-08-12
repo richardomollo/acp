@@ -32,6 +32,7 @@ interface Gym {
 
 interface CommunityHome {
   id: string;
+  slug: string | null;
   name: string;
   category: string;
   location: string | null;
@@ -751,7 +752,7 @@ export default function HomeScreen() {
 
       const { data: communityData } = await supabase
         .from('communities')
-        .select('id, name, category, location, logo_url, member_count')
+        .select('id, slug, name, category, location, logo_url, member_count')
         .eq('review_status', 'approved')
         .eq('is_active', true)
         .order('member_count', { ascending: false })
@@ -1158,7 +1159,7 @@ export default function HomeScreen() {
                   tagline={c.location}
                   meta1={`${c.member_count} member${c.member_count === 1 ? '' : 's'}`}
                   priceLabel="View Community"
-                  onPress={() => router.push({ pathname: '/community/[id]', params: { id: c.id } } as any)}
+                  onPress={() => router.push({ pathname: '/community/[id]', params: { id: c.slug ?? c.id } } as any)}
                 />
               ))}
               <TouchableOpacity

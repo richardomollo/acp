@@ -17,8 +17,8 @@ interface ResolvedInvite {
   community_type: "open" | "approval_required";
 }
 
-export default function CommunityJoinPage({ params }: { params: Promise<{ token: string }> }) {
-  const { token } = use(params);
+export default function CommunityJoinPage({ params }: { params: Promise<{ slug: string; token: string }> }) {
+  const { slug, token } = use(params);
   const router = useRouter();
 
   const [invite, setInvite] = useState<ResolvedInvite | null>(null);
@@ -77,7 +77,7 @@ export default function CommunityJoinPage({ params }: { params: Promise<{ token:
           </h1>
           <p className="text-sm text-gray-500 mb-6">Sign in or create an account to join this community.</p>
           <a
-            href={`/login?redirect=${encodeURIComponent(`/community/join/${token}`)}`}
+            href={`/login?redirect=${encodeURIComponent(`/community/join/${slug}/${token}`)}`}
             className="inline-block px-5 py-2.5 text-sm font-semibold rounded-xl bg-black text-white hover:bg-gray-800 transition"
           >
             Sign in

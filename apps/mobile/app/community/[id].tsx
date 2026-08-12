@@ -13,12 +13,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 
 interface Community {
-  id: string; name: string; description: string | null; category: string; location: string | null;
+  id: string; slug: string | null; name: string; description: string | null; category: string; location: string | null;
   logo_url: string | null; cover_url: string | null; community_type: 'open' | 'approval_required';
   member_count: number; owner_user_id: string;
 }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 interface EventRow {
-  id: string; title: string; date: string; start_time: string; location: string;
+  id: string; slug: string | null; title: string; date: string; start_time: string; location: string;
   event_type: string; capacity: number | null; distance_km: number | null; image_url: string | null;
 }
 interface PostRow {
@@ -61,17 +63,20 @@ export default function CommunityDetailScreen() {
     const uid = session?.user.id ?? null;
     setUserId(uid);
 
+    const col = UUID_RE.test(id) ? 'id' : 'slug';
     const { data: c } = await supabase
       .from('communities')
-      .select('id, name, description, category, location, logo_url, cover_url, community_type, member_count, owner_user_id')
-      .eq('id', id).single();
+      .select('id, slug, name, description, category, location, logo_url, cover_url, community_type, member_count, owner_user_id')
+      .eq(col, id).single();
     setCommunity(c as Community);
+    if (!c) { setLoading(false); return; }
+    const cid = c.id;
 
     const today = new Date().toISOString().slice(0, 10);
     const { data: eventRows } = await supabase
       .from('community_events')
-      .select('id, title, date, start_time, location, event_type, capacity, distance_km, image_url')
-      .eq('community_id', id).eq('status', 'active').gte('date', today)
+      .select('id, slug, title, date, start_time, location, event_type, capacity, distance_km, image_url')
+      .eq('community_id', cid).eq('status', 'active').gte('date', today)
       .order('date', { ascending: true }).limit(10);
     setEvents((eventRows as EventRow[]) ?? []);
 
@@ -86,18 +91,18 @@ export default function CommunityDetailScreen() {
 
     const { data: postRows } = await supabase
       .from('community_posts').select('id, post_type, body, created_at, author_user_id')
-      .eq('community_id', id).order('created_at', { ascending: false }).limit(10);
+      .eq('community_id', cid).order('created_at', { ascending: false }).limit(10);
     setPosts((postRows as PostRow[]) ?? []);
 
     const { data: challengeRows } = await supabase
       .from('challenges').select('id, title, metric, target_value, period_start, period_end')
-      .eq('community_id', id).eq('is_active', true).order('period_start', { ascending: false });
+      .eq('community_id', cid).eq('is_active', true).order('period_start', { ascending: false });
     setChallenges((challengeRows as ChallengeRow[]) ?? []);
 
     if (uid) {
       const [{ data: follow }, { data: membership }] = await Promise.all([
-        supabase.from('community_follows').select('id').eq('community_id', id).eq('user_id', uid).maybeSingle(),
-        supabase.from('community_members').select('status').eq('community_id', id).eq('user_id', uid).maybeSingle(),
+        supabase.from('community_follows').select('id').eq('community_id', cid).eq('user_id', uid).maybeSingle(),
+        supabase.from('community_members').select('status').eq('community_id', cid).eq('user_id', uid).maybeSingle(),
       ]);
       setIsFollowing(!!follow);
       setMembershipStatus(membership ? (membership.status === 'active' ? 'active' : 'pending') : 'none');
@@ -113,7 +118,7 @@ export default function CommunityDetailScreen() {
 
   const handleShare = async () => {
     if (!community) return;
-    const url = `https://activecitypass.com/community/${community.id}`;
+    const url = `https://activecitypass.com/community/${community.slug ?? community.id}`;
     const message = `Join "${community.name}" on Active CityPass\n\n${url}`;
     try {
       await Share.share({ message, url: Platform.OS === 'ios' ? url : undefined, title: community.name });
@@ -126,24 +131,24 @@ export default function CommunityDetailScreen() {
   };
 
   const toggleFollow = () => requireAuth(async () => {
-    if (!id || !userId) return;
+    if (!community || !userId) return;
     setBusy(true);
     if (isFollowing) {
-      await supabase.from('community_follows').delete().eq('community_id', id).eq('user_id', userId);
+      await supabase.from('community_follows').delete().eq('community_id', community.id).eq('user_id', userId);
       setIsFollowing(false);
     } else {
-      await supabase.from('community_follows').insert({ community_id: id, user_id: userId });
+      await supabase.from('community_follows').insert({ community_id: community.id, user_id: userId });
       setIsFollowing(true);
     }
     setBusy(false);
   });
 
   const handleJoin = () => requireAuth(async () => {
-    if (!id || !userId || !community) return;
+    if (!community || !userId) return;
     setBusy(true);
     const isOpen = community.community_type === 'open';
     const { error } = await supabase.from('community_members').insert({
-      community_id: id, user_id: userId, status: isOpen ? 'active' : 'pending',
+      community_id: community.id, user_id: userId, status: isOpen ? 'active' : 'pending',
     });
     setBusy(false);
     if (error) { Alert.alert('Could not join', error.message); return; }
@@ -158,8 +163,8 @@ export default function CommunityDetailScreen() {
       {
         text: 'Leave', style: 'destructive',
         onPress: async () => {
-          if (!id || !userId) return;
-          await supabase.from('community_members').delete().eq('community_id', id).eq('user_id', userId);
+          if (!community || !userId) return;
+          await supabase.from('community_members').delete().eq('community_id', community.id).eq('user_id', userId);
           setMembershipStatus('none');
           load();
         },
@@ -250,7 +255,7 @@ export default function CommunityDetailScreen() {
                   key={e.id}
                   style={s.eventCard}
                   activeOpacity={0.85}
-                  onPress={() => router.push({ pathname: '/community/[id]/event/[eventId]', params: { id: community.id, eventId: e.id } } as any)}
+                  onPress={() => router.push({ pathname: '/community/[id]/event/[eventId]', params: { id: community.slug ?? community.id, eventId: e.slug ?? e.id } } as any)}
                 >
                   {e.image_url && <Image source={{ uri: e.image_url }} style={s.eventThumb} />}
                   <View style={{ flex: 1 }}>
@@ -280,7 +285,7 @@ export default function CommunityDetailScreen() {
                       key={c.id}
                       style={s.eventCard}
                       activeOpacity={0.85}
-                      onPress={() => router.push({ pathname: '/community/[id]/challenge/[challengeId]', params: { id: community.id, challengeId: c.id } } as any)}
+                      onPress={() => router.push({ pathname: '/community/[id]/challenge/[challengeId]', params: { id: community.slug ?? community.id, challengeId: c.id } } as any)}
                     >
                       <View style={{ flex: 1 }}>
                         <ThemedText style={s.eventTitle}>{c.title}</ThemedText>

@@ -21,6 +21,7 @@ type Tab = "pending" | "active";
 export default function CommunityDashboardMembersPage() {
   const router = useRouter();
   const [communityId, setCommunityId] = useState<string | null>(null);
+  const [communitySlug, setCommunitySlug] = useState<string | null>(null);
   const [inviteToken, setInviteToken] = useState<string | null>(null);
   const [regenerating, setRegenerating] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -44,8 +45,9 @@ export default function CommunityDashboardMembersPage() {
     setCommunityId(cid);
     if (!cid) { setLoading(false); return; }
 
-    const { data: communityRow } = await supabase.from("communities").select("invite_token").eq("id", cid).single();
+    const { data: communityRow } = await supabase.from("communities").select("slug, invite_token").eq("id", cid).single();
     setInviteToken(communityRow?.invite_token ?? null);
+    setCommunitySlug(communityRow?.slug ?? null);
 
     const { data: memberRows } = await supabase
       .from("community_members")
@@ -66,9 +68,11 @@ export default function CommunityDashboardMembersPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  const inviteUrl = inviteToken && communityId ? `${INVITE_BASE_URL}/${communitySlug ?? communityId}/${inviteToken}` : null;
+
   const copyInviteLink = async () => {
-    if (!inviteToken) return;
-    await navigator.clipboard.writeText(`${INVITE_BASE_URL}/${inviteToken}`);
+    if (!inviteUrl) return;
+    await navigator.clipboard.writeText(inviteUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -114,10 +118,10 @@ export default function CommunityDashboardMembersPage() {
     <div className="p-6 lg:p-8 max-w-3xl">
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Members</h1>
 
-      {inviteToken && (
+      {inviteUrl && (
         <div className="bg-blue-50 border border-blue-100 rounded-2xl p-5 mb-8">
           <p className="text-sm font-bold text-blue-900 mb-2">Invite people</p>
-          <p className="text-xs text-gray-600 mb-3 truncate">{`${INVITE_BASE_URL}/${inviteToken}`}</p>
+          <p className="text-xs text-gray-600 mb-3 truncate">{inviteUrl}</p>
           <div className="flex gap-2">
             <button onClick={copyInviteLink} className="px-4 py-2 rounded-full bg-black text-white text-xs font-semibold hover:bg-gray-800 transition">
               {copied ? "Copied!" : "Copy link"}

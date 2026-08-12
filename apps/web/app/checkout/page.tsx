@@ -134,7 +134,7 @@ export default async function CheckoutPage({
         depositAmount={price}
         remainderAmount={0}
         fullPayment
-        backUrl={`/community/${community?.slug ?? community?.id}/event/${event.id}`}
+        backUrl={`/community/${community?.slug ?? community?.id}/event/${event.slug ?? event.id}`}
         backLabel="Back to event"
       />
     );

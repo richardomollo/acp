@@ -14,7 +14,7 @@ interface ResolvedInvite {
 }
 
 export default function CommunityJoinScreen() {
-  const { token } = useLocalSearchParams<{ token: string }>();
+  const { token } = useLocalSearchParams<{ slug: string; token: string }>();
   const router = useRouter();
   const { showAuthModal } = useAuthModal();
 
@@ -44,7 +44,7 @@ export default function CommunityJoinScreen() {
     }
 
     setStatus('joined');
-    router.replace({ pathname: '/community/[id]', params: { id: inv.community_id } } as any);
+    router.replace({ pathname: '/community/[id]', params: { id: inv.slug ?? inv.community_id } } as any);
   }, [router, showAuthModal]);
 
   useEffect(() => {

@@ -1,15 +1,56 @@
 import { useRouter } from 'expo-router';
-import { StyleSheet, View, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Switch } from 'react-native';
+import { StyleSheet, View, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Switch, Image } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
 
 interface Community {
-  id: string; name: string; description: string | null; location: string | null;
+  id: string; name: string; description: string | null; location: string | null; category: string;
+  logo_url: string | null; cover_url: string | null;
   community_type: 'open' | 'approval_required'; review_status: string;
+}
+
+const CATEGORIES = [
+  { key: 'running',        label: 'Running' },
+  { key: 'walking',        label: 'Walking' },
+  { key: 'cycling',        label: 'Cycling' },
+  { key: 'strength',       label: 'Strength' },
+  { key: 'boxing',         label: 'Boxing' },
+  { key: 'yoga',           label: 'Yoga' },
+  { key: 'pilates',        label: 'Pilates' },
+  { key: 'hiking',         label: 'Hiking' },
+  { key: 'dance',          label: 'Dance' },
+  { key: 'outdoor_fitness', label: 'Outdoor Fitness' },
+  { key: 'football',       label: 'Football' },
+  { key: 'other',          label: 'Other' },
+] as const;
+
+async function uploadCommunityImage(base64: string, uri: string): Promise<string | null> {
+  try {
+    const ext = uri.split('.').pop()?.toLowerCase() || 'jpg';
+    const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
+    const filename = `communities/temp/${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
+
+    const binaryStr = atob(base64);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+
+    const { data, error } = await supabase.storage
+      .from('fitpass-images')
+      .upload(filename, bytes, { contentType: mimeType, upsert: true });
+    if (error) throw error;
+
+    const { data: urlData } = supabase.storage.from('fitpass-images').getPublicUrl(data.path);
+    return urlData.publicUrl;
+  } catch (error) {
+    console.error('Upload error:', error);
+    Alert.alert('Error', 'Failed to upload image');
+    return null;
+  }
 }
 
 export default function CommunityProfileScreen() {
@@ -18,6 +59,11 @@ export default function CommunityProfileScreen() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
+  const [category, setCategory] = useState('other');
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [coverUrl, setCoverUrl] = useState<string | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingCover, setUploadingCover] = useState(false);
   const [approvalRequired, setApprovalRequired] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -31,7 +77,7 @@ export default function CommunityProfileScreen() {
     if (!user) { setLoading(false); return; }
 
     const [{ data: membership }, { data: gym }, { data: pt }] = await Promise.all([
-      supabase.from('community_members').select('communities(id, name, description, location, community_type, review_status)')
+      supabase.from('community_members').select('communities(id, name, description, location, category, logo_url, cover_url, community_type, review_status)')
         .eq('user_id', user.id).in('role', ['owner', 'admin']).eq('status', 'active')
         .order('created_at', { ascending: false }).limit(1).maybeSingle(),
       supabase.from('gyms').select('id').ilike('contact_email', user.email ?? '').maybeSingle(),
@@ -44,6 +90,9 @@ export default function CommunityProfileScreen() {
       setName(c.name);
       setDescription(c.description ?? '');
       setLocation(c.location ?? '');
+      setCategory(c.category);
+      setLogoUrl(c.logo_url ?? null);
+      setCoverUrl(c.cover_url ?? null);
       setApprovalRequired(c.community_type === 'approval_required');
     }
     setHasVenueRole(!!gym);
@@ -53,6 +102,31 @@ export default function CommunityProfileScreen() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
+  const pickImage = async (target: 'logo' | 'cover') => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow photo access to update your photos.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'], quality: 0.7, base64: true, allowsEditing: true,
+      aspect: target === 'logo' ? [1, 1] : [16, 9],
+    });
+    if (result.canceled || !result.assets?.[0]?.base64) return;
+    const setUploading = target === 'logo' ? setUploadingLogo : setUploadingCover;
+    setUploading(true);
+    const url = await uploadCommunityImage(result.assets[0].base64, result.assets[0].uri);
+    if (url) {
+      if (target === 'logo') setLogoUrl(url); else setCoverUrl(url);
+      if (community) {
+        await supabase.from('communities').update(
+          target === 'logo' ? { logo_url: url } : { cover_url: url }
+        ).eq('id', community.id);
+      }
+    }
+    setUploading(false);
+  };
+
   const handleSave = async () => {
     if (!community) return;
     setSaving(true);
@@ -60,6 +134,7 @@ export default function CommunityProfileScreen() {
       name: name.trim(),
       description: description.trim() || null,
       location: location.trim() || null,
+      category,
       community_type: approvalRequired ? 'approval_required' : 'open',
     }).eq('id', community.id);
     setSaving(false);
@@ -94,6 +169,51 @@ export default function CommunityProfileScreen() {
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.inputGroup}>
+          <ThemedText style={styles.inputLabel}>Cover photo</ThemedText>
+          <TouchableOpacity
+            style={styles.coverPicker}
+            onPress={() => editing && pickImage('cover')}
+            disabled={!editing || uploadingCover}
+            activeOpacity={editing ? 0.8 : 1}
+          >
+            {uploadingCover ? (
+              <ActivityIndicator color="#000" />
+            ) : coverUrl ? (
+              <Image source={{ uri: coverUrl }} style={styles.coverImage} />
+            ) : (
+              <>
+                <Ionicons name="image-outline" size={24} color="#666" />
+                <ThemedText style={styles.imagePickerText}>{editing ? 'Add cover photo' : 'No cover photo'}</ThemedText>
+              </>
+            )}
+            {editing && coverUrl && (
+              <View style={styles.imageEditBadge}><Ionicons name="camera" size={14} color="#fff" /></View>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.inputGroup}>
+          <ThemedText style={styles.inputLabel}>Logo</ThemedText>
+          <TouchableOpacity
+            style={styles.logoPicker}
+            onPress={() => editing && pickImage('logo')}
+            disabled={!editing || uploadingLogo}
+            activeOpacity={editing ? 0.8 : 1}
+          >
+            {uploadingLogo ? (
+              <ActivityIndicator color="#000" />
+            ) : logoUrl ? (
+              <Image source={{ uri: logoUrl }} style={styles.logoImage} />
+            ) : (
+              <Ionicons name="image-outline" size={22} color="#666" />
+            )}
+            {editing && (
+              <View style={styles.imageEditBadgeSmall}><Ionicons name="camera" size={11} color="#fff" /></View>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.inputGroup}>
           <ThemedText style={styles.inputLabel}>Name</ThemedText>
           {editing ? (
             <TextInput style={styles.input} value={name} onChangeText={setName} />
@@ -108,6 +228,21 @@ export default function CommunityProfileScreen() {
             <TextInput style={styles.input} value={location} onChangeText={setLocation} />
           ) : (
             <ThemedText style={styles.readValue}>{community.location || '—'}</ThemedText>
+          )}
+        </View>
+
+        <View style={styles.inputGroup}>
+          <ThemedText style={styles.inputLabel}>Activity</ThemedText>
+          {editing ? (
+            <View style={styles.chipRow}>
+              {CATEGORIES.map(c => (
+                <TouchableOpacity key={c.key} style={[styles.chip, category === c.key && styles.chipActive]} onPress={() => setCategory(c.key)}>
+                  <ThemedText style={[styles.chipText, category === c.key && styles.chipTextActive]}>{c.label}</ThemedText>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : (
+            <ThemedText style={styles.readValue}>{CATEGORIES.find(c => c.key === community.category)?.label ?? community.category}</ThemedText>
           )}
         </View>
 
@@ -167,6 +302,33 @@ const styles = StyleSheet.create({
   input: { backgroundColor: '#fff', borderRadius: 12, padding: 14, fontSize: 15, color: '#000', borderWidth: 1, borderColor: '#e0e0e0' },
   textArea: { minHeight: 90, textAlignVertical: 'top' },
   helperText: { fontSize: 12, color: '#888', marginTop: 1 },
+  coverPicker: {
+    height: 130, borderRadius: 14, backgroundColor: '#f9fafb',
+    borderWidth: 1, borderColor: '#e0e0e0', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+  },
+  coverImage: { width: '100%', height: '100%' },
+  logoPicker: {
+    width: 72, height: 72, borderRadius: 36, backgroundColor: '#f9fafb',
+    borderWidth: 1, borderColor: '#e0e0e0', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+  },
+  logoImage: { width: 72, height: 72 },
+  imagePickerText: { fontSize: 12, color: '#666', marginTop: 6 },
+  imageEditBadge: {
+    position: 'absolute', bottom: 8, right: 8, width: 26, height: 26, borderRadius: 13,
+    backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff',
+  },
+  imageEditBadgeSmall: {
+    position: 'absolute', bottom: 0, right: 0, width: 22, height: 22, borderRadius: 11,
+    backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff',
+  },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: {
+    paddingHorizontal: 12, paddingVertical: 7, borderRadius: 18,
+    backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e0e0e0',
+  },
+  chipActive: { backgroundColor: '#000', borderColor: '#000' },
+  chipText: { fontSize: 12.5, fontWeight: '600', color: '#444' },
+  chipTextActive: { color: '#fff' },
   switchRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 24 },
   switchBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,

@@ -286,7 +286,7 @@ function CommunityEventCard({ event }: { event: any }) {
 
   return (
     <Link
-      href={`/community/${community?.slug ?? community?.id ?? ""}/event/${event.id}`}
+      href={`/community/${community?.slug ?? community?.id ?? ""}/event/${event.slug ?? event.id}`}
       className="group flex-shrink-0 w-44 rounded-2xl overflow-hidden bg-white border border-gray-100 shadow-sm hover:shadow-md transition-shadow block"
     >
       <div className="relative overflow-hidden" style={{ height: 140 }}>
@@ -364,7 +364,7 @@ export default async function DiscoverPage() {
       .limit(8),
     supabase
       .from("community_events")
-      .select("id, title, date, event_type, price_kes, image_url, communities(id, slug, name)")
+      .select("id, slug, title, date, event_type, price_kes, image_url, communities(id, slug, name)")
       .eq("status", "active")
       .gte("date", todayStr)
       .order("date", { ascending: true })

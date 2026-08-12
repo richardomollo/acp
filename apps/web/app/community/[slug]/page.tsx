@@ -70,12 +70,21 @@ export default async function CommunityDetailPage({ params }: Props) {
   const todayStr = new Date().toISOString().split("T")[0];
   const { data: events } = await supabase
     .from("community_events")
-    .select("id, title, date, start_time, location, event_type, price_kes, image_url")
+    .select("id, slug, title, date, start_time, location, event_type, price_kes, image_url")
     .eq("community_id", community.id)
     .eq("status", "active")
     .gte("date", todayStr)
     .order("date", { ascending: true })
     .limit(20);
+
+  const { data: challenges } = await supabase
+    .from("challenges")
+    .select("id, title, metric, target_value, period_start, period_end")
+    .eq("community_id", community.id)
+    .eq("is_active", true)
+    .order("period_start", { ascending: false });
+
+  const METRIC_UNIT: Record<string, string> = { distance_km: "km", activity_count: "activities", days_active: "days" };
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-10">
@@ -129,7 +138,7 @@ export default async function CommunityDetailPage({ params }: Props) {
                 {(events ?? []).map((e: any) => (
                   <Link
                     key={e.id}
-                    href={`/community/${community.slug ?? community.id}/event/${e.id}`}
+                    href={`/community/${community.slug ?? community.id}/event/${e.slug ?? e.id}`}
                     className="flex items-center gap-4 p-3.5 rounded-2xl border border-gray-100 bg-white shadow-sm hover:shadow-md transition-shadow"
                   >
                     {e.image_url ? (
@@ -149,6 +158,31 @@ export default async function CommunityDetailPage({ params }: Props) {
               </div>
             )}
           </div>
+
+          {(challenges ?? []).length > 0 && (
+            <div className="mt-10">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Challenges</h2>
+              <div className="space-y-3">
+                {(challenges ?? []).map((c: any) => (
+                  <Link
+                    key={c.id}
+                    href={`/community/${community.slug ?? community.id}/challenge/${c.id}`}
+                    className="flex items-center justify-between gap-4 p-3.5 rounded-2xl border border-gray-100 bg-white shadow-sm hover:shadow-md transition-shadow"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-semibold text-gray-900 text-sm truncate">{c.title}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        Target {c.target_value} {METRIC_UNIT[c.metric] ?? c.metric} · ends {new Date(`${c.period_end}T00:00:00`).toLocaleDateString("en-KE", { day: "numeric", month: "short" })}
+                      </p>
+                    </div>
+                    <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
 
           <CommunityShareBar communityId={community.slug ?? community.id} name={community.name} category={CATEGORY_LABEL[community.category] ?? community.category} />
         </div>

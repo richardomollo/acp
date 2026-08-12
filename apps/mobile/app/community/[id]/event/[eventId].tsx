@@ -13,14 +13,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import QRCode from 'react-native-qrcode-svg';
 
 interface EventDetail {
-  id: string; community_id: string; title: string; description: string | null;
+  id: string; slug: string | null; community_id: string; title: string; description: string | null;
   event_type: 'free' | 'paid' | 'partner_session' | 'external';
   activity_type: string | null; difficulty: string | null;
   date: string; start_time: string; end_time: string | null; location: string;
   capacity: number | null; price_kes: number | null; distance_km: number | null;
   external_url: string | null; status: string; image_url: string | null;
-  communities: { name: string; logo_url: string | null } | null;
+  communities: { name: string; logo_url: string | null; slug: string | null } | null;
 }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 interface Attendee {
   id: string; status: string; confirmation_code: string | null; checked_in: boolean;
   activity_id: string | null;
@@ -67,22 +69,25 @@ export default function CommunityEventDetailScreen() {
     const uid = session?.user.id ?? null;
     setUserId(uid);
 
+    const col = UUID_RE.test(eventId) ? 'id' : 'slug';
     const { data: e } = await supabase
       .from('community_events')
-      .select('id, community_id, title, description, event_type, activity_type, difficulty, date, start_time, end_time, location, capacity, price_kes, distance_km, external_url, status, image_url, communities(name, logo_url)')
-      .eq('id', eventId).single();
+      .select('id, slug, community_id, title, description, event_type, activity_type, difficulty, date, start_time, end_time, location, capacity, price_kes, distance_km, external_url, status, image_url, communities(name, logo_url, slug)')
+      .eq(col, eventId).single();
     setEvent(e as any);
+    if (!e) { setLoading(false); return; }
+    const eid = e.id;
 
     const { count } = await supabase
       .from('community_event_attendees').select('id', { count: 'exact', head: true })
-      .eq('event_id', eventId).eq('status', 'going');
+      .eq('event_id', eid).eq('status', 'going');
     setGoingCount(count ?? 0);
 
     if (uid) {
       const { data: a } = await supabase
         .from('community_event_attendees')
         .select('id, status, confirmation_code, checked_in, activity_id, activities(distance_meters, moving_time_seconds)')
-        .eq('event_id', eventId).eq('user_id', uid).maybeSingle();
+        .eq('event_id', eid).eq('user_id', uid).maybeSingle();
       setAttendee(a as any);
     } else {
       setAttendee(null);
@@ -126,7 +131,7 @@ export default function CommunityEventDetailScreen() {
 
   const handleShare = async () => {
     if (!event) return;
-    const url = `https://activecitypass.com/community/${event.community_id}/event/${event.id}`;
+    const url = `https://activecitypass.com/community/${event.communities?.slug ?? event.community_id}/event/${event.slug ?? event.id}`;
     const message = `Join "${event.title}"${event.communities?.name ? ` with ${event.communities.name}` : ''} — ${fmtDate(event.date)}\n\n${url}`;
     try {
       await Share.share({ message, url: Platform.OS === 'ios' ? url : undefined, title: event.title });

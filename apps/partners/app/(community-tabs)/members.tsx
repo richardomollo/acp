@@ -17,6 +17,7 @@ type Tab = 'pending' | 'active';
 
 export default function CommunityMembersScreen() {
   const [communityId, setCommunityId] = useState<string | null>(null);
+  const [communitySlug, setCommunitySlug] = useState<string | null>(null);
   const [inviteToken, setInviteToken] = useState<string | null>(null);
   const [regenerating, setRegenerating] = useState(false);
   const [members, setMembers] = useState<MemberRow[]>([]);
@@ -40,8 +41,9 @@ export default function CommunityMembersScreen() {
     if (!cid) { setLoading(false); return; }
 
     const { data: communityRow } = await supabase
-      .from('communities').select('invite_token').eq('id', cid).single();
+      .from('communities').select('slug, invite_token').eq('id', cid).single();
     setInviteToken(communityRow?.invite_token ?? null);
+    setCommunitySlug(communityRow?.slug ?? null);
 
     const { data: memberRows } = await supabase
       .from('community_members')
@@ -63,9 +65,11 @@ export default function CommunityMembersScreen() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
+  const inviteUrl = inviteToken && communityId ? `${INVITE_BASE_URL}/${communitySlug ?? communityId}/${inviteToken}` : null;
+
   const copyInviteLink = () => {
-    if (!inviteToken) return;
-    Clipboard.setString(`${INVITE_BASE_URL}/${inviteToken}`);
+    if (!inviteUrl) return;
+    Clipboard.setString(inviteUrl);
     Alert.alert('Copied', 'Invite link copied to clipboard.');
   };
 
@@ -149,13 +153,13 @@ export default function CommunityMembersScreen() {
         <ActivityIndicator size="large" color="#000" style={{ marginTop: 60 }} />
       ) : (
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          {inviteToken && (
+          {inviteUrl && (
             <View style={styles.inviteCard}>
               <View style={styles.inviteCardHeader}>
                 <Ionicons name="link-outline" size={16} color="#1d3cb0" />
                 <ThemedText style={styles.inviteCardTitle}>Invite people</ThemedText>
               </View>
-              <ThemedText style={styles.inviteLink} numberOfLines={1}>{`${INVITE_BASE_URL}/${inviteToken}`}</ThemedText>
+              <ThemedText style={styles.inviteLink} numberOfLines={1}>{inviteUrl}</ThemedText>
               <View style={styles.inviteBtnRow}>
                 <TouchableOpacity style={styles.inviteCopyBtn} onPress={copyInviteLink}>
                   <Ionicons name="copy-outline" size={14} color="#fff" />
