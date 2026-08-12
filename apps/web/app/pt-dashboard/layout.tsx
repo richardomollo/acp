@@ -41,8 +41,20 @@ export default async function PTDashboardServerLayout({
     .ilike("contact_email", user.email ?? "")
     .maybeSingle();
 
+  const { data: communityMembership } = await supabase
+    .from("community_members")
+    .select("communities(review_status)")
+    .eq("user_id", user.id)
+    .in("role", ["owner", "admin"])
+    .eq("status", "active")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const communityStatus = (communityMembership?.communities as any)?.review_status as
+    | "pending" | "approved" | "rejected" | undefined;
+
   return (
-    <PTDashboardLayout ptId={pt.id} ptName={displayName} hasVenueRole={!!gym}>
+    <PTDashboardLayout ptId={pt.id} ptName={displayName} hasVenueRole={!!gym} communityStatus={communityStatus}>
       {children}
     </PTDashboardLayout>
   );

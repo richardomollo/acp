@@ -23,6 +23,21 @@ interface UserProfile {
   avatar_url: string | null;
 }
 
+interface ClubMembership {
+  community_id: string;
+  role: string;
+  communities: {
+    id: string; slug: string | null; name: string; category: string;
+    logo_url: string | null; member_count: number;
+  } | null;
+}
+
+const CATEGORY_LABEL: Record<string, string> = {
+  running: 'Running', walking: 'Walking', cycling: 'Cycling', strength: 'Strength',
+  boxing: 'Boxing', yoga: 'Yoga', pilates: 'Pilates', hiking: 'Hiking', dance: 'Dance',
+  outdoor_fitness: 'Outdoor Fitness', football: 'Football', other: 'Other',
+};
+
 // ─── Avatar upload ────────────────────────────────────────────────────────────
 
 async function uploadAvatarImage(base64: string, uri: string): Promise<string | null> {
@@ -76,6 +91,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { showAuthModal } = useAuthModal();
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [clubs, setClubs] = useState<ClubMembership[]>([]);
   const [loading, setLoading] = useState(true);
   const [isGuest, setIsGuest] = useState(false);
 
@@ -133,6 +149,14 @@ export default function ProfileScreen() {
       setUser(profile);
       setEditName(profile.name || '');
       setEditPhone(profile.phone || '');
+
+      const { data: clubRows } = await supabase
+        .from('community_members')
+        .select('community_id, role, communities(id, slug, name, category, logo_url, member_count)')
+        .eq('user_id', session.user.id)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false });
+      setClubs((clubRows as any) ?? []);
     } catch (err) {
       console.error('Profile load error:', err);
     } finally {
@@ -313,6 +337,56 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* ── My Clubs ── */}
+        <View style={styles.menuSection}>
+          <View style={styles.clubsSectionHeader}>
+            <ThemedText style={[styles.menuSectionTitle, { marginBottom: 0, marginLeft: 0 }]}>MY CLUBS</ThemedText>
+            <TouchableOpacity onPress={() => router.push('/(tabs)/communities' as any)} hitSlop={8}>
+              <ThemedText style={styles.clubsDiscoverLink}>Discover</ThemedText>
+            </TouchableOpacity>
+          </View>
+          {clubs.length === 0 ? (
+            <View style={styles.menuCard}>
+              <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/(tabs)/communities' as any)}>
+                <View style={styles.menuItemLeft}>
+                  <Ionicons name="people-outline" size={20} color={palette.ink600} />
+                  <ThemedText style={styles.menuText}>Join a community</ThemedText>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={palette.gray200} />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.menuCard}>
+              {clubs.map((c, i) => c.communities && (
+                <View key={c.community_id}>
+                  {i > 0 && <View style={styles.menuDivider} />}
+                  <TouchableOpacity
+                    style={styles.menuItem}
+                    onPress={() => router.push({ pathname: '/community/[id]', params: { id: c.communities!.slug ?? c.communities!.id } } as any)}
+                  >
+                    <View style={styles.menuItemLeft}>
+                      {c.communities.logo_url ? (
+                        <Image source={{ uri: c.communities.logo_url }} style={styles.clubAvatar} />
+                      ) : (
+                        <View style={styles.clubAvatarFallback}>
+                          <ThemedText style={styles.clubAvatarFallbackText}>{c.communities.name[0]}</ThemedText>
+                        </View>
+                      )}
+                      <View style={{ flex: 1 }}>
+                        <ThemedText style={styles.menuText} numberOfLines={1}>{c.communities.name}</ThemedText>
+                        <ThemedText style={styles.clubMeta}>
+                          {CATEGORY_LABEL[c.communities.category] ?? c.communities.category} · {c.communities.member_count} members
+                        </ThemedText>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={palette.gray200} />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+
         {/* ── Preferences ── */}
         <View style={styles.menuSection}>
           <ThemedText style={styles.menuSectionTitle}>PREFERENCES</ThemedText>
@@ -490,9 +564,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 15,
   },
-  menuItemLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  menuItemLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 },
   menuText: { fontSize: fontSize.base, color: palette.ink900 },
   menuDivider: { height: 1, backgroundColor: palette.hairline, marginHorizontal: 16 },
+
+  clubsSectionHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginBottom: 8, marginLeft: 4, marginRight: 2,
+  },
+  clubsDiscoverLink: { fontSize: fontSize.sm, fontWeight: '600', color: palette.blue500 },
+  clubAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: palette.surfaceMuted },
+  clubAvatarFallback: { width: 36, height: 36, borderRadius: 18, backgroundColor: palette.blue25, alignItems: 'center', justifyContent: 'center' },
+  clubAvatarFallbackText: { fontSize: 14, fontWeight: '800', color: palette.blue500 },
+  clubMeta: { fontSize: fontSize.xs, color: palette.gray300, marginTop: 2, textTransform: 'capitalize' },
 
   // Sign out
   signOutSection: { paddingHorizontal: 16, paddingTop: 16 },

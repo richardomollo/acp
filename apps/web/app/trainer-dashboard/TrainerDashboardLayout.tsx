@@ -39,17 +39,26 @@ interface TrainerDashboardLayoutProps {
   children: React.ReactNode;
   trainerName: string;
   gymName: string;
+  communityStatus?: "pending" | "approved" | "rejected";
 }
 
 export default function TrainerDashboardLayout({
   children,
   trainerName,
   gymName,
+  communityStatus,
 }: TrainerDashboardLayoutProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+
+  const communityCta =
+    communityStatus === "approved"
+      ? { href: "/community-dashboard", label: "Community Dashboard" }
+      : communityStatus === "pending" || communityStatus === "rejected"
+      ? { href: "/community-onboarding/pending", label: "Community Status" }
+      : { href: "/community-onboarding", label: "Start a Community" };
 
   const isActive = (link: (typeof navLinks)[0]) =>
     link.exact ? pathname === link.href : pathname.startsWith(link.href);
@@ -100,7 +109,16 @@ export default function TrainerDashboardLayout({
           ))}
         </nav>
 
-        <div className="px-3 py-4 border-t border-white/10">
+        <div className="px-3 py-4 border-t border-white/10 space-y-1">
+          <Link
+            href={communityCta.href}
+            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 hover:bg-white/5 hover:text-white transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 100-8 4 4 0 000 8zm6 5v-2a4 4 0 00-3-3.87m-9.6 0A4 4 0 006 15.13V17" />
+            </svg>
+            {communityCta.label}
+          </Link>
           <button
             onClick={handleSignOut}
             disabled={signingOut}
@@ -165,7 +183,17 @@ export default function TrainerDashboardLayout({
                   </Link>
                 ))}
               </div>
-              <div className="px-3 py-4 border-t border-white/10">
+              <div className="px-3 py-4 border-t border-white/10 space-y-1">
+                <Link
+                  href={communityCta.href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:text-white transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 100-8 4 4 0 000 8zm6 5v-2a4 4 0 00-3-3.87m-9.6 0A4 4 0 006 15.13V17" />
+                  </svg>
+                  {communityCta.label}
+                </Link>
                 <button
                   onClick={handleSignOut}
                   disabled={signingOut}

@@ -31,7 +31,26 @@ type Booking = {
   sessions: { name: string; instructor: string } | null
 }
 
-type Tab = 'account' | 'bookings' | 'settings'
+type Club = {
+  community_id: string
+  role: string
+  communities: {
+    id: string
+    slug: string | null
+    name: string
+    category: string
+    logo_url: string | null
+    member_count: number
+  } | null
+}
+
+type Tab = 'account' | 'bookings' | 'clubs' | 'settings'
+
+const CATEGORY_LABEL: Record<string, string> = {
+  running: 'Running', walking: 'Walking', cycling: 'Cycling', strength: 'Strength',
+  boxing: 'Boxing', yoga: 'Yoga', pilates: 'Pilates', hiking: 'Hiking', dance: 'Dance',
+  outdoor_fitness: 'Outdoor Fitness', football: 'Football', other: 'Other',
+}
 
 const fmtDate = (d: string) =>
   new Date(d).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -41,6 +60,7 @@ export default function DashboardPage() {
   const [user, setUser] = useState<any>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [bookings, setBookings] = useState<Booking[]>([])
+  const [clubs, setClubs] = useState<Club[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<Tab>('account')
   const [editing, setEditing] = useState(false)
@@ -56,7 +76,7 @@ export default function DashboardPage() {
       if (!session) { router.replace('/login'); return }
       setUser(session.user)
 
-      const [profileRes, bookingsRes] = await Promise.all([
+      const [profileRes, bookingsRes, clubsRes] = await Promise.all([
         supabase.from('users').select('*').eq('id', session.user.id).single(),
         supabase
           .from('bookings')
@@ -66,11 +86,18 @@ export default function DashboardPage() {
           .gte('booking_date', new Date().toISOString().split('T')[0])
           .order('booking_date', { ascending: true })
           .limit(10),
+        supabase
+          .from('community_members')
+          .select('community_id, role, communities(id, slug, name, category, logo_url, member_count)')
+          .eq('user_id', session.user.id)
+          .eq('status', 'active')
+          .order('created_at', { ascending: false }),
       ])
 
       setProfile(profileRes.data)
       setForm({ name: profileRes.data?.name || '', phone: profileRes.data?.phone || '' })
       setBookings(bookingsRes.data || [])
+      setClubs((clubsRes.data as any) || [])
       setLoading(false)
     }
     init()
@@ -109,6 +136,7 @@ export default function DashboardPage() {
   const navItems: { id: Tab; label: string }[] = [
     { id: 'account', label: 'Account' },
     { id: 'bookings', label: 'My Bookings' },
+    { id: 'clubs', label: 'My Clubs' },
     { id: 'settings', label: 'Settings' },
   ]
 
@@ -237,6 +265,59 @@ export default function DashboardPage() {
                           Confirmed
                         </span>
                       </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── CLUBS ── */}
+          {tab === 'clubs' && (
+            <div>
+              <div className="flex items-center justify-between mb-6 gap-3">
+                <h1 className="text-2xl font-semibold text-gray-900">My Clubs</h1>
+                <Link href="/community" className="flex-shrink-0">
+                  <button className="text-sm bg-gray-900 text-white px-5 py-2 rounded-full hover:bg-gray-700 transition font-medium whitespace-nowrap">
+                    Discover clubs
+                  </button>
+                </Link>
+              </div>
+              <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                {clubs.length === 0 ? (
+                  <div className="text-center py-16">
+                    <p className="text-gray-400 text-sm mb-4">You haven&apos;t joined any communities yet.</p>
+                    <Link href="/community" className="text-blue-600 text-sm font-medium hover:underline">
+                      Browse communities →
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-gray-100">
+                    {clubs.map(c => c.communities && (
+                      <Link
+                        key={c.community_id}
+                        href={`/community/${c.communities.slug ?? c.communities.id}`}
+                        className="flex items-center gap-3 px-4 md:px-6 py-4 hover:bg-gray-50 transition-colors"
+                      >
+                        {c.communities.logo_url ? (
+                          <img src={c.communities.logo_url} alt={c.communities.name} className="w-11 h-11 rounded-full object-cover flex-shrink-0" />
+                        ) : (
+                          <div className="w-11 h-11 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center text-sm font-bold flex-shrink-0">
+                            {c.communities.name[0]}
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 truncate">{c.communities.name}</p>
+                          <p className="text-xs text-gray-500 mt-0.5 truncate capitalize">
+                            {CATEGORY_LABEL[c.communities.category] ?? c.communities.category} · {c.communities.member_count} members
+                          </p>
+                        </div>
+                        {(c.role === 'owner' || c.role === 'admin') && (
+                          <span className="text-xs bg-blue-50 text-blue-600 px-2.5 py-0.5 rounded-full font-medium whitespace-nowrap flex-shrink-0 capitalize">
+                            {c.role}
+                          </span>
+                        )}
+                      </Link>
                     ))}
                   </div>
                 )}
