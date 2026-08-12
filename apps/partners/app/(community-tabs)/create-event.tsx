@@ -9,6 +9,22 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import DatePickerModal from '@/components/DatePickerModal';
 import * as ImagePicker from 'expo-image-picker';
+import DateTimePicker from '@react-native-community/datetimepicker';
+
+function timeStringToDate(time: string): Date {
+  const d = new Date();
+  const [h, m] = time.split(':').map(Number);
+  d.setHours(Number.isFinite(h) ? h : 18, Number.isFinite(m) ? m : 0, 0, 0);
+  return d;
+}
+
+function dateToTimeString(d: Date): string {
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function formatTimeLabel(time: string): string {
+  return timeStringToDate(time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
 
 async function uploadEventImage(base64: string, uri: string): Promise<string | null> {
   try {
@@ -64,6 +80,7 @@ export default function CreateCommunityEventScreen() {
   const [date, setDate] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [time, setTime] = useState('');
+  const [showTimePicker, setShowTimePicker] = useState(false);
   const [location, setLocation] = useState('');
   const [capacity, setCapacity] = useState('');
   const [priceKes, setPriceKes] = useState('');
@@ -320,7 +337,21 @@ export default function CreateCommunityEventScreen() {
           </View>
           <View style={[styles.inputGroup, { flex: 1 }]}>
             <ThemedText style={styles.inputLabel}>Start time</ThemedText>
-            <TextInput style={styles.input} placeholder="18:30" placeholderTextColor="#999" value={time} onChangeText={setTime} />
+            <TouchableOpacity style={[styles.input, styles.timeBtn]} onPress={() => setShowTimePicker(true)}>
+              <Ionicons name="time-outline" size={16} color="#666" />
+              <ThemedText style={{ color: time ? '#000' : '#999' }}>{time ? formatTimeLabel(time) : 'Select time'}</ThemedText>
+            </TouchableOpacity>
+            {showTimePicker && (
+              <DateTimePicker
+                value={timeStringToDate(time || '18:00')}
+                mode="time"
+                display="spinner"
+                onChange={(_, selected) => {
+                  setShowTimePicker(false);
+                  if (selected) setTime(dateToTimeString(selected));
+                }}
+              />
+            )}
           </View>
         </View>
 
@@ -403,6 +434,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#e0e0e0', justifyContent: 'center',
   },
   textArea: { minHeight: 90, textAlignVertical: 'top' },
+  timeBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   helperText: { fontSize: 13, color: '#888', lineHeight: 19 },
   imagePicker: {
     height: 120, borderRadius: 12, backgroundColor: '#f9fafb',
