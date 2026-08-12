@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
 
 const supabase = createBrowserClient(
@@ -20,6 +21,7 @@ type Props = {
 };
 
 export default function RsvpEventButton({ eventId, isFull, className }: Props) {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [loggedIn, setLoggedIn] = useState(false);
   const [status, setStatus] = useState<"none" | "going" | "waitlisted" | "pending_payment">("none");
@@ -49,7 +51,10 @@ export default function RsvpEventButton({ eventId, isFull, className }: Props) {
       event_id: eventId, user_id: user.id, confirmation_code: generateCode(),
     });
     setBusy(false);
-    if (!error) setStatus(isFull ? "waitlisted" : "going");
+    if (!error) {
+      setStatus(isFull ? "waitlisted" : "going");
+      router.refresh();
+    }
   };
 
   if (loading) return <button disabled className={className}>Loading…</button>;

@@ -51,10 +51,8 @@ export default function SignUpScreen() {
       });
       if (error) throw error;
       if (data.user) {
-        const { error: profileError } = await supabase
-          .from('users')
-          .insert([{ id: data.user.id, email: data.user.email, name }]);
-        if (profileError) throw profileError;
+        // handle_new_user() DB trigger already created the profile row with
+        // this name from options.data above — nothing left to do here.
         Alert.alert('Welcome!', 'Your account has been created.', [
           { text: 'Get started', onPress: () => router.replace(redirectTo as any) },
         ]);

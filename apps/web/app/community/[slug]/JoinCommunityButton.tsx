@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
 
 const supabase = createBrowserClient(
@@ -16,6 +17,7 @@ type Props = {
 };
 
 export default function JoinCommunityButton({ communityId, communityType, className }: Props) {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [loggedIn, setLoggedIn] = useState(false);
   const [status, setStatus] = useState<"none" | "pending" | "active">("none");
@@ -46,7 +48,10 @@ export default function JoinCommunityButton({ communityId, communityType, classN
       community_id: communityId, user_id: user.id, status: isOpen ? "active" : "pending",
     });
     setBusy(false);
-    if (!error) setStatus(isOpen ? "active" : "pending");
+    if (!error) {
+      setStatus(isOpen ? "active" : "pending");
+      router.refresh();
+    }
   };
 
   if (loading) {

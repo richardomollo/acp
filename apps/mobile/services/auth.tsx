@@ -9,11 +9,14 @@ export const signInWithApple = async (identityToken: string, fullName?: { givenN
   if (!data.user) throw new Error('Sign-in failed');
 
   const name = [fullName?.givenName, fullName?.familyName].filter(Boolean).join(' ');
-  await supabase.from('users').upsert({
-    id: data.user.id,
-    email: data.user.email ?? '',
-    name: name || data.user.user_metadata?.full_name || '',
-  }, { onConflict: 'id', ignoreDuplicates: true });
+  const resolvedName = name || data.user.user_metadata?.full_name || '';
+  if (resolvedName) {
+    await supabase.from('users').upsert({
+      id: data.user.id,
+      email: data.user.email ?? '',
+      name: resolvedName,
+    }, { onConflict: 'id' });
+  }
 
   return data;
 };
@@ -26,13 +29,16 @@ export const signInWithGoogle = async (idToken: string) => {
   if (error) throw error;
   if (!data.user) throw new Error('Sign-in failed');
 
-  // Upsert profile so Google users have a row in `users`
+  // Upsert profile so Google users have a row in `users`, and to backfill
+  // name/phone onto the row handle_new_user() already created.
+  const googleName = data.user.user_metadata?.full_name ?? data.user.user_metadata?.name ?? '';
+  const googlePhone = data.user.user_metadata?.phone ?? '';
   await supabase.from('users').upsert({
     id: data.user.id,
     email: data.user.email ?? '',
-    name: data.user.user_metadata?.full_name ?? data.user.user_metadata?.name ?? '',
-    phone: data.user.user_metadata?.phone ?? '',
-  }, { onConflict: 'id', ignoreDuplicates: true });
+    ...(googleName ? { name: googleName } : {}),
+    ...(googlePhone ? { phone: googlePhone } : {}),
+  }, { onConflict: 'id' });
 
   return data;
 };
@@ -74,21 +80,9 @@ export const authService = {
       if (authError) throw authError;
       if (!authData.user) throw new Error('Failed to create user');
 
-      // 2. Create user profile
-      const { error: profileError } = await supabase
-        .from('users')
-        .insert([
-          {
-            id: authData.user.id,
-            email: data.email,
-            name: data.name,
-            phone: data.phone,
-          },
-        ]);
-
-      if (profileError) {
-        console.error('Profile creation error:', profileError);
-      }
+      // The handle_new_user() DB trigger already created the profile row
+      // (with name/phone from options.data above) — no follow-up insert
+      // needed, and one would just fail on the id primary key.
 
       return {
         user: {
