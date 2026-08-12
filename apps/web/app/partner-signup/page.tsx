@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { APIProvider, useMapsLibrary } from "@vis.gl/react-google-maps";
 import { fetchVenueTypes, fetchPTSpecialisations } from "@/app/lib/lookups";
 import { NEIGHBOURHOOD_LABELS } from "@/app/lib/neighbourhoods";
@@ -160,6 +161,7 @@ type Question = {
 };
 
 export default function PartnerSignupPage() {
+  const router = useRouter();
   const [partnerTypes, setPartnerTypes] = useState<PartnerType[]>([]);
   const toggleType = (t: PartnerType) =>
     setPartnerTypes(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
@@ -514,7 +516,7 @@ export default function PartnerSignupPage() {
               <span>We recognised your existing account and linked it. Let's keep going.</span>
             </div>
           )}
-          <div className="grid sm:grid-cols-3 gap-4">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {TYPE_OPTIONS.map(({ key, label, sub, icon }) => {
               const selected = partnerTypes.includes(key);
               return (
@@ -549,6 +551,29 @@ export default function PartnerSignupPage() {
                 </button>
               );
             })}
+            <button
+              type="button"
+              onClick={() => router.push("/community-onboarding")}
+              className="relative text-left rounded-2xl p-5 transition border-2 border-gray-200 hover:border-gray-400 flex flex-col justify-start"
+            >
+              <div className="absolute top-4 right-4 text-gray-300">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                </svg>
+              </div>
+              <div className="flex flex-col items-start gap-3">
+                <div className="w-11 h-11 rounded-xl flex-shrink-0 flex items-center justify-center bg-gray-100 text-gray-600">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+                      d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 100-8 4 4 0 000 8zm6 5v-2a4 4 0 00-3-3.87m-9.6 0A4 4 0 006 15.13V17" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900 text-sm leading-snug mb-1 pr-6">Community & Clubs</h3>
+                  <p className="text-xs text-gray-500">Running clubs, cycling crews, yoga circles, or any activity group — this is a separate, quicker signup</p>
+                </div>
+              </div>
+            </button>
           </div>
         </div>
       ),
