@@ -207,6 +207,29 @@ function firstPayout(d: any) {
   `)
 }
 
+function partnerSetupIncomplete(d: any) {
+  const steps: string[] = []
+  if (d.missingPhoto) {
+    steps.push(`<p style="margin:0 0 5px;font-size:14px;color:#555;">📸 <strong>Add a cover photo</strong> — go to Dashboard → Venue → Edit, and upload a photo. Listings with no photo get skipped by customers.</p>`)
+  }
+  if (d.missingOfferings) {
+    steps.push(`<p style="margin:0 0 5px;font-size:14px;color:#555;">🗓️ <strong>Add your first class or experience</strong> — go to Dashboard → Classes → Add Class (or Experiences → Add Experience). Customers can't book what isn't listed.</p>`)
+  }
+  return wrap(`
+    <h1 style="${h1}">Your listing isn't finished yet</h1>
+    <p style="${p}">Hi ${d.businessName},</p>
+    <p style="${p}">Your Active CityPass listing has been live for a while, but it's still missing a couple of things that keep customers from booking with you.</p>
+    <div style="${card}">
+      <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#333;">What's left</p>
+      ${steps.join('')}
+    </div>
+    <a href="${d.dashboardUrl}" style="${btn}">Finish Your Listing →</a>
+    <p style="${p}">Questions? Just reply to this email or reach us at <a href="mailto:info@activecitypass.com" style="color:#000;font-weight:600;">info@activecitypass.com</a>.</p>
+    <div style="${foot}">Active CityPass | Nairobi, Kenya<br>
+      <a href="mailto:info@activecitypass.com" style="color:#aaa;">info@activecitypass.com</a></div>
+  `)
+}
+
 function partnerApplicationReceived(d: any) {
   return wrap(`
     <h1 style="${h1}">We've received your application!</h1>
@@ -494,6 +517,10 @@ serve(async (req) => {
       case 'first_payout':
         html = firstPayout(data)
         subject = 'Congratulations on your first payout!'
+        break
+      case 'partner_setup_incomplete':
+        html = partnerSetupIncomplete(data)
+        subject = `${data.businessName}, your Active CityPass listing isn't finished yet`
         break
       case 'partner_application_received':
         html = partnerApplicationReceived(data)

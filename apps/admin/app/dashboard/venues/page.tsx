@@ -18,6 +18,7 @@ type Gym = {
   rate_floor: number | null;
   rate_floor_percentage: number | null;
   created_at: string;
+  setup_reminder_sent_at: string | null;
 };
 
 const VENUE_TYPES_FALLBACK = ['gym', 'yoga', 'pilates', 'studio', 'crossfit', 'martial-arts', 'swimming', 'spa', 'dance', 'kids'];
@@ -26,10 +27,12 @@ const inp = 'w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ou
 
 export default function VenuesPage() {
   const [gyms, setGyms] = useState<Gym[]>([]);
+  const [offeringCounts, setOfferingCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [filterSetup, setFilterSetup] = useState('all');
 
   const [editGym, setEditGym] = useState<Gym | null>(null);
   const [editForm, setEditForm] = useState<Partial<Gym>>({});
@@ -57,12 +60,21 @@ export default function VenuesPage() {
   }
 
   async function loadGyms() {
-    const { data, error } = await supabase
-      .from('gyms')
-      .select('*')
-      .order('created_at', { ascending: false });
+    const [{ data, error }, { data: sessionRows }, { data: experienceRows }] = await Promise.all([
+      supabase.from('gyms').select('*').order('created_at', { ascending: false }),
+      supabase.from('sessions').select('gym_id'),
+      supabase.from('experiences').select('gym_id'),
+    ]);
     if (!error) setGyms(data || []);
+    const counts: Record<string, number> = {};
+    for (const r of sessionRows ?? []) counts[r.gym_id] = (counts[r.gym_id] ?? 0) + 1;
+    for (const r of experienceRows ?? []) counts[r.gym_id] = (counts[r.gym_id] ?? 0) + 1;
+    setOfferingCounts(counts);
     setLoading(false);
+  }
+
+  function isIncomplete(gym: Gym) {
+    return !gym.image_url || (offeringCounts[gym.id] ?? 0) === 0;
   }
 
   async function toggleActive(gym: Gym) {
@@ -136,7 +148,10 @@ export default function VenuesPage() {
     const matchStatus = filterStatus === 'all' ||
       (filterStatus === 'active' && g.is_active) ||
       (filterStatus === 'inactive' && !g.is_active);
-    return matchSearch && matchType && matchStatus;
+    const matchSetup = filterSetup === 'all' ||
+      (filterSetup === 'incomplete' && isIncomplete(g)) ||
+      (filterSetup === 'complete' && !isIncomplete(g));
+    return matchSearch && matchType && matchStatus && matchSetup;
   });
 
   if (loading) return <div className="p-8 text-gray-500">Loading venues…</div>;
@@ -147,7 +162,12 @@ export default function VenuesPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Venues</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{gyms.length} total · {gyms.filter(g => g.is_active).length} active</p>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {gyms.length} total · {gyms.filter(g => g.is_active).length} active ·{' '}
+            <span className={gyms.filter(isIncomplete).length > 0 ? 'text-amber-600 font-medium' : ''}>
+              {gyms.filter(isIncomplete).length} incomplete setup
+            </span>
+          </p>
         </div>
       </div>
 
@@ -171,6 +191,12 @@ export default function VenuesPage() {
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
         </select>
+        <select value={filterSetup} onChange={e => setFilterSetup(e.target.value)}
+          className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="all">All setup states</option>
+          <option value="incomplete">Incomplete setup</option>
+          <option value="complete">Complete setup</option>
+        </select>
       </div>
 
       {/* Table */}
@@ -184,6 +210,7 @@ export default function VenuesPage() {
               <th className="text-left px-5 py-3 font-semibold text-gray-600">Rating</th>
               <th className="text-left px-5 py-3 font-semibold text-gray-600">Rate Floor</th>
               <th className="text-left px-5 py-3 font-semibold text-gray-600">Status</th>
+              <th className="text-left px-5 py-3 font-semibold text-gray-600">Setup</th>
               <th className="text-right px-5 py-3 font-semibold text-gray-600">Actions</th>
             </tr>
           </thead>
@@ -236,6 +263,30 @@ export default function VenuesPage() {
                   </button>
                 </td>
                 <td className="px-5 py-4">
+                  {isIncomplete(gym) ? (
+                    <div>
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                        Incomplete
+                      </span>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {[!gym.image_url && 'no photo', (offeringCounts[gym.id] ?? 0) === 0 && 'no classes/experiences']
+                          .filter(Boolean).join(' · ')}
+                      </p>
+                      {gym.setup_reminder_sent_at && (
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          Last reminded {new Date(gym.setup_reminder_sent_at).toLocaleDateString('en-KE', { day: 'numeric', month: 'short' })}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                      Complete
+                    </span>
+                  )}
+                </td>
+                <td className="px-5 py-4">
                   <div className="flex items-center justify-end gap-2">
                     <button onClick={() => openEdit(gym)}
                       className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition font-medium">
@@ -255,7 +306,7 @@ export default function VenuesPage() {
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-5 py-12 text-center text-gray-400">No venues match your filters.</td>
+                <td colSpan={8} className="px-5 py-12 text-center text-gray-400">No venues match your filters.</td>
               </tr>
             )}
           </tbody>
