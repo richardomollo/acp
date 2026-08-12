@@ -207,6 +207,41 @@ function partnerApplicationAlert(d: any) {
   `)
 }
 
+function communityApplicationReceived(d: any) {
+  return wrap(`
+    <h1 style="${h1}">We've received your community application!</h1>
+    <p style="${p}">Hi ${d.name},</p>
+    <p style="${p}">Thanks for submitting <strong>${d.communityName}</strong> to Active CityPass. We're excited to have you on board!</p>
+    <div style="${card}">
+      <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#333;">What happens next</p>
+      <p style="margin:0 0 5px;font-size:14px;color:#555;">✅ Our team will review your community within <strong>24–48 hours</strong></p>
+      <p style="margin:0 0 5px;font-size:14px;color:#555;">✅ We'll send you an email the moment you're approved</p>
+      <p style="margin:0;font-size:14px;color:#555;">✅ Once approved, you can create events and invite members</p>
+    </div>
+    <p style="${p}">In the meantime, if you have any questions feel free to reach out to us at <a href="mailto:info@activecitypass.com" style="color:#000;font-weight:600;">info@activecitypass.com</a>.</p>
+    <div style="${foot}">Active CityPass | Nairobi, Kenya<br>
+      <a href="mailto:info@activecitypass.com" style="color:#aaa;">info@activecitypass.com</a></div>
+  `)
+}
+
+function communityApplicationAlert(d: any) {
+  return wrap(`
+    <h1 style="${h1}">New Community Application</h1>
+    <p style="${p}">A new community has been submitted for review on Active CityPass.</p>
+    <div style="${card}">
+      <p style="margin:0 0 8px;font-size:14px;font-weight:700;color:#333;">Community details</p>
+      <p style="margin:0 0 5px;font-size:14px;color:#555;">🏷️ <strong>Name:</strong> ${d.communityName}</p>
+      <p style="margin:0 0 5px;font-size:14px;color:#555;">📂 <strong>Category:</strong> ${d.category}</p>
+      <p style="margin:0 0 5px;font-size:14px;color:#555;">📍 <strong>Location:</strong> ${d.location || 'Not provided'}</p>
+      <p style="margin:0 0 5px;font-size:14px;color:#555;">👤 <strong>Owner:</strong> ${d.ownerName || 'Not provided'}</p>
+      <p style="margin:0 0 5px;font-size:14px;color:#555;">📧 <strong>Email:</strong> ${d.ownerEmail}</p>
+      <p style="margin:0;font-size:14px;color:#555;">📞 <strong>Phone:</strong> ${d.ownerPhone || 'Not provided'}</p>
+    </div>
+    <a href="https://supabase.com/dashboard/project/kdmhmkwzanqnwehcddvr/editor" style="${btn}">Review in Supabase →</a>
+    <div style="${foot}">Active CityPass | Nairobi, Kenya</div>
+  `)
+}
+
 function partnerApproved(d: any) {
   const tasks: string[] = Array.isArray(d.remainingTasks) ? d.remainingTasks : []
   const taskListHtml = tasks.length
@@ -425,6 +460,14 @@ serve(async (req) => {
       case 'partner_application_alert':
         html = partnerApplicationAlert(data)
         subject = `New partner application — ${data.applicantName} (${data.partnerType})`
+        break
+      case 'community_application_received':
+        html = communityApplicationReceived(data)
+        subject = 'We\'ve received your community application'
+        break
+      case 'community_application_alert':
+        html = communityApplicationAlert(data)
+        subject = `New community application — ${data.communityName}`
         break
       case 'partner_approved':
         html = partnerApproved(data)

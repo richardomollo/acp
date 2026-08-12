@@ -102,6 +102,36 @@ export default function CreateCommunityScreen() {
       Alert.alert('Could not create community', error.message);
       return;
     }
+
+    // Confirmation to the applicant + alert to admins so it doesn't sit
+    // unnoticed in the approval queue. Non-fatal — never blocks navigation.
+    supabase.from('users').select('name, phone').eq('id', user.id).maybeSingle()
+      .then(({ data: profile }) => {
+        const categoryLabel = CATEGORIES.find(c => c.key === category)?.label ?? category;
+        Promise.allSettled([
+          supabase.functions.invoke('send-email', {
+            body: {
+              type: 'community_application_received',
+              data: { email: user.email, name: profile?.name || user.email, communityName: name.trim() },
+            },
+          }),
+          supabase.functions.invoke('send-email', {
+            body: {
+              type: 'community_application_alert',
+              data: {
+                email: 'info@activecitypass.com',
+                communityName: name.trim(),
+                category: categoryLabel,
+                location: location.trim() || null,
+                ownerName: profile?.name || null,
+                ownerEmail: user.email,
+                ownerPhone: profile?.phone || null,
+              },
+            },
+          }),
+        ]).catch(e => console.error('Community application emails failed:', e));
+      });
+
     router.replace('/(community-onboarding)/pending' as any);
   };
 
