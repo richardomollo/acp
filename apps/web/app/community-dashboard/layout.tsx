@@ -37,8 +37,24 @@ export default async function CommunityDashboardServerLayout({
     redirect("/community-onboarding/pending");
   }
 
+  const [{ data: partner }, { data: gym }, { data: pt }] = await Promise.all([
+    supabase.from("partners").select("id").eq("user_id", user.id).maybeSingle(),
+    // Fallback: gyms linked by contact_email (web-signup partners with no
+    // matching `partners` row — same pattern used elsewhere for this check).
+    supabase.from("gyms").select("id").ilike("contact_email", user.email ?? "").maybeSingle(),
+    supabase.from("personal_trainers").select("status").eq("user_id", user.id).maybeSingle(),
+  ]);
+
+  const hasVenueRole = !!partner || !!gym;
+  const hasPTRole = !!pt && pt.status === "approved";
+
   return (
-    <CommunityDashboardLayout communityId={community.id} communityName={community.name}>
+    <CommunityDashboardLayout
+      communityId={community.id}
+      communityName={community.name}
+      hasVenueRole={hasVenueRole}
+      hasPTRole={hasPTRole}
+    >
       {children}
     </CommunityDashboardLayout>
   );

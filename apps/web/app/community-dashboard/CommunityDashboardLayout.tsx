@@ -73,10 +73,14 @@ export default function CommunityDashboardLayout({
   children,
   communityId,
   communityName,
+  hasVenueRole,
+  hasPTRole,
 }: {
   children: React.ReactNode;
   communityId: string;
   communityName: string;
+  hasVenueRole?: boolean;
+  hasPTRole?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -127,6 +131,28 @@ export default function CommunityDashboardLayout({
         </nav>
 
         <div className="px-3 py-4 border-t border-white/10 space-y-1">
+          {hasVenueRole && (
+            <Link
+              href="/partner-dashboard"
+              className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 hover:bg-white/5 hover:text-white transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+              Switch to Venue Dashboard
+            </Link>
+          )}
+          {hasPTRole && (
+            <Link
+              href="/pt-dashboard"
+              className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 hover:bg-white/5 hover:text-white transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+              Switch to Trainer Dashboard
+            </Link>
+          )}
           <Link
             href={`/community/${communityId}`}
             className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 hover:bg-white/5 hover:text-white transition-colors"
@@ -194,6 +220,40 @@ export default function CommunityDashboardLayout({
                 ))}
               </div>
               <div className="px-3 py-4 border-t border-white/10 space-y-1">
+                {hasVenueRole && (
+                  <Link
+                    href="/partner-dashboard"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:text-white transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                    </svg>
+                    Switch to Venue Dashboard
+                  </Link>
+                )}
+                {hasPTRole && (
+                  <Link
+                    href="/pt-dashboard"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:text-white transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                    </svg>
+                    Switch to Trainer Dashboard
+                  </Link>
+                )}
+                <Link
+                  href={`/community/${communityId}`}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:text-white transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                  View public page
+                </Link>
                 <button
                   onClick={handleSignOut}
                   disabled={signingOut}

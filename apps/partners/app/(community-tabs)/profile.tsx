@@ -76,10 +76,13 @@ export default function CommunityProfileScreen() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
 
-    const [{ data: membership }, { data: gym }, { data: pt }] = await Promise.all([
+    const [{ data: membership }, { data: partner }, { data: gym }, { data: pt }] = await Promise.all([
       supabase.from('community_members').select('communities(id, name, description, location, category, logo_url, cover_url, community_type, review_status)')
         .eq('user_id', user.id).in('role', ['owner', 'admin']).eq('status', 'active')
         .order('created_at', { ascending: false }).limit(1).maybeSingle(),
+      supabase.from('partners').select('id').eq('user_id', user.id).maybeSingle(),
+      // Fallback: gyms linked by contact_email (web-signup partners with no
+      // matching `partners` row — see checkin.tsx for the same pattern).
       supabase.from('gyms').select('id').ilike('contact_email', user.email ?? '').maybeSingle(),
       supabase.from('personal_trainers').select('status').eq('user_id', user.id).maybeSingle(),
     ]);
@@ -95,7 +98,7 @@ export default function CommunityProfileScreen() {
       setCoverUrl(c.cover_url ?? null);
       setApprovalRequired(c.community_type === 'approval_required');
     }
-    setHasVenueRole(!!gym);
+    setHasVenueRole(!!partner || !!gym);
     setHasPTRole(!!pt && pt.status === 'approved');
     setLoading(false);
   }, []);
