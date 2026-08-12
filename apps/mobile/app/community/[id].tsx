@@ -30,6 +30,9 @@ interface ChallengeRow {
   id: string; title: string; metric: 'distance_km' | 'activity_count' | 'days_active';
   target_value: number; period_start: string; period_end: string;
 }
+interface MemberInfo {
+  user_id: string; name: string | null; avatar_url: string | null; role: string;
+}
 
 const CATEGORY_LABEL: Record<string, string> = {
   running: 'Running', walking: 'Walking', cycling: 'Cycling', strength: 'Strength',
@@ -50,11 +53,13 @@ export default function CommunityDetailScreen() {
   const [attendeeCounts, setAttendeeCounts] = useState<Record<string, number>>({});
   const [posts, setPosts] = useState<PostRow[]>([]);
   const [challenges, setChallenges] = useState<ChallengeRow[]>([]);
+  const [members, setMembers] = useState<MemberInfo[]>([]);
   const [isFollowing, setIsFollowing] = useState(false);
   const [membershipStatus, setMembershipStatus] = useState<'none' | 'pending' | 'active'>('none');
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [descExpanded, setDescExpanded] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -98,6 +103,9 @@ export default function CommunityDetailScreen() {
       .from('challenges').select('id, title, metric, target_value, period_start, period_end')
       .eq('community_id', cid).eq('is_active', true).order('period_start', { ascending: false });
     setChallenges((challengeRows as ChallengeRow[]) ?? []);
+
+    const { data: memberRows } = await supabase.rpc('get_community_members', { p_community_id: cid });
+    setMembers((memberRows as MemberInfo[]) ?? []);
 
     if (uid) {
       const [{ data: follow }, { data: membership }] = await Promise.all([
@@ -197,6 +205,12 @@ export default function CommunityDetailScreen() {
         </SafeAreaView>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
+          {community.cover_url ? (
+            <Image source={{ uri: community.cover_url }} style={s.cover} />
+          ) : (
+            <View style={s.coverFallback} />
+          )}
+
           <View style={s.heroRow}>
             {community.logo_url ? (
               <Image source={{ uri: community.logo_url }} style={s.logo} />
@@ -213,7 +227,18 @@ export default function CommunityDetailScreen() {
           </View>
 
           <View style={s.content}>
-            {community.description ? <ThemedText style={s.description}>{community.description}</ThemedText> : null}
+            {community.description ? (
+              <View style={{ marginBottom: 16 }}>
+                <ThemedText style={s.descriptionText} numberOfLines={descExpanded ? undefined : 3}>
+                  {community.description}
+                </ThemedText>
+                {community.description.length > 120 && (
+                  <TouchableOpacity onPress={() => setDescExpanded(v => !v)} hitSlop={8}>
+                    <ThemedText style={s.readMore}>{descExpanded ? 'Read less' : 'Read more'}</ThemedText>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ) : null}
 
             <View style={s.actionsRow}>
               <TouchableOpacity
@@ -300,6 +325,26 @@ export default function CommunityDetailScreen() {
               </>
             )}
 
+            {members.length > 0 && (
+              <>
+                <ThemedText style={s.sectionLabel}>Members</ThemedText>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.membersRow}>
+                  {members.slice(0, 20).map(m => (
+                    <View key={m.user_id} style={s.memberItem}>
+                      {m.avatar_url ? (
+                        <Image source={{ uri: m.avatar_url }} style={s.memberAvatar} />
+                      ) : (
+                        <View style={s.memberAvatarFallback}>
+                          <ThemedText style={s.memberAvatarFallbackText}>{(m.name ?? 'M')[0]?.toUpperCase()}</ThemedText>
+                        </View>
+                      )}
+                      <ThemedText style={s.memberName} numberOfLines={1}>{m.name ?? 'Member'}</ThemedText>
+                    </View>
+                  ))}
+                </ScrollView>
+              </>
+            )}
+
             {posts.length > 0 && (
               <>
                 <ThemedText style={s.sectionLabel}>Updates</ThemedText>
@@ -339,9 +384,11 @@ const s = StyleSheet.create({
     width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.9)',
     alignItems: 'center', justifyContent: 'center', ...shadows.sm,
   },
+  cover: { width: '100%', height: 180, backgroundColor: palette.surfaceMuted },
+  coverFallback: { width: '100%', height: 120 },
   heroRow: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
-    paddingHorizontal: 20, paddingTop: 70, paddingBottom: 20,
+    paddingHorizontal: 20, paddingTop: 16, paddingBottom: 20,
   },
   logo: { width: 64, height: 64, borderRadius: 32 },
   logoFallback: { width: 64, height: 64, borderRadius: 32, backgroundColor: palette.blue25, alignItems: 'center', justifyContent: 'center' },
@@ -349,7 +396,14 @@ const s = StyleSheet.create({
   name: { fontSize: 20, fontWeight: '800', color: palette.ink900 },
   meta: { fontSize: 12.5, color: palette.gray300, marginTop: 3 },
   content: { paddingHorizontal: 20 },
-  description: { fontSize: 14, color: palette.gray450, lineHeight: 20, marginBottom: 16 },
+  descriptionText: { fontSize: 14, color: palette.gray450, lineHeight: 20 },
+  readMore: { fontSize: 13, fontWeight: '700', color: palette.blue500, marginTop: 4 },
+  membersRow: { gap: 14, paddingBottom: 8, paddingRight: 8 },
+  memberItem: { alignItems: 'center', width: 56 },
+  memberAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: palette.surfaceMuted },
+  memberAvatarFallback: { width: 48, height: 48, borderRadius: 24, backgroundColor: palette.blue25, alignItems: 'center', justifyContent: 'center' },
+  memberAvatarFallbackText: { fontSize: 16, fontWeight: '800', color: palette.blue500 },
+  memberName: { fontSize: 10.5, color: palette.gray450, marginTop: 4, textAlign: 'center' },
   actionsRow: { flexDirection: 'row', gap: 10, marginBottom: 28 },
   followBtn: {
     paddingHorizontal: 20, paddingVertical: 12, borderRadius: radii.pill,

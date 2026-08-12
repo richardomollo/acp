@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import JoinCommunityButton from "./JoinCommunityButton";
 import CommunityShareBar from "./CommunityShareBar";
+import CommunityDescription from "./CommunityDescription";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -86,6 +87,8 @@ export default async function CommunityDetailPage({ params }: Props) {
 
   const METRIC_UNIT: Record<string, string> = { distance_km: "km", activity_count: "activities", days_active: "days" };
 
+  const { data: members } = await supabase.rpc("get_community_members", { p_community_id: community.id });
+
   return (
     <div className="max-w-7xl mx-auto px-6 py-10">
       <Link href="/community" className="text-sm text-gray-500 hover:underline mb-6 inline-block">
@@ -117,9 +120,7 @@ export default async function CommunityDetailPage({ params }: Props) {
             </div>
           </div>
 
-          {community.description && (
-            <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line mt-6 mb-2">{community.description}</p>
-          )}
+          {community.description && <CommunityDescription text={community.description} />}
 
           <div className="md:hidden mt-6">
             <JoinCommunityButton
@@ -179,6 +180,26 @@ export default async function CommunityDetailPage({ params }: Props) {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                     </svg>
                   </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {(members ?? []).length > 0 && (
+            <div className="mt-10">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Members</h2>
+              <div className="flex flex-wrap gap-4">
+                {(members ?? []).slice(0, 24).map((m: any) => (
+                  <div key={m.user_id} className="flex flex-col items-center w-16">
+                    {m.avatar_url ? (
+                      <img src={m.avatar_url} alt={m.name ?? "Member"} className="w-12 h-12 rounded-full object-cover" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center text-sm font-bold">
+                        {(m.name ?? "M")[0]?.toUpperCase()}
+                      </div>
+                    )}
+                    <p className="text-[11px] text-gray-500 mt-1 text-center truncate w-full">{m.name ?? "Member"}</p>
+                  </div>
                 ))}
               </div>
             </div>
