@@ -105,7 +105,7 @@ export default async function CommunityEventDetailPage({ params }: Props) {
         ← Back to {community?.name ?? "Community"}
       </Link>
 
-      <div className="flex flex-col md:flex-row gap-6 md:gap-10 items-start">
+      <div className="flex flex-col md:flex-row gap-6 md:gap-10 md:items-start">
         {/* ── Left: main content ── */}
         <div className="flex-1 min-w-0">
           {event.image_url ? (

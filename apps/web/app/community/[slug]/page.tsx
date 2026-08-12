@@ -96,7 +96,7 @@ export default async function CommunityDetailPage({ params }: Props) {
         Back to all communities
       </Link>
 
-      <div className="flex flex-col md:flex-row gap-10 items-start">
+      <div className="flex flex-col md:flex-row gap-10 md:items-start">
         {/* ── Left: main content ── */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-4 mb-1">
