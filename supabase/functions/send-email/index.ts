@@ -145,6 +145,40 @@ function welcome(d: any) {
   `)
 }
 
+function customerWelcome(d: any) {
+  return wrap(`
+    <h1 style="${h1}">Welcome to Active CityPass! 🎉</h1>
+    <p style="${p}">Hi ${d.name},</p>
+    <p style="${p}">Your account is ready. Active CityPass is Nairobi's flexible sports & wellness membership — one pass, 50+ venues, and a growing set of communities and clubs to move with.</p>
+    <div style="${card}">
+      <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#333;">Here's where to start</p>
+      <p style="margin:0 0 5px;font-size:14px;color:#555;">🏋️ Browse gyms, studios and classes</p>
+      <p style="margin:0 0 5px;font-size:14px;color:#555;">🤝 Join a running crew, cycling club or yoga circle</p>
+      <p style="margin:0;font-size:14px;color:#555;">📅 Book your first session in a couple of taps</p>
+    </div>
+    <a href="https://activecitypass.com/sessions" style="${btn}">Explore Active CityPass →</a>
+    <div style="${foot}">Active CityPass | Nairobi, Kenya<br>
+      <a href="mailto:info@activecitypass.com" style="color:#aaa;">info@activecitypass.com</a></div>
+  `)
+}
+
+function communityWelcome(d: any) {
+  return wrap(`
+    <h1 style="${h1}">Welcome to ${d.communityName}! 🎉</h1>
+    <p style="${p}">Hi ${d.name},</p>
+    <p style="${p}">You're in! You've joined <strong>${d.communityName}</strong> on Active CityPass — get ready to meet your people and show up together.</p>
+    <div style="${card}">
+      <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#333;">What you can do now</p>
+      <p style="margin:0 0 5px;font-size:14px;color:#555;">📅 RSVP to upcoming community events</p>
+      <p style="margin:0 0 5px;font-size:14px;color:#555;">🏆 Join community challenges and climb the leaderboard</p>
+      <p style="margin:0;font-size:14px;color:#555;">👋 See who else is in the club</p>
+    </div>
+    <a href="${d.communityUrl}" style="${btn}">Go to ${d.communityName} →</a>
+    <div style="${foot}">Active CityPass | Nairobi, Kenya<br>
+      <a href="mailto:info@activecitypass.com" style="color:#aaa;">info@activecitypass.com</a></div>
+  `)
+}
+
 function payoutProcessing(d: any) {
   return wrap(`
     <h1 style="${h1}">Payout Processing 💰</h1>
@@ -440,6 +474,14 @@ serve(async (req) => {
       case 'welcome':
         html = welcome(data)
         subject = 'Welcome to FitPass Partner Platform!'
+        break
+      case 'customer_welcome':
+        html = customerWelcome(data)
+        subject = 'Welcome to Active CityPass! 🎉'
+        break
+      case 'community_welcome':
+        html = communityWelcome(data)
+        subject = `Welcome to ${data.communityName}!`
         break
       case 'payout_processing':
         html = payoutProcessing(data)
