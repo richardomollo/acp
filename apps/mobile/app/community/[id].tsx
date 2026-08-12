@@ -1,16 +1,15 @@
 import {
-  StyleSheet, View, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert, Share, Platform,
+  StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Share, Platform,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { ThemedText } from '@/components/themed-text';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { palette, radii, fontSize, shadows } from '@/constants/theme';
+import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
+import { palette, radii, fontSize } from '@/constants/theme';
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { authService } from '@/services/auth';
 import { useAuthModal } from '@/contexts/auth-modal-context';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from 'expo-router';
 
 interface Community {
   id: string; slug: string | null; name: string; description: string | null; category: string; location: string | null;
@@ -181,89 +180,113 @@ export default function CommunityDetailScreen() {
   };
 
   if (loading) {
-    return <ActivityIndicator size="large" color={palette.blue500} style={{ marginTop: 100 }} />;
+    return (
+      <View style={[styles.container, styles.center]}>
+        <ActivityIndicator size="large" color={palette.blue500} />
+      </View>
+    );
   }
   if (!community) {
     return (
-      <View style={s.notFound}>
-        <ThemedText>Community not found.</ThemedText>
+      <View style={[styles.container, styles.center]}>
+        <Ionicons name="people-outline" size={56} color={palette.gray200} />
+        <ThemedText style={styles.errorText}>Community not found</ThemedText>
+        <TouchableOpacity style={styles.errorBtn} onPress={() => router.back()}>
+          <ThemedText style={styles.errorBtnText}>Go Back</ThemedText>
+        </TouchableOpacity>
       </View>
     );
   }
 
+  const categoryLabel = CATEGORY_LABEL[community.category] ?? community.category;
+
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <View style={s.root}>
-        <SafeAreaView edges={['top']} style={s.header}>
-          <TouchableOpacity style={s.backBtn} onPress={() => router.back()} hitSlop={12}>
-            <Ionicons name="arrow-back" size={22} color={palette.ink900} />
-          </TouchableOpacity>
-          <TouchableOpacity style={s.shareBtn} onPress={handleShare} hitSlop={12}>
-            <Ionicons name="share-outline" size={20} color={palette.ink900} />
-          </TouchableOpacity>
-        </SafeAreaView>
-
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
-          {community.cover_url ? (
-            <Image source={{ uri: community.cover_url }} style={s.cover} />
-          ) : (
-            <View style={s.coverFallback} />
-          )}
-
-          <View style={s.heroRow}>
-            {community.logo_url ? (
-              <Image source={{ uri: community.logo_url }} style={s.logo} />
+      <View style={styles.container}>
+        <ScrollView showsVerticalScrollIndicator={false}>
+          {/* ── Cover hero ── */}
+          <View style={styles.hero}>
+            {community.cover_url ? (
+              <Image source={{ uri: community.cover_url }} style={styles.heroImage} contentFit="cover" />
             ) : (
-              <View style={s.logoFallback}><ThemedText style={s.logoFallbackText}>{community.name[0]}</ThemedText></View>
+              <View style={[styles.heroImage, styles.heroPlaceholder]}>
+                <Ionicons name="people" size={64} color="rgba(255,255,255,0.4)" />
+              </View>
             )}
-            <View style={{ flex: 1 }}>
-              <ThemedText style={s.name}>{community.name}</ThemedText>
-              <ThemedText style={s.meta}>
-                {CATEGORY_LABEL[community.category] ?? community.category}
-                {community.location ? ` · ${community.location}` : ''} · {community.member_count} members
-              </ThemedText>
-            </View>
+            <View style={styles.heroOverlay} />
+
+            <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+              <Ionicons name="arrow-back" size={22} color={palette.white} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.shareBtn} onPress={handleShare}>
+              <Ionicons name="share-outline" size={22} color={palette.white} />
+            </TouchableOpacity>
           </View>
 
-          <View style={s.content}>
+          {/* ── Content card ── */}
+          <View style={styles.card}>
+            <View style={styles.nameRow}>
+              {community.logo_url ? (
+                <Image source={{ uri: community.logo_url }} style={styles.logo} contentFit="cover" />
+              ) : (
+                <View style={styles.logoFallback}>
+                  <ThemedText style={styles.logoFallbackText}>{community.name[0]}</ThemedText>
+                </View>
+              )}
+              <View style={{ flex: 1 }}>
+                <ThemedText style={styles.communityName}>{community.name}</ThemedText>
+                <View style={styles.memberBadge}>
+                  <Ionicons name="people-outline" size={12} color={palette.blue500} />
+                  <ThemedText style={styles.memberBadgeText}>{community.member_count} members</ThemedText>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.locationRow}>
+              <Ionicons name="pricetag-outline" size={16} color={palette.blue500} />
+              <ThemedText style={styles.locationText}>
+                {categoryLabel}{community.location ? ` · ${community.location}` : ''}
+              </ThemedText>
+            </View>
+
             {community.description ? (
-              <View style={{ marginBottom: 16 }}>
-                <ThemedText style={s.descriptionText} numberOfLines={descExpanded ? undefined : 3}>
+              <View style={{ marginBottom: 8 }}>
+                <ThemedText style={styles.description} numberOfLines={descExpanded ? undefined : 3}>
                   {community.description}
                 </ThemedText>
                 {community.description.length > 120 && (
                   <TouchableOpacity onPress={() => setDescExpanded(v => !v)} hitSlop={8}>
-                    <ThemedText style={s.readMore}>{descExpanded ? 'Read less' : 'Read more'}</ThemedText>
+                    <ThemedText style={styles.readMore}>{descExpanded ? 'Read less' : 'Read more'}</ThemedText>
                   </TouchableOpacity>
                 )}
               </View>
             ) : null}
 
-            <View style={s.actionsRow}>
+            <View style={styles.actionsRow}>
               <TouchableOpacity
-                style={[s.followBtn, isFollowing && s.followBtnActive]}
+                style={[styles.followBtn, isFollowing && styles.followBtnActive]}
                 onPress={toggleFollow}
                 disabled={busy}
               >
-                <ThemedText style={[s.followBtnText, isFollowing && s.followBtnTextActive]}>
+                <ThemedText style={[styles.followBtnText, isFollowing && styles.followBtnTextActive]}>
                   {isFollowing ? 'Following' : 'Follow'}
                 </ThemedText>
               </TouchableOpacity>
 
               {membershipStatus === 'active' ? (
-                <TouchableOpacity style={s.joinBtnActive} onPress={handleLeave} disabled={busy}>
+                <TouchableOpacity style={styles.joinBtnActive} onPress={handleLeave} disabled={busy}>
                   <Ionicons name="checkmark-circle" size={16} color={palette.success700} />
-                  <ThemedText style={s.joinBtnActiveText}>Member</ThemedText>
+                  <ThemedText style={styles.joinBtnActiveText}>Member</ThemedText>
                 </TouchableOpacity>
               ) : membershipStatus === 'pending' ? (
-                <View style={s.joinBtnPending}>
-                  <ThemedText style={s.joinBtnPendingText}>Request Sent</ThemedText>
+                <View style={styles.joinBtnPending}>
+                  <ThemedText style={styles.joinBtnPendingText}>Request Sent</ThemedText>
                 </View>
               ) : (
-                <TouchableOpacity style={s.joinBtn} onPress={handleJoin} disabled={busy}>
+                <TouchableOpacity style={styles.joinBtn} onPress={handleJoin} disabled={busy}>
                   {busy ? <ActivityIndicator color="#fff" size="small" /> : (
-                    <ThemedText style={s.joinBtnText}>
+                    <ThemedText style={styles.joinBtnText}>
                       {community.community_type === 'open' ? 'Join Community' : 'Request to Join'}
                     </ThemedText>
                   )}
@@ -271,51 +294,77 @@ export default function CommunityDetailScreen() {
               )}
             </View>
 
-            <ThemedText style={s.sectionLabel}>Upcoming</ThemedText>
+            {/* ── Events section ── */}
+            <View style={styles.sectionHeader}>
+              <ThemedText style={styles.sectionTitle}>Upcoming events</ThemedText>
+            </View>
             {events.length === 0 ? (
-              <ThemedText style={s.emptyText}>No upcoming events yet.</ThemedText>
+              <View style={styles.emptyState}>
+                <Ionicons name="calendar-outline" size={40} color={palette.gray200} />
+                <ThemedText style={styles.emptyText}>No events scheduled yet</ThemedText>
+              </View>
             ) : (
-              events.map(e => (
-                <TouchableOpacity
-                  key={e.id}
-                  style={s.eventCard}
-                  activeOpacity={0.85}
-                  onPress={() => router.push({ pathname: '/community/[id]/event/[eventId]', params: { id: community.slug ?? community.id, eventId: e.slug ?? e.id } } as any)}
-                >
-                  {e.image_url && <Image source={{ uri: e.image_url }} style={s.eventThumb} />}
-                  <View style={{ flex: 1 }}>
-                    <ThemedText style={s.eventTitle}>{e.title}</ThemedText>
-                    <ThemedText style={s.eventMeta}>
-                      {e.distance_km ? `${e.distance_km} km · ` : ''}{e.location}
-                    </ThemedText>
-                    <ThemedText style={s.eventMeta}>{fmtDate(e.date)} · {fmtTime(e.start_time)}</ThemedText>
-                  </View>
-                  <View style={s.goingBadge}>
-                    <ThemedText style={s.goingBadgeText}>
-                      {attendeeCounts[e.id] ?? 0}{e.capacity ? `/${e.capacity}` : ''}
-                    </ThemedText>
-                    <ThemedText style={s.goingBadgeLabel}>going</ThemedText>
-                  </View>
-                </TouchableOpacity>
-              ))
+              events.map(e => {
+                const going = attendeeCounts[e.id] ?? 0;
+                const isFull = e.capacity != null && going >= e.capacity;
+                return (
+                  <TouchableOpacity
+                    key={e.id}
+                    style={styles.sessionRow}
+                    activeOpacity={0.85}
+                    onPress={() => router.push({ pathname: '/community/[id]/event/[eventId]', params: { id: community.slug ?? community.id, eventId: e.slug ?? e.id } } as any)}
+                  >
+                    <View style={styles.sessionThumb}>
+                      {e.image_url ? (
+                        <Image source={{ uri: e.image_url }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
+                      ) : (
+                        <View style={[StyleSheet.absoluteFillObject, styles.sessionThumbFallback]}>
+                          <Ionicons name="calendar-outline" size={22} color="rgba(255,255,255,0.9)" />
+                        </View>
+                      )}
+                    </View>
+
+                    <View style={styles.sessionInfo}>
+                      <View style={styles.sessionBadges}>
+                        <View style={styles.catChip}>
+                          <ThemedText style={styles.catChipText}>{categoryLabel}</ThemedText>
+                        </View>
+                        <View style={[styles.spotsChip, { backgroundColor: isFull ? palette.danger50 : palette.success50 }]}>
+                          <ThemedText style={[styles.spotsChipText, { color: isFull ? palette.danger600 : palette.success700 }]}>
+                            {going}{e.capacity ? `/${e.capacity}` : ''} going
+                          </ThemedText>
+                        </View>
+                      </View>
+                      <ThemedText style={styles.sessionName} numberOfLines={1}>{e.title}</ThemedText>
+                      <View style={styles.sessionMeta}>
+                        <Ionicons name="time-outline" size={12} color={palette.gray450} />
+                        <ThemedText style={styles.metaText}>{fmtDate(e.date)} · {fmtTime(e.start_time)} · {e.location}</ThemedText>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })
             )}
 
+            {/* ── Challenges section ── */}
             {challenges.length > 0 && (
               <>
-                <ThemedText style={s.sectionLabel}>Challenges</ThemedText>
+                <View style={styles.sectionHeader}>
+                  <ThemedText style={styles.sectionTitle}>Challenges</ThemedText>
+                </View>
                 {challenges.map(c => {
                   const unit = c.metric === 'distance_km' ? 'km' : c.metric === 'days_active' ? 'days' : 'activities';
                   return (
                     <TouchableOpacity
                       key={c.id}
-                      style={s.eventCard}
+                      style={styles.challengeRow}
                       activeOpacity={0.85}
                       onPress={() => router.push({ pathname: '/community/[id]/challenge/[challengeId]', params: { id: community.slug ?? community.id, challengeId: c.id } } as any)}
                     >
                       <View style={{ flex: 1 }}>
-                        <ThemedText style={s.eventTitle}>{c.title}</ThemedText>
-                        <ThemedText style={s.eventMeta}>
-                          Target: {c.target_value} {unit} · ends {new Date(`${c.period_end}T00:00:00`).toLocaleDateString('en-KE', { day: 'numeric', month: 'short' })}
+                        <ThemedText style={styles.sessionName}>{c.title}</ThemedText>
+                        <ThemedText style={styles.metaText}>
+                          Target {c.target_value} {unit} · ends {new Date(`${c.period_end}T00:00:00`).toLocaleDateString('en-KE', { day: 'numeric', month: 'short' })}
                         </ThemedText>
                       </View>
                       <Ionicons name="chevron-forward" size={18} color={palette.gray300} />
@@ -325,86 +374,118 @@ export default function CommunityDetailScreen() {
               </>
             )}
 
+            {/* ── Members section ── */}
             {members.length > 0 && (
               <>
-                <ThemedText style={s.sectionLabel}>Members</ThemedText>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.membersRow}>
+                <View style={styles.sectionHeader}>
+                  <ThemedText style={styles.sectionTitle}>Members</ThemedText>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.membersRow}>
                   {members.slice(0, 20).map(m => (
-                    <View key={m.user_id} style={s.memberItem}>
+                    <View key={m.user_id} style={styles.memberItem}>
                       {m.avatar_url ? (
-                        <Image source={{ uri: m.avatar_url }} style={s.memberAvatar} />
+                        <Image source={{ uri: m.avatar_url }} style={styles.memberAvatar} contentFit="cover" />
                       ) : (
-                        <View style={s.memberAvatarFallback}>
-                          <ThemedText style={s.memberAvatarFallbackText}>{(m.name ?? 'M')[0]?.toUpperCase()}</ThemedText>
+                        <View style={styles.memberAvatarFallback}>
+                          <ThemedText style={styles.memberAvatarFallbackText}>{(m.name ?? 'M')[0]?.toUpperCase()}</ThemedText>
                         </View>
                       )}
-                      <ThemedText style={s.memberName} numberOfLines={1}>{m.name ?? 'Member'}</ThemedText>
+                      <ThemedText style={styles.memberName} numberOfLines={1}>{m.name ?? 'Member'}</ThemedText>
                     </View>
                   ))}
                 </ScrollView>
               </>
             )}
 
+            {/* ── Updates section ── */}
             {posts.length > 0 && (
               <>
-                <ThemedText style={s.sectionLabel}>Updates</ThemedText>
+                <View style={styles.sectionHeader}>
+                  <ThemedText style={styles.sectionTitle}>Updates</ThemedText>
+                </View>
                 {posts.map(p => (
-                  <View key={p.id} style={s.postCard}>
+                  <View key={p.id} style={styles.postCard}>
                     {p.post_type === 'announcement' && (
-                      <View style={s.postTag}><ThemedText style={s.postTagText}>Announcement</ThemedText></View>
+                      <View style={styles.postTag}><ThemedText style={styles.postTagText}>Announcement</ThemedText></View>
                     )}
-                    <ThemedText style={s.postBody}>{p.body}</ThemedText>
-                    <ThemedText style={s.postDate}>
+                    <ThemedText style={styles.postBody}>{p.body}</ThemedText>
+                    <ThemedText style={styles.postDate}>
                       {new Date(p.created_at).toLocaleDateString('en-KE', { day: 'numeric', month: 'short' })}
                     </ThemedText>
                   </View>
                 ))}
               </>
             )}
+
+            {community.location && (
+              <View style={styles.contactRow}>
+                <View style={styles.contactPill}>
+                  <Ionicons name="location-outline" size={13} color={palette.blue500} />
+                  <ThemedText style={styles.contactText}>{community.location}</ThemedText>
+                </View>
+              </View>
+            )}
           </View>
+
+          <View style={{ height: 40 }} />
         </ScrollView>
       </View>
     </>
   );
 }
 
-const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: palette.white },
-  notFound: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  header: {
-    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
-    flexDirection: 'row', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingTop: 8,
-  },
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: palette.white },
+  center: { justifyContent: 'center', alignItems: 'center', gap: 12, padding: 20 },
+  errorText: { fontSize: fontSize.lg, color: palette.gray450, textAlign: 'center', marginTop: 8 },
+  errorBtn: { backgroundColor: palette.ink900, paddingVertical: 12, paddingHorizontal: 28, borderRadius: 25, marginTop: 4 },
+  errorBtnText: { color: palette.white, fontSize: fontSize.base, fontWeight: '600' },
+
+  // Hero
+  hero: { height: 300, position: 'relative' },
+  heroImage: { width: '100%', height: '100%' },
+  heroPlaceholder: { backgroundColor: palette.blue500, justifyContent: 'center', alignItems: 'center' },
+  heroOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.25)' },
   backBtn: {
-    width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.9)',
-    alignItems: 'center', justifyContent: 'center', ...shadows.sm,
+    position: 'absolute', top: Platform.OS === 'ios' ? 56 : 16, left: 20,
+    width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'center', alignItems: 'center',
   },
   shareBtn: {
-    width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.9)',
-    alignItems: 'center', justifyContent: 'center', ...shadows.sm,
+    position: 'absolute', top: Platform.OS === 'ios' ? 56 : 16, right: 20,
+    width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'center', alignItems: 'center',
   },
-  cover: { width: '100%', height: 180, backgroundColor: palette.surfaceMuted },
-  coverFallback: { width: '100%', height: 120 },
-  heroRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 14,
-    paddingHorizontal: 20, paddingTop: 16, paddingBottom: 20,
+
+  // Content card
+  card: { backgroundColor: palette.white, borderTopLeftRadius: radii['2xl'], borderTopRightRadius: radii['2xl'], marginTop: -24, padding: 24 },
+
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 14 },
+  logo: { width: 56, height: 56, borderRadius: 28 },
+  logoFallback: { width: 56, height: 56, borderRadius: 28, backgroundColor: palette.blue25, alignItems: 'center', justifyContent: 'center' },
+  logoFallbackText: { fontSize: 22, fontWeight: '800', color: palette.blue500 },
+  communityName: { fontSize: fontSize['2xl'], fontWeight: 'bold', color: palette.ink900, marginBottom: 4 },
+  memberBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start',
+    backgroundColor: palette.blue50, paddingHorizontal: 10, paddingVertical: 4, borderRadius: radii.xl,
   },
-  logo: { width: 64, height: 64, borderRadius: 32 },
-  logoFallback: { width: 64, height: 64, borderRadius: 32, backgroundColor: palette.blue25, alignItems: 'center', justifyContent: 'center' },
-  logoFallbackText: { fontSize: 24, fontWeight: '800', color: palette.blue500 },
-  name: { fontSize: 20, fontWeight: '800', color: palette.ink900 },
-  meta: { fontSize: 12.5, color: palette.gray300, marginTop: 3 },
-  content: { paddingHorizontal: 20 },
-  descriptionText: { fontSize: 14, color: palette.gray450, lineHeight: 20 },
+  memberBadgeText: { fontSize: fontSize.xs, fontWeight: '700', color: palette.blue500 },
+
+  locationRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 14 },
+  locationText: { fontSize: fontSize.base, color: palette.gray450, textTransform: 'capitalize' },
+
+  description: { fontSize: fontSize.base, color: palette.gray450, lineHeight: 22 },
   readMore: { fontSize: 13, fontWeight: '700', color: palette.blue500, marginTop: 4 },
-  membersRow: { gap: 14, paddingBottom: 8, paddingRight: 8 },
-  memberItem: { alignItems: 'center', width: 56 },
-  memberAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: palette.surfaceMuted },
-  memberAvatarFallback: { width: 48, height: 48, borderRadius: 24, backgroundColor: palette.blue25, alignItems: 'center', justifyContent: 'center' },
-  memberAvatarFallbackText: { fontSize: 16, fontWeight: '800', color: palette.blue500 },
-  memberName: { fontSize: 10.5, color: palette.gray450, marginTop: 4, textAlign: 'center' },
-  actionsRow: { flexDirection: 'row', gap: 10, marginBottom: 28 },
+
+  contactRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  contactPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: palette.blue50, borderRadius: radii.xl,
+    paddingHorizontal: 12, paddingVertical: 7,
+  },
+  contactText: { fontSize: fontSize.sm, color: palette.blue500, fontWeight: '500' },
+
+  actionsRow: { flexDirection: 'row', gap: 10, marginBottom: 8 },
   followBtn: {
     paddingHorizontal: 20, paddingVertical: 12, borderRadius: radii.pill,
     borderWidth: 1, borderColor: palette.border, backgroundColor: palette.white,
@@ -421,22 +502,54 @@ const s = StyleSheet.create({
   joinBtnActiveText: { fontSize: 13.5, fontWeight: '700', color: palette.success700 },
   joinBtnPending: { flex: 1, paddingVertical: 12, borderRadius: radii.pill, backgroundColor: palette.surfaceMuted, alignItems: 'center' },
   joinBtnPendingText: { fontSize: 13.5, fontWeight: '700', color: palette.gray450 },
-  sectionLabel: { fontSize: 13, fontWeight: '700', color: palette.gray300, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 12 },
-  emptyText: { fontSize: 13, color: palette.gray300, marginBottom: 20 },
-  eventCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: palette.white, borderRadius: radii.lg, borderWidth: 1, borderColor: palette.hairline,
-    padding: 14, marginBottom: 10, ...shadows.sm,
+
+  // Section headers (gym-details divider pattern)
+  sectionHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginBottom: 14,
+    borderTopWidth: 1, borderTopColor: palette.hairline, paddingTop: 24,
   },
-  eventThumb: { width: 48, height: 48, borderRadius: radii.md, backgroundColor: palette.surfaceMuted },
-  eventTitle: { fontSize: 14, fontWeight: '700', color: palette.ink900 },
-  eventMeta: { fontSize: 12, color: palette.gray300, marginTop: 2 },
-  goingBadge: { alignItems: 'center' },
-  goingBadgeText: { fontSize: 15, fontWeight: '800', color: palette.ink900 },
-  goingBadgeLabel: { fontSize: 10, color: palette.gray300 },
-  postCard: {
-    backgroundColor: palette.surfaceMuted, borderRadius: radii.lg, padding: 14, marginBottom: 10,
+  sectionTitle: { fontSize: fontSize.lg, fontWeight: '700', color: palette.ink900 },
+
+  emptyState: { alignItems: 'center', paddingVertical: 32, gap: 8 },
+  emptyText: { fontSize: fontSize.sm, color: palette.gray300 },
+
+  // Row card (session-row pattern, reused for events)
+  sessionRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14,
+    borderBottomWidth: 1, borderBottomColor: palette.hairline,
   },
+  sessionThumb: { width: 84, height: 84, borderRadius: radii.md, overflow: 'hidden', flexShrink: 0 },
+  sessionThumbFallback: { backgroundColor: palette.blue500, justifyContent: 'center', alignItems: 'center' },
+  sessionInfo: { flex: 1, gap: 4 },
+  sessionBadges: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  catChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: palette.surfaceMuted, borderRadius: 20, paddingHorizontal: 8, paddingVertical: 4, flexShrink: 1,
+  },
+  catChipText: { fontSize: 11, fontWeight: '500', color: palette.gray450, textTransform: 'capitalize', flexShrink: 1 },
+  spotsChip: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 20, paddingHorizontal: 8, paddingVertical: 4 },
+  spotsChipText: { fontSize: 11, fontWeight: '600' },
+  sessionName: { fontSize: 15.5, fontWeight: '700', color: palette.ink900 },
+  sessionMeta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  metaText: { fontSize: fontSize.xs, color: palette.gray450 },
+
+  // Challenge row
+  challengeRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14,
+    borderBottomWidth: 1, borderBottomColor: palette.hairline,
+  },
+
+  // Members
+  membersRow: { gap: 14, paddingBottom: 8, paddingRight: 8 },
+  memberItem: { alignItems: 'center', width: 56 },
+  memberAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: palette.surfaceMuted },
+  memberAvatarFallback: { width: 48, height: 48, borderRadius: 24, backgroundColor: palette.blue25, alignItems: 'center', justifyContent: 'center' },
+  memberAvatarFallbackText: { fontSize: 16, fontWeight: '800', color: palette.blue500 },
+  memberName: { fontSize: 10.5, color: palette.gray450, marginTop: 4, textAlign: 'center' },
+
+  // Updates / posts
+  postCard: { backgroundColor: palette.surfaceMuted, borderRadius: radii.lg, padding: 14, marginBottom: 10 },
   postTag: { alignSelf: 'flex-start', backgroundColor: palette.blue25, borderRadius: radii.pill, paddingHorizontal: 8, paddingVertical: 3, marginBottom: 6 },
   postTagText: { fontSize: 10.5, fontWeight: '700', color: palette.blue500 },
   postBody: { fontSize: 13.5, color: palette.ink700, lineHeight: 19 },

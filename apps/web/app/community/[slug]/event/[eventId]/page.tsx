@@ -19,7 +19,7 @@ async function fetchEvent(eventId: string) {
   const col = UUID_RE.test(eventId) ? "id" : "slug";
   const { data } = await supabase
     .from("community_events")
-    .select("*, communities(id, slug, name, logo_url)")
+    .select("*, communities(id, slug, name, logo_url, category, description)")
     .eq(col, eventId)
     .single();
   return data;
@@ -64,71 +64,130 @@ export default async function CommunityEventDetailPage({ params }: Props) {
 
   const community = Array.isArray(event.communities) ? event.communities[0] : event.communities;
 
-  const { count: goingCount } = await supabase
-    .from("community_event_attendees")
-    .select("id", { count: "exact", head: true })
-    .eq("event_id", eventId)
-    .eq("status", "going");
+  const [{ count: goingCount }, { data: attendees }] = await Promise.all([
+    supabase
+      .from("community_event_attendees")
+      .select("id", { count: "exact", head: true })
+      .eq("event_id", event.id)
+      .eq("status", "going"),
+    supabase.rpc("get_event_attendees", { p_event_id: event.id }),
+  ]);
 
   const isFull = event.capacity != null && (goingCount ?? 0) >= event.capacity;
 
+  const cta = (
+    event.status !== "active" ? (
+      <p className="text-sm text-red-600 font-semibold">This event has been cancelled.</p>
+    ) : event.event_type === "free" ? (
+      <RsvpEventButton eventId={event.id} isFull={isFull} className="block sm:inline-block text-center px-5 py-3.5 text-sm font-semibold rounded-xl bg-black text-white hover:bg-gray-800 transition disabled:opacity-60 w-full sm:w-auto" />
+    ) : event.event_type === "paid" ? (
+      isFull ? (
+        <button disabled className="w-full sm:w-auto px-4 py-3 text-sm rounded-xl bg-gray-200 text-gray-500 cursor-not-allowed">Event Full</button>
+      ) : (
+        <Link href={`/checkout?type=community_event&id=${event.id}`} className="block sm:inline-block text-center px-5 py-3.5 text-sm font-semibold rounded-xl bg-black text-white hover:bg-gray-800 transition w-full sm:w-auto">
+          Book — KES {Number(event.price_kes).toLocaleString()}
+        </Link>
+      )
+    ) : event.event_type === "external" ? (
+      <a href={event.external_url} target="_blank" rel="noopener noreferrer" className="block sm:inline-block text-center px-5 py-3.5 text-sm font-semibold rounded-xl bg-black text-white hover:bg-gray-800 transition w-full sm:w-auto">
+        Register externally
+      </a>
+    ) : (
+      <Link href="/classes" className="block sm:inline-block text-center px-5 py-3.5 text-sm font-semibold rounded-xl bg-black text-white hover:bg-gray-800 transition w-full sm:w-auto">
+        Book via Classes
+      </Link>
+    )
+  );
+
   return (
-    <div className="max-w-7xl mx-auto px-6 py-10">
-      <Link href={`/community/${community?.slug ?? community?.id}`} className="text-sm text-gray-500 hover:underline mb-6 inline-block">
+    <div className="w-full px-4 sm:px-6 py-6 sm:py-10 max-w-7xl mx-auto">
+      <Link href={`/community/${community?.slug ?? community?.id}`} className="text-sm text-gray-500 hover:underline mb-5 inline-block">
         ← Back to {community?.name ?? "Community"}
       </Link>
 
-      <div className="flex gap-10 items-start">
+      <div className="flex flex-col md:flex-row gap-6 md:gap-10 items-start">
+        {/* ── Left: main content ── */}
         <div className="flex-1 min-w-0">
           {event.image_url ? (
-            <img src={event.image_url} alt={event.title} className="w-full aspect-[16/7] object-cover rounded-2xl mb-6" />
+            <img src={event.image_url} alt={event.title} className="w-full h-48 sm:h-64 object-cover rounded-2xl mb-5" />
           ) : (
-            <div className="w-full aspect-[16/7] rounded-2xl mb-6 bg-gradient-to-br from-emerald-800 to-emerald-500 flex items-center justify-center">
+            <div className="w-full h-48 sm:h-64 rounded-2xl mb-5 bg-gradient-to-br from-emerald-800 to-emerald-500 flex items-center justify-center">
               <svg className="w-16 h-16 text-white/20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
             </div>
           )}
 
-          {event.activity_type && (
-            <p className="text-xs text-emerald-600 font-semibold uppercase tracking-wide mb-1 capitalize">{event.activity_type.replace("_", " ")}</p>
-          )}
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">{event.title}</h1>
-          {community?.name && <p className="text-sm text-gray-400 mb-6">Organised by {community.name}</p>}
+          <p className="text-xs text-gray-400 uppercase tracking-wide capitalize mb-1">
+            {(event.activity_type ?? "").replace("_", " ")}{community?.name ? ` · ${community.name}` : ""}
+          </p>
+          <h1 className="text-2xl font-semibold text-gray-900 mb-4">{event.title}</h1>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-            <div className="bg-gray-50 rounded-xl p-4">
-              <p className="text-xs text-gray-400 mb-1">Date</p>
-              <p className="text-sm font-semibold text-gray-900">{fmtDate(event.date)}</p>
+          {/* Detail pills */}
+          <div className="flex flex-wrap gap-3 mb-6">
+            <div className="text-sm">
+              <p className="text-xs text-gray-400 mb-0.5">Date</p>
+              <p className="font-medium text-gray-900">{fmtDate(event.date)}</p>
             </div>
-            <div className="bg-gray-50 rounded-xl p-4">
-              <p className="text-xs text-gray-400 mb-1">Time</p>
-              <p className="text-sm font-semibold text-gray-900">
+            <div className="text-sm">
+              <p className="text-xs text-gray-400 mb-0.5">Time</p>
+              <p className="font-medium text-gray-900">
                 {fmtTime(event.start_time)}{event.end_time ? ` – ${fmtTime(event.end_time)}` : ""}
               </p>
             </div>
-            <div className="bg-gray-50 rounded-xl p-4">
-              <p className="text-xs text-gray-400 mb-1">Location</p>
-              <p className="text-sm font-semibold text-gray-900 truncate">{event.location}</p>
+            <div className="text-sm">
+              <p className="text-xs text-gray-400 mb-0.5">Location</p>
+              <p className="font-medium text-gray-900">{event.location}</p>
             </div>
-            <div className="bg-gray-50 rounded-xl p-4">
-              <p className="text-xs text-gray-400 mb-1">Going</p>
-              <p className="text-sm font-semibold text-gray-900">
+            <div className="text-sm">
+              <p className="text-xs text-gray-400 mb-0.5">Going</p>
+              <p className={`font-medium ${isFull ? "text-red-500" : "text-green-600"}`}>
                 {goingCount ?? 0}{event.capacity ? ` / ${event.capacity}` : ""}
               </p>
             </div>
+            {event.event_type === "paid" && (
+              <div className="text-sm">
+                <p className="text-xs text-gray-400 mb-0.5">Price</p>
+                <p className="font-bold text-gray-900 text-base">KES {Number(event.price_kes).toLocaleString()}</p>
+              </div>
+            )}
           </div>
 
           {event.difficulty && (
             <p className="text-sm text-gray-500 mb-6">Difficulty: <span className="font-semibold text-gray-900">{DIFFICULTY_LABEL[event.difficulty] ?? event.difficulty}</span></p>
           )}
 
+          {/* Description */}
           {event.description && (
-            <div className="mb-8">
-              <h2 className="text-lg font-semibold text-gray-900 mb-3">About this event</h2>
+            <div className="mb-6">
+              <h2 className="text-base font-semibold text-gray-900 mb-2">About this event</h2>
               <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line">{event.description}</p>
             </div>
           )}
+
+          {/* Who's going */}
+          {(attendees ?? []).length > 0 && (
+            <div className="mb-6">
+              <h2 className="text-base font-semibold text-gray-900 mb-3">Who&apos;s going</h2>
+              <div className="flex flex-wrap gap-4">
+                {(attendees ?? []).slice(0, 24).map((a: any) => (
+                  <div key={a.user_id} className="flex flex-col items-center w-16">
+                    {a.avatar_url ? (
+                      <img src={a.avatar_url} alt={a.name ?? "Attendee"} className="w-12 h-12 rounded-full object-cover" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center text-sm font-bold">
+                        {(a.name ?? "M")[0]?.toUpperCase()}
+                      </div>
+                    )}
+                    <p className="text-[11px] text-gray-500 mt-1 text-center truncate w-full">{a.name ?? "Member"}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* CTA */}
+          <div className="mt-4">{cta}</div>
 
           <CommunityEventShareBar
             communitySlug={community?.slug ?? community?.id ?? ""}
@@ -137,64 +196,13 @@ export default async function CommunityEventDetailPage({ params }: Props) {
             communityName={community?.name ?? ""}
             date={event.date}
           />
-
-          <div className="md:hidden mt-6">
-            {event.status !== "active" ? (
-              <p className="text-sm text-red-600 font-semibold">This event has been cancelled.</p>
-            ) : event.event_type === "free" ? (
-              <RsvpEventButton eventId={event.id} isFull={isFull} className="block w-full py-3 text-sm font-semibold rounded-xl bg-black text-white hover:bg-gray-800 transition text-center disabled:opacity-60" />
-            ) : event.event_type === "paid" ? (
-              isFull ? (
-                <button disabled className="w-full py-3 text-sm font-semibold rounded-xl bg-gray-200 text-gray-500 cursor-not-allowed">Event Full</button>
-              ) : (
-                <Link href={`/checkout?type=community_event&id=${event.id}`} className="block w-full py-3 text-sm font-semibold rounded-xl bg-black text-white hover:bg-gray-800 transition text-center">
-                  Book — KES {Number(event.price_kes).toLocaleString()}
-                </Link>
-              )
-            ) : event.event_type === "external" ? (
-              <a href={event.external_url} target="_blank" rel="noopener noreferrer" className="block w-full py-3 text-sm font-semibold rounded-xl bg-black text-white hover:bg-gray-800 transition text-center">
-                Register externally
-              </a>
-            ) : (
-              <Link href="/classes" className="block w-full py-3 text-sm font-semibold rounded-xl bg-black text-white hover:bg-gray-800 transition text-center">
-                Book via Classes
-              </Link>
-            )}
-          </div>
         </div>
 
-        <div className="hidden md:block w-80 flex-shrink-0">
-          <div className="sticky top-[86px] space-y-4">
-            <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-              {event.event_type === "paid" && (
-                <p className="text-2xl font-bold text-gray-900 mb-4">KES {Number(event.price_kes).toLocaleString()}</p>
-              )}
-              {event.status !== "active" ? (
-                <p className="text-sm text-red-600 font-semibold">This event has been cancelled.</p>
-              ) : event.event_type === "free" ? (
-                <RsvpEventButton eventId={event.id} isFull={isFull} className="block w-full py-3 text-sm font-semibold rounded-xl bg-black text-white hover:bg-gray-800 transition text-center disabled:opacity-60" />
-              ) : event.event_type === "paid" ? (
-                isFull ? (
-                  <button disabled className="w-full py-3 text-sm font-semibold rounded-xl bg-gray-200 text-gray-500 cursor-not-allowed">Event Full</button>
-                ) : (
-                  <Link href={`/checkout?type=community_event&id=${event.id}`} className="block w-full py-3 text-sm font-semibold rounded-xl bg-black text-white hover:bg-gray-800 transition text-center">
-                    Book & Pay
-                  </Link>
-                )
-              ) : event.event_type === "external" ? (
-                <a href={event.external_url} target="_blank" rel="noopener noreferrer" className="block w-full py-3 text-sm font-semibold rounded-xl bg-black text-white hover:bg-gray-800 transition text-center">
-                  Register externally
-                </a>
-              ) : (
-                <Link href="/classes" className="block w-full py-3 text-sm font-semibold rounded-xl bg-black text-white hover:bg-gray-800 transition text-center">
-                  Book via Classes
-                </Link>
-              )}
-            </div>
-
-            {community && (
-              <div className="bg-white rounded-2xl border border-gray-200 p-4 text-sm space-y-2">
-                <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold">Hosted by</p>
+        {/* ── Right: sticky sidebar ── */}
+        {community && (
+          <div className="hidden md:block w-80 lg:w-96 flex-shrink-0">
+            <div className="sticky top-[86px] space-y-3">
+              <div className="bg-white rounded-2xl border border-gray-200 p-4 text-sm space-y-3">
                 <div className="flex items-center gap-3">
                   {community.logo_url ? (
                     <img src={community.logo_url} alt={community.name} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
@@ -203,15 +211,28 @@ export default async function CommunityEventDetailPage({ params }: Props) {
                       {community.name?.[0] ?? "?"}
                     </div>
                   )}
-                  <p className="font-semibold text-gray-900">{community.name}</p>
+                  <div>
+                    <p className="font-semibold text-gray-900">{community.name}</p>
+                    {community.category && <p className="text-gray-500 capitalize mt-0.5 text-xs">{community.category}</p>}
+                  </div>
                 </div>
-                <Link href={`/community/${community.slug ?? community.id}`} className="text-xs text-[#050040] hover:underline block">
-                  View community →
+
+                {community.description && (
+                  <p className="text-xs text-gray-500 leading-relaxed border-t border-gray-100 pt-3">
+                    {community.description}
+                  </p>
+                )}
+
+                <Link
+                  href={`/community/${community.slug ?? community.id}`}
+                  className="block text-sm text-blue-600 hover:underline font-medium pt-1 border-t border-gray-100"
+                >
+                  View community
                 </Link>
               </div>
-            )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

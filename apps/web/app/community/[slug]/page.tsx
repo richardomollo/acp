@@ -18,6 +18,7 @@ const CATEGORY_LABEL: Record<string, string> = {
   boxing: "Boxing", yoga: "Yoga", pilates: "Pilates", hiking: "Hiking", dance: "Dance",
   outdoor_fitness: "Outdoor Fitness", football: "Football", other: "Other",
 };
+const METRIC_UNIT: Record<string, string> = { distance_km: "km", activity_count: "activities", days_active: "days" };
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -69,55 +70,56 @@ export default async function CommunityDetailPage({ params }: Props) {
   if (!community || community.review_status !== "approved" || !community.is_active) return notFound();
 
   const todayStr = new Date().toISOString().split("T")[0];
-  const { data: events } = await supabase
-    .from("community_events")
-    .select("id, slug, title, date, start_time, location, event_type, price_kes, image_url")
-    .eq("community_id", community.id)
-    .eq("status", "active")
-    .gte("date", todayStr)
-    .order("date", { ascending: true })
-    .limit(20);
+  const [{ data: events }, { data: challenges }, { data: members }] = await Promise.all([
+    supabase
+      .from("community_events")
+      .select("id, slug, title, date, start_time, location, event_type, price_kes, image_url, activity_type")
+      .eq("community_id", community.id)
+      .eq("status", "active")
+      .gte("date", todayStr)
+      .order("date", { ascending: true })
+      .limit(20),
+    supabase
+      .from("challenges")
+      .select("id, title, metric, target_value, period_start, period_end")
+      .eq("community_id", community.id)
+      .eq("is_active", true)
+      .order("period_start", { ascending: false }),
+    supabase.rpc("get_community_members", { p_community_id: community.id }),
+  ]);
 
-  const { data: challenges } = await supabase
-    .from("challenges")
-    .select("id, title, metric, target_value, period_start, period_end")
-    .eq("community_id", community.id)
-    .eq("is_active", true)
-    .order("period_start", { ascending: false });
-
-  const METRIC_UNIT: Record<string, string> = { distance_km: "km", activity_count: "activities", days_active: "days" };
-
-  const { data: members } = await supabase.rpc("get_community_members", { p_community_id: community.id });
+  const categoryLabel = CATEGORY_LABEL[community.category] ?? community.category;
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-10">
+    <div className="w-full px-6 py-12 max-w-7xl mx-auto">
       <Link href="/community" className="text-sm text-gray-500 hover:underline mb-6 inline-block">
-        ← Back to Communities
+        Back to all communities
       </Link>
 
-      <div className="flex gap-10 items-start">
+      <div className="flex flex-col md:flex-row gap-10 items-start">
+        {/* ── Left: main content ── */}
         <div className="flex-1 min-w-0">
-          {community.cover_url ? (
-            <img src={community.cover_url} alt={community.name} className="w-full aspect-[16/7] object-cover rounded-2xl mb-6" />
-          ) : (
-            <div className="w-full aspect-[16/7] rounded-2xl mb-6 bg-gradient-to-br from-emerald-800 to-emerald-500 flex items-center justify-center">
-              <span className="text-6xl font-black text-white/25">{community.name[0]}</span>
-            </div>
-          )}
-
-          <div className="flex items-center gap-4 mb-2">
+          <div className="flex items-center gap-4 mb-1">
             {community.logo_url && (
               <img src={community.logo_url} alt={community.name} className="w-14 h-14 rounded-full object-cover border border-gray-100 flex-shrink-0" />
             )}
             <div>
-              <p className="text-xs text-emerald-600 font-semibold uppercase tracking-wide">
-                {CATEGORY_LABEL[community.category] ?? community.category}
-              </p>
-              <h1 className="text-2xl font-bold text-gray-900">{community.name}</h1>
-              <p className="text-sm text-gray-400 mt-0.5">
-                {community.location ? `${community.location} · ` : ""}{community.member_count ?? 0} members
+              <h1 className="text-3xl font-semibold">{community.name}</h1>
+              <p className="text-sm text-gray-500 mt-0.5 capitalize">
+                {categoryLabel}{community.location ? `, ${community.location}` : ""} · {community.member_count ?? 0} members
               </p>
             </div>
+          </div>
+
+          {/* Cover image */}
+          <div className="w-full mt-4 mb-4 max-h-[420px] overflow-hidden rounded-lg">
+            {community.cover_url ? (
+              <img src={community.cover_url} alt={community.name} className="w-full h-full object-contain object-center" />
+            ) : (
+              <div className="h-48 bg-gradient-to-br from-emerald-800 to-emerald-500 rounded-lg flex items-center justify-center">
+                <span className="text-5xl font-black text-white/25">{community.name[0]}</span>
+              </div>
+            )}
           </div>
 
           {community.description && <CommunityDescription text={community.description} />}
@@ -130,49 +132,55 @@ export default async function CommunityDetailPage({ params }: Props) {
             />
           </div>
 
-          <div className="mt-10">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Upcoming events</h2>
+          {/* Events list */}
+          <div className="mt-12">
+            <h2 className="text-xl font-semibold mb-4">Upcoming events</h2>
             {(events ?? []).length === 0 ? (
-              <p className="text-sm text-gray-400">No upcoming events yet.</p>
+              <p className="text-gray-500 py-8 text-center text-sm">No events scheduled yet.</p>
             ) : (
-              <div className="space-y-3">
+              <div className="divide-y divide-gray-100 border border-gray-200 rounded-2xl overflow-hidden bg-white">
                 {(events ?? []).map((e: any) => (
                   <Link
                     key={e.id}
                     href={`/community/${community.slug ?? community.id}/event/${e.slug ?? e.id}`}
-                    className="flex items-center gap-4 p-3.5 rounded-2xl border border-gray-100 bg-white shadow-sm hover:shadow-md transition-shadow"
+                    className="flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors"
                   >
                     {e.image_url ? (
-                      <img src={e.image_url} alt={e.title} className="w-16 h-16 rounded-xl object-cover flex-shrink-0" />
+                      <img src={e.image_url} alt={e.title} className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
                     ) : (
-                      <div className="w-16 h-16 rounded-xl bg-emerald-900 flex-shrink-0" />
+                      <div className="w-14 h-14 rounded-xl bg-emerald-900 flex-shrink-0" />
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-gray-900 text-sm truncate">{e.title}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{fmtDate(e.date)} · {fmtTime(e.start_time)} · {e.location}</p>
+                      <p className="text-xs text-gray-400 uppercase tracking-wide mb-0.5 capitalize">
+                        {(e.activity_type ?? categoryLabel).toString().replace("_", " ")}
+                      </p>
+                      <p className="text-sm font-semibold text-gray-900 truncate">{e.title}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{fmtDate(e.date)} · {fmtTime(e.start_time)} · {e.location}</p>
                     </div>
-                    <p className="text-sm font-bold text-gray-900 flex-shrink-0">
-                      {e.price_kes ? `KES ${Number(e.price_kes).toLocaleString()}` : "Free"}
-                    </p>
+                    <div className="flex-shrink-0 text-right">
+                      <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Price</p>
+                      <p className="text-sm font-bold text-gray-900">{e.price_kes ? `KES ${Number(e.price_kes).toLocaleString()}` : "Free"}</p>
+                    </div>
                   </Link>
                 ))}
               </div>
             )}
           </div>
 
+          {/* Challenges list */}
           {(challenges ?? []).length > 0 && (
-            <div className="mt-10">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Challenges</h2>
-              <div className="space-y-3">
+            <div className="mt-12">
+              <h2 className="text-xl font-semibold mb-4">Challenges</h2>
+              <div className="divide-y divide-gray-100 border border-gray-200 rounded-2xl overflow-hidden bg-white">
                 {(challenges ?? []).map((c: any) => (
                   <Link
                     key={c.id}
                     href={`/community/${community.slug ?? community.id}/challenge/${c.id}`}
-                    className="flex items-center justify-between gap-4 p-3.5 rounded-2xl border border-gray-100 bg-white shadow-sm hover:shadow-md transition-shadow"
+                    className="flex items-center justify-between gap-4 px-5 py-4 hover:bg-gray-50 transition-colors"
                   >
                     <div className="min-w-0">
-                      <p className="font-semibold text-gray-900 text-sm truncate">{c.title}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{c.title}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">
                         Target {c.target_value} {METRIC_UNIT[c.metric] ?? c.metric} · ends {new Date(`${c.period_end}T00:00:00`).toLocaleDateString("en-KE", { day: "numeric", month: "short" })}
                       </p>
                     </div>
@@ -185,9 +193,10 @@ export default async function CommunityDetailPage({ params }: Props) {
             </div>
           )}
 
+          {/* Members */}
           {(members ?? []).length > 0 && (
-            <div className="mt-10">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Members</h2>
+            <div className="mt-12">
+              <h2 className="text-xl font-semibold mb-4">Members</h2>
               <div className="flex flex-wrap gap-4">
                 {(members ?? []).slice(0, 24).map((m: any) => (
                   <div key={m.user_id} className="flex flex-col items-center w-16">
@@ -205,12 +214,39 @@ export default async function CommunityDetailPage({ params }: Props) {
             </div>
           )}
 
-          <CommunityShareBar communityId={community.slug ?? community.id} name={community.name} category={CATEGORY_LABEL[community.category] ?? community.category} />
+          {community.location && (
+            <div className="mt-8 pt-6 border-t border-gray-100 space-y-2 text-sm text-gray-600">
+              <p>📍 {community.location}</p>
+            </div>
+          )}
+
+          <CommunityShareBar communityId={community.slug ?? community.id} name={community.name} category={categoryLabel} />
         </div>
 
-        <div className="hidden md:block w-80 flex-shrink-0">
-          <div className="sticky top-[86px] space-y-4">
-            <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
+        {/* ── Right: sticky sidebar ── */}
+        <div className="hidden md:block w-80 lg:w-96 flex-shrink-0">
+          <div className="sticky top-[86px] bg-white rounded-2xl border border-gray-200 p-4 text-sm space-y-3">
+            <div>
+              <p className="font-semibold text-gray-900">{community.name}</p>
+              <p className="text-gray-500 capitalize mt-0.5">{categoryLabel}</p>
+            </div>
+
+            {community.description && (
+              <p className="text-gray-500 leading-relaxed text-xs border-t border-gray-100 pt-3">
+                {community.description}
+              </p>
+            )}
+
+            {community.location && (
+              <div className="border-t border-gray-100 pt-3 space-y-1.5">
+                <p className="text-gray-500 flex gap-1.5">
+                  <span>📍</span>
+                  <span>{community.location}</span>
+                </p>
+              </div>
+            )}
+
+            <div className="border-t border-gray-100 pt-3">
               <p className="text-xs text-gray-400 mb-3">{community.member_count ?? 0} members</p>
               <JoinCommunityButton
                 communityId={community.id}
