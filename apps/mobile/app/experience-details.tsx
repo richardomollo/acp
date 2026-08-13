@@ -26,6 +26,8 @@ type Experience = {
   transport_info: string | null;
   price_kes: number;
   discount_kes: number;
+  deposit_pct: number | null;
+  cancellation_cutoff_hours: number | null;
   max_capacity: number;
   spots_left: number;
   includes: string[];
@@ -35,6 +37,16 @@ type Experience = {
   gym_id: string;
   gyms?: { name: string; deposit_pct?: number | null } | null;
 };
+
+// Mirrors the server-side pricing rule in guest-book-experience/book-experience:
+// an explicit cancellation_cutoff_hours of 0 with no per-experience deposit_pct
+// override means full payment upfront (100%), not the gym's default deposit %.
+function resolveDepositPct(experience: Pick<Experience, 'deposit_pct' | 'cancellation_cutoff_hours' | 'gyms'>): number {
+  const cutoffHours = experience.cancellation_cutoff_hours ?? null;
+  const expDepositPct = experience.deposit_pct ?? null;
+  const isFullPayment = cutoffHours === 0 && !expDepositPct;
+  return isFullPayment ? 100 : Number(expDepositPct ?? experience.gyms?.deposit_pct ?? 30);
+}
 
 type ExperienceBooking = {
   id: string;
@@ -81,7 +93,7 @@ export default function ExperienceDetailsScreen() {
   const isFree = useMemo(() => {
     if (!experience) return false;
     const price = Number(experience.price_kes);
-    const pct = experience.gyms?.deposit_pct ?? 30;
+    const pct = resolveDepositPct(experience);
     const deposit = Math.round(price * pct / 100);
     const discount = Math.min(Number(experience.discount_kes) || 0, deposit);
     return deposit - discount <= 0;
@@ -120,7 +132,7 @@ export default function ExperienceDetailsScreen() {
   const navigateToCheckout = useCallback(() => {
     if (!experience) return;
     const price = Number(experience.price_kes);
-    const pct = experience.gyms?.deposit_pct ?? 30;
+    const pct = resolveDepositPct(experience);
     const deposit = Math.round(price * pct / 100);
     const discountKes = Math.min(Number(experience.discount_kes) || 0, deposit);
     router.push({
@@ -206,7 +218,7 @@ export default function ExperienceDetailsScreen() {
   }
 
   const isSoldOut = experience.spots_left <= 0;
-  const depositPct = experience.gyms?.deposit_pct ?? 30;
+  const depositPct = resolveDepositPct(experience);
   const experiencePrice = Number(experience.price_kes);
   const depositAmount = Math.round(experiencePrice * depositPct / 100);
   const remainderAmount = experiencePrice - depositAmount;
