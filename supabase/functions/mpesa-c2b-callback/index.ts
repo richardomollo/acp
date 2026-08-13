@@ -166,7 +166,7 @@ async function reconcileStk(
       }).eq('id', expPayment.id).eq('status', 'pending')
 
       const { data: confirmedExp } = await admin.from('experience_bookings').update({
-        status: 'confirmed', payment_completed_at: now, updated_at: now,
+        status: 'confirmed', deposit_paid_at: now, deposit_payment_id: receipt, updated_at: now,
       }).eq('id', expBooking.id).eq('status', 'pending_payment').select('id')
 
       if (confirmedExp?.length) {

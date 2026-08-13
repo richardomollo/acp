@@ -31,7 +31,12 @@ export async function GET(request: Request) {
     return NextResponse.json({ status: 'FAILED', reason: darajaMsg });
   }
 
-  // Payment succeeded — enrich with confirmation code if available
+  // Payment succeeded at the M-Pesa level — but don't report COMPLETED until
+  // the actual booking record reflects it. booking_payments.status alone isn't
+  // proof the booking got confirmed (the two writes aren't atomic); trusting it
+  // in isolation let a real customer see "Booking Confirmed!" while their
+  // experience_bookings row was still stuck on pending_payment. Fall through to
+  // PENDING (keep polling) until the downstream row actually catches up.
   const result: Record<string, unknown> = {
     status: 'COMPLETED',
     mpesaReceipt: payment.mpesa_receipt ?? null,
@@ -40,32 +45,35 @@ export async function GET(request: Request) {
   if (payment.booking_id) {
     const { data: booking } = await admin
       .from('bookings')
-      .select('confirmation_code, remainder_amount')
+      .select('status, confirmation_code, remainder_amount')
       .eq('id', payment.booking_id)
       .maybeSingle();
-    result.confirmationCode = booking?.confirmation_code ?? null;
-    result.remainderAmount = booking?.remainder_amount ?? null;
+    if (!booking || booking.status === 'pending_payment') return NextResponse.json({ status: 'PENDING' });
+    result.confirmationCode = booking.confirmation_code ?? null;
+    result.remainderAmount = booking.remainder_amount ?? null;
   }
 
   const expBookingId = (payment.metadata as any)?.experience_booking_id ?? null;
   if (expBookingId) {
     const { data: expBooking } = await admin
       .from('experience_bookings')
-      .select('confirmation_code, remainder_amount')
+      .select('status, confirmation_code, remainder_amount')
       .eq('id', expBookingId)
       .maybeSingle();
-    result.confirmationCode = expBooking?.confirmation_code ?? null;
-    result.remainderAmount = expBooking?.remainder_amount ?? null;
+    if (!expBooking || expBooking.status === 'pending_payment') return NextResponse.json({ status: 'PENDING' });
+    result.confirmationCode = expBooking.confirmation_code ?? null;
+    result.remainderAmount = expBooking.remainder_amount ?? null;
   }
 
   const communityAttendeeId = (payment.metadata as any)?.community_event_attendee_id ?? null;
   if (communityAttendeeId) {
     const { data: attendee } = await admin
       .from('community_event_attendees')
-      .select('confirmation_code')
+      .select('status, confirmation_code')
       .eq('id', communityAttendeeId)
       .maybeSingle();
-    result.confirmationCode = attendee?.confirmation_code ?? null;
+    if (!attendee || attendee.status === 'pending_payment') return NextResponse.json({ status: 'PENDING' });
+    result.confirmationCode = attendee.confirmation_code ?? null;
     result.remainderAmount = 0;
   }
 

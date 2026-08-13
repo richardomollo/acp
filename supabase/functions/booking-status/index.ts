@@ -31,8 +31,11 @@ serve(async (req) => {
 
   if (typeof body.bookingId !== 'string') return Response.json({ error: 'bookingId required' }, { status: 400, headers: CORS })
 
-  // Balance payment polling — check booking_payments directly so we don't confuse
-  // deposit_paid (already paid deposit) with "payment succeeded just now"
+  // Checkout polling (initial deposit AND balance payments) — check
+  // booking_payments first, but booking_payments.status alone isn't proof the
+  // booking itself got confirmed (the two writes aren't atomic). Verify the
+  // downstream row actually left pending_payment before reporting 'confirmed',
+  // and report 'pending' (keep polling) otherwise rather than a false positive.
   if (typeof body.checkoutRequestId === 'string') {
     const { data: payment } = await admin
       .from('booking_payments')
@@ -44,9 +47,14 @@ serve(async (req) => {
       return Response.json({ status: 'pending', confirmationCode: null, cancellationReason: null }, { headers: CORS })
     }
     if (payment.status === 'success') {
-      const table = body.bookingType === 'community_event' ? 'community_event_attendees' : 'bookings'
-      const { data: booking } = await admin.from(table).select('confirmation_code').eq('id', body.bookingId).single()
-      return Response.json({ status: 'confirmed', confirmationCode: booking?.confirmation_code ?? null, cancellationReason: null }, { headers: CORS })
+      const table = body.bookingType === 'community_event' ? 'community_event_attendees'
+        : body.bookingType === 'experience' ? 'experience_bookings'
+        : 'bookings'
+      const { data: booking } = await admin.from(table).select('status, confirmation_code').eq('id', body.bookingId).single()
+      if (!booking || booking.status === 'pending_payment') {
+        return Response.json({ status: 'pending', confirmationCode: null, cancellationReason: null }, { headers: CORS })
+      }
+      return Response.json({ status: 'confirmed', confirmationCode: booking.confirmation_code ?? null, cancellationReason: null }, { headers: CORS })
     }
     // failed
     return Response.json({ status: 'cancelled', confirmationCode: null, cancellationReason: payment.cancellation_reason ?? 'mpesa_failed' }, { headers: CORS })

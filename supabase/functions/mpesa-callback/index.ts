@@ -132,7 +132,8 @@ serve(async (req) => {
       // Guard: only update and decrement if still pending_payment (C2B may have already confirmed)
       const { data: confirmedExp } = await admin.from('experience_bookings').update({
         status: 'confirmed',
-        payment_completed_at: new Date().toISOString(),
+        deposit_paid_at: new Date().toISOString(),
+        deposit_payment_id: receiptNumber ?? checkoutRequestId,
         updated_at: new Date().toISOString(),
       }).eq('id', experienceBookingId).eq('status', 'pending_payment').select('id')
 

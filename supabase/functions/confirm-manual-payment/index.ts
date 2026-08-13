@@ -54,7 +54,8 @@ serve(async (req) => {
 
     await admin.from('experience_bookings').update({
       status: 'confirmed',
-      payment_completed_at: now,
+      deposit_paid_at: now,
+      deposit_payment_id: receipt,
       updated_at: now,
     }).eq('id', bookingId)
 

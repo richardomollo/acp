@@ -173,7 +173,7 @@ serve(async (req) => {
       session_price: price, deposit_pct: depositPct,
       deposit_amount: depositAmount, remainder_amount: remainderAmount,
       discount_kes: discountKes,
-      payment_phone: userPhone, payment_completed_at: now, updated_at: now,
+      payment_phone: userPhone, deposit_paid_at: now, deposit_payment_id: receipt, updated_at: now,
     }).select().single()
     if (bookErr || !booking) return Response.json({ error: bookErr?.message ?? 'Failed to create booking' }, { status: 500, headers: CORS })
 
