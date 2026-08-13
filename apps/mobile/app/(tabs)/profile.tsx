@@ -2,7 +2,7 @@ import { StyleSheet, View, ScrollView, TouchableOpacity, TextInput, ActivityIndi
 import { ThemedText } from '@/components/themed-text';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { palette, radii, fontSize } from '@/constants/theme';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Component, type ReactNode } from 'react';
 import { authService } from '@/services/auth';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
@@ -70,6 +70,28 @@ const getInitials = (name: string | null | undefined) => {
   if (!name) return 'U';
   return name.trim().split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
 };
+
+// ─── Error boundary ───────────────────────────────────────────────────────────
+// The app has no global error boundary, so any render exception anywhere
+// crashes the whole app with no fallback. This scopes that risk for the
+// newer, less-proven "My Clubs" section specifically.
+
+class SectionErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error: unknown) {
+    console.error('Profile section render error:', error);
+  }
+  render() {
+    if (this.state.hasError) return null;
+    return this.props.children;
+  }
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -156,7 +178,14 @@ export default function ProfileScreen() {
         .eq('user_id', session.user.id)
         .eq('status', 'active')
         .order('created_at', { ascending: false });
-      setClubs((clubRows as any) ?? []);
+      // Supabase/PostgREST can return a to-one embed as either an object or a
+      // single-item array depending on relationship resolution — normalize so
+      // downstream rendering can safely assume a plain object or null.
+      const normalizedClubs = ((clubRows as any[]) ?? []).map((c) => ({
+        ...c,
+        communities: Array.isArray(c.communities) ? (c.communities[0] ?? null) : c.communities,
+      }));
+      setClubs(normalizedClubs);
     } catch (err) {
       console.error('Profile load error:', err);
     } finally {
@@ -338,6 +367,7 @@ export default function ProfileScreen() {
         </View>
 
         {/* ── My Clubs ── */}
+        <SectionErrorBoundary>
         <View style={styles.menuSection}>
           <View style={styles.clubsSectionHeader}>
             <ThemedText style={[styles.menuSectionTitle, { marginBottom: 0, marginLeft: 0 }]}>MY CLUBS</ThemedText>
@@ -369,7 +399,7 @@ export default function ProfileScreen() {
                         <Image source={{ uri: c.communities.logo_url }} style={styles.clubAvatar} />
                       ) : (
                         <View style={styles.clubAvatarFallback}>
-                          <ThemedText style={styles.clubAvatarFallbackText}>{c.communities.name[0]}</ThemedText>
+                          <ThemedText style={styles.clubAvatarFallbackText}>{(c.communities.name || '?')[0]}</ThemedText>
                         </View>
                       )}
                       <View style={{ flex: 1 }}>
@@ -386,6 +416,7 @@ export default function ProfileScreen() {
             </View>
           )}
         </View>
+        </SectionErrorBoundary>
 
         {/* ── Preferences ── */}
         <View style={styles.menuSection}>

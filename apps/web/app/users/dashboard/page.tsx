@@ -97,7 +97,14 @@ export default function DashboardPage() {
       setProfile(profileRes.data)
       setForm({ name: profileRes.data?.name || '', phone: profileRes.data?.phone || '' })
       setBookings(bookingsRes.data || [])
-      setClubs((clubsRes.data as any) || [])
+      // Supabase/PostgREST can return a to-one embed as either an object or a
+      // single-item array depending on relationship resolution — normalize so
+      // downstream rendering can safely assume a plain object or null.
+      const normalizedClubs = ((clubsRes.data as any[]) || []).map((c) => ({
+        ...c,
+        communities: Array.isArray(c.communities) ? (c.communities[0] ?? null) : c.communities,
+      }))
+      setClubs(normalizedClubs)
       setLoading(false)
     }
     init()
@@ -303,7 +310,7 @@ export default function DashboardPage() {
                           <img src={c.communities.logo_url} alt={c.communities.name} className="w-11 h-11 rounded-full object-cover flex-shrink-0" />
                         ) : (
                           <div className="w-11 h-11 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center text-sm font-bold flex-shrink-0">
-                            {c.communities.name[0]}
+                            {(c.communities.name || '?')[0]}
                           </div>
                         )}
                         <div className="flex-1 min-w-0">
