@@ -84,12 +84,12 @@ export default function CommunityEventDetailScreen() {
     if (!e) { setLoading(false); return; }
     const eid = e.id;
 
-    const [{ count }, { data: attendeeRows }] = await Promise.all([
-      supabase.from('community_event_attendees').select('id', { count: 'exact', head: true })
-        .eq('event_id', eid).eq('status', 'going'),
-      supabase.rpc('get_event_attendees', { p_event_id: eid }),
-    ]);
-    setGoingCount(count ?? 0);
+    // community_event_attendees has no public-read RLS policy (only own row /
+    // organiser), so a direct count() query gets silently filtered to what the
+    // viewer themselves can see — get_event_attendees() is a SECURITY DEFINER
+    // RPC that correctly returns the full public list regardless of viewer.
+    const { data: attendeeRows } = await supabase.rpc('get_event_attendees', { p_event_id: eid });
+    setGoingCount((attendeeRows as AttendeeInfo[] | null)?.length ?? 0);
     setAttendees((attendeeRows as AttendeeInfo[]) ?? []);
 
     if (uid) {

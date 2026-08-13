@@ -64,16 +64,14 @@ export default async function CommunityEventDetailPage({ params }: Props) {
 
   const community = Array.isArray(event.communities) ? event.communities[0] : event.communities;
 
-  const [{ count: goingCount }, { data: attendees }] = await Promise.all([
-    supabase
-      .from("community_event_attendees")
-      .select("id", { count: "exact", head: true })
-      .eq("event_id", event.id)
-      .eq("status", "going"),
-    supabase.rpc("get_event_attendees", { p_event_id: event.id }),
-  ]);
+  // community_event_attendees has no public-read RLS policy (only own row /
+  // organiser), so a direct count() query gets silently filtered to what the
+  // viewer themselves can see — get_event_attendees() is a SECURITY DEFINER
+  // RPC that correctly returns the full public list regardless of viewer.
+  const { data: attendees } = await supabase.rpc("get_event_attendees", { p_event_id: event.id });
+  const goingCount = attendees?.length ?? 0;
 
-  const isFull = event.capacity != null && (goingCount ?? 0) >= event.capacity;
+  const isFull = event.capacity != null && goingCount >= event.capacity;
 
   const cta = (
     event.status !== "active" ? (
@@ -142,7 +140,7 @@ export default async function CommunityEventDetailPage({ params }: Props) {
             <div className="text-sm">
               <p className="text-xs text-gray-400 mb-0.5">Going</p>
               <p className={`font-medium ${isFull ? "text-red-500" : "text-green-600"}`}>
-                {goingCount ?? 0}{event.capacity ? ` / ${event.capacity}` : ""}
+                {goingCount}{event.capacity ? ` / ${event.capacity}` : ""}
               </p>
             </div>
             {event.event_type === "paid" && (

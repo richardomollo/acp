@@ -86,10 +86,13 @@ export default function CommunityDetailScreen() {
 
     const evIds = (eventRows ?? []).map(e => e.id);
     if (evIds.length > 0) {
-      const { data: attendeeRows } = await supabase
-        .from('community_event_attendees').select('event_id').in('event_id', evIds).eq('status', 'going');
+      // community_event_attendees has no public-read RLS policy (only own row /
+      // organiser), so a direct query gets silently filtered to what the viewer
+      // themselves can see — get_event_attendee_counts() is a SECURITY DEFINER
+      // RPC that correctly aggregates counts regardless of viewer.
+      const { data: countRows } = await supabase.rpc('get_event_attendee_counts', { p_event_ids: evIds });
       const counts: Record<string, number> = {};
-      for (const r of attendeeRows ?? []) counts[r.event_id] = (counts[r.event_id] ?? 0) + 1;
+      for (const r of (countRows as { event_id: string; going_count: number }[]) ?? []) counts[r.event_id] = r.going_count;
       setAttendeeCounts(counts);
     }
 
