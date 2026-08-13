@@ -179,6 +179,42 @@ function communityWelcome(d: any) {
   `)
 }
 
+function communityEngagementReminder(d: any) {
+  const events = (d.events ?? []) as { title: string; communityName: string; dateLabel: string; url: string }[]
+  const challenges = (d.challenges ?? []) as { title: string; communityName: string; url: string }[]
+
+  const eventsBlock = events.length ? `
+    <div style="${card}">
+      <p style="margin:0 0 10px;font-size:14px;font-weight:700;color:#333;">📅 Events you haven't RSVP'd to</p>
+      ${events.map(e => `
+        <a href="${e.url}" style="display:block;text-decoration:none;margin:0 0 10px;">
+          <p style="margin:0;font-size:14px;font-weight:600;color:#000;">${e.title}</p>
+          <p style="margin:2px 0 0;font-size:13px;color:#777;">${e.communityName} · ${e.dateLabel}</p>
+        </a>`).join('')}
+    </div>` : ''
+
+  const challengesBlock = challenges.length ? `
+    <div style="${card}">
+      <p style="margin:0 0 10px;font-size:14px;font-weight:700;color:#333;">🏆 Challenges you haven't joined in on</p>
+      ${challenges.map(c => `
+        <a href="${c.url}" style="display:block;text-decoration:none;margin:0 0 10px;">
+          <p style="margin:0;font-size:14px;font-weight:600;color:#000;">${c.title}</p>
+          <p style="margin:2px 0 0;font-size:13px;color:#777;">${c.communityName}</p>
+        </a>`).join('')}
+    </div>` : ''
+
+  return wrap(`
+    <h1 style="${h1}">Your communities are moving without you 👀</h1>
+    <p style="${p}">Hi ${d.name},</p>
+    <p style="${p}">Here's what's happening in your communities that you haven't jumped into yet.</p>
+    ${eventsBlock}
+    ${challengesBlock}
+    <a href="https://activecitypass.com/community" style="${btn}">Open Communities →</a>
+    <div style="${foot}">Active CityPass | Nairobi, Kenya<br>
+      <a href="mailto:info@activecitypass.com" style="color:#aaa;">info@activecitypass.com</a></div>
+  `)
+}
+
 function payoutProcessing(d: any) {
   return wrap(`
     <h1 style="${h1}">Payout Processing 💰</h1>
@@ -505,6 +541,10 @@ serve(async (req) => {
       case 'community_welcome':
         html = communityWelcome(data)
         subject = `Welcome to ${data.communityName}!`
+        break
+      case 'community_engagement_reminder':
+        html = communityEngagementReminder(data)
+        subject = 'Your communities are moving without you 👀'
         break
       case 'payout_processing':
         html = payoutProcessing(data)
