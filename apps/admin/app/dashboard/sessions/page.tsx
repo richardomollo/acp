@@ -23,6 +23,8 @@ type Session = {
   gyms: { name: string } | { name: string }[] | null;
 };
 
+type SessionGroup = { key: string; rep: Session; all: Session[] };
+
 const CATEGORIES_FALLBACK = ['yoga', 'pilates', 'hiit', 'cardio', 'strength', 'boxing', 'spinning', 'dance', 'swimming', 'crossfit'];
 
 const inp = 'w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
@@ -42,7 +44,10 @@ export default function SessionsPage() {
   const [filterTime, setFilterTime] = useState<'upcoming' | 'all' | 'past'>('upcoming');
   const [filterStatus, setFilterStatus] = useState('all');
 
+  // Editing either a single one-off session (editSession set, editGroup null)
+  // or a whole recurring series at once (editGroup set, editSession null).
   const [editSession, setEditSession] = useState<Session | null>(null);
+  const [editGroup, setEditGroup] = useState<SessionGroup | null>(null);
   const [editForm, setEditForm] = useState<Partial<Session>>({});
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState('');
@@ -74,13 +79,35 @@ export default function SessionsPage() {
     return g?.name ?? '—';
   }
 
+  // Recurring occurrences share name+time+category+venue — same grouping key
+  // shape as the partner dashboard, plus gym_id since this page spans every venue.
+  const oneOff = sessions.filter(s => !s.recurring);
+  const groupsMap = new Map<string, Session[]>();
+  for (const s of sessions.filter(s => s.recurring)) {
+    const key = `${s.gym_id}||${s.name}||${s.time}||${s.category}`;
+    if (!groupsMap.has(key)) groupsMap.set(key, []);
+    groupsMap.get(key)!.push(s);
+  }
+  const groups: SessionGroup[] = [...groupsMap.entries()].map(([key, all]) => {
+    const sorted = [...all].sort((a, b) => a.date.localeCompare(b.date));
+    return { key, rep: sorted[0], all: sorted };
+  });
+
   async function toggleActive(session: Session) {
     const { error } = await supabase.from('sessions').update({ is_active: !session.is_active }).eq('id', session.id);
     if (!error) setSessions(prev => prev.map(s => s.id === session.id ? { ...s, is_active: !s.is_active } : s));
   }
 
+  async function toggleGroupActive(group: SessionGroup) {
+    const allActive = group.all.every(s => s.is_active);
+    const ids = group.all.map(s => s.id);
+    const { error } = await supabase.from('sessions').update({ is_active: !allActive }).in('id', ids);
+    if (!error) setSessions(prev => prev.map(s => ids.includes(s.id) ? { ...s, is_active: !allActive } : s));
+  }
+
   function openEdit(session: Session) {
     setEditSession(session);
+    setEditGroup(null);
     setEditForm({
       name: session.name,
       category: session.category,
@@ -95,43 +122,75 @@ export default function SessionsPage() {
     setEditError('');
   }
 
+  function openEditGroup(group: SessionGroup) {
+    setEditGroup(group);
+    setEditSession(null);
+    setEditForm({
+      name: group.rep.name,
+      category: group.rep.category,
+      time: group.rep.time?.slice(0, 5),
+      duration_minutes: group.rep.duration_minutes,
+      max_capacity: group.rep.max_capacity,
+      drop_in_price: group.rep.drop_in_price,
+      instructor: group.rep.instructor,
+      description: group.rep.description,
+    });
+    setEditError('');
+  }
+
   async function saveEdit() {
-    if (!editSession) return;
+    if (!editSession && !editGroup) return;
     setEditLoading(true);
     setEditError('');
-    const { error } = await supabase
-      .from('sessions')
-      .update({
-        name: editForm.name,
-        category: editForm.category,
-        date: editForm.date,
-        time: editForm.time,
-        duration_minutes: editForm.duration_minutes != null ? Number(editForm.duration_minutes) : null,
-        max_capacity: editForm.max_capacity != null ? Number(editForm.max_capacity) : null,
-        drop_in_price: editForm.drop_in_price != null && editForm.drop_in_price !== ('' as any) ? Number(editForm.drop_in_price) : null,
-        instructor: editForm.instructor,
-        description: editForm.description,
-      })
-      .eq('id', editSession.id);
-    setEditLoading(false);
-    if (error) { setEditError(error.message); return; }
-    setSessions(prev => prev.map(s => s.id === editSession.id ? { ...s, ...editForm } as Session : s));
-    setEditSession(null);
+
+    const payload: Record<string, any> = {
+      name: editForm.name,
+      category: editForm.category,
+      time: editForm.time,
+      duration_minutes: editForm.duration_minutes != null ? Number(editForm.duration_minutes) : null,
+      max_capacity: editForm.max_capacity != null ? Number(editForm.max_capacity) : null,
+      drop_in_price: editForm.drop_in_price != null && editForm.drop_in_price !== ('' as any) ? Number(editForm.drop_in_price) : null,
+      instructor: editForm.instructor,
+      description: editForm.description,
+    };
+
+    if (editGroup) {
+      // Bulk edit: every occurrence in the series gets the same field values.
+      // Date is deliberately left alone — each occurrence keeps its own date.
+      const ids = editGroup.all.map(s => s.id);
+      const { error } = await supabase.from('sessions').update(payload).in('id', ids);
+      setEditLoading(false);
+      if (error) { setEditError(error.message); return; }
+      setSessions(prev => prev.map(s => ids.includes(s.id) ? { ...s, ...payload } as Session : s));
+      setEditGroup(null);
+    } else if (editSession) {
+      const { error } = await supabase.from('sessions').update({ ...payload, date: editForm.date }).eq('id', editSession.id);
+      setEditLoading(false);
+      if (error) { setEditError(error.message); return; }
+      setSessions(prev => prev.map(s => s.id === editSession.id ? { ...s, ...payload, date: editForm.date } as Session : s));
+      setEditSession(null);
+    }
   }
 
   const t = todayStr();
-  const filtered = sessions.filter(s => {
+  const matchesFilters = (s: Session, dateForFilter: string) => {
     const matchSearch = !search ||
       s.name.toLowerCase().includes(search.toLowerCase()) ||
       gymName(s).toLowerCase().includes(search.toLowerCase()) ||
       (s.instructor ?? '').toLowerCase().includes(search.toLowerCase());
     const matchVenue = filterVenue === 'all' || s.gym_id === filterVenue;
-    const matchTime = filterTime === 'all' || (filterTime === 'upcoming' ? s.date >= t : s.date < t);
+    const matchTime = filterTime === 'all' || (filterTime === 'upcoming' ? dateForFilter >= t : dateForFilter < t);
     const matchStatus = filterStatus === 'all' ||
       (filterStatus === 'active' && s.is_active) ||
       (filterStatus === 'inactive' && !s.is_active);
     return matchSearch && matchVenue && matchTime && matchStatus;
-  });
+  };
+
+  const filteredOneOff = oneOff.filter(s => matchesFilters(s, s.date));
+  const filteredGroups = groups.filter(g =>
+    matchesFilters(g.rep, filterTime === 'past' ? g.all[g.all.length - 1].date : (g.all.find(s => s.date >= t)?.date ?? g.all[g.all.length - 1].date))
+  );
+  const totalShown = filteredOneOff.length + filteredGroups.length;
 
   if (loading) return <div className="p-8 text-gray-500">Loading sessions…</div>;
 
@@ -140,7 +199,7 @@ export default function SessionsPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Sessions</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{sessions.length} total · {filtered.length} shown</p>
+          <p className="text-sm text-gray-500 mt-0.5">{sessions.length} total occurrences · {totalShown} shown</p>
         </div>
       </div>
 
@@ -184,18 +243,66 @@ export default function SessionsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {filtered.map(session => (
+            {filteredGroups.map(group => {
+              const allActive = group.all.every(s => s.is_active);
+              const nextDate = group.all.find(s => s.date >= t)?.date;
+              const endDate = group.all[group.all.length - 1].date;
+              return (
+                <tr key={group.key} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-5 py-4">
+                    <p className="font-semibold text-gray-900">{group.rep.name}</p>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {group.rep.category && (
+                        <span className="inline-block px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-xs font-medium capitalize">
+                          {group.rep.category}
+                        </span>
+                      )}
+                      <span className="inline-block px-2 py-0.5 bg-gray-100 text-gray-500 rounded text-xs font-medium">
+                        Recurring · {group.all.length} sessions
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-5 py-4 text-gray-700">{gymName(group.rep)}</td>
+                  <td className="px-5 py-4">
+                    <p className="text-gray-900">{nextDate ? `Next: ${fmtDate(nextDate)}` : `Ended ${fmtDate(endDate)}`}</p>
+                    <p className="text-xs text-gray-400">{fmtTime(group.rep.time)}</p>
+                  </td>
+                  <td className="px-5 py-4">
+                    <p className="font-semibold text-gray-900">
+                      {group.rep.drop_in_price != null ? `KES ${Number(group.rep.drop_in_price).toLocaleString()}` : '—'}
+                    </p>
+                  </td>
+                  <td className="px-5 py-4 text-gray-700">{group.rep.max_capacity}</td>
+                  <td className="px-5 py-4">
+                    <button onClick={() => toggleGroupActive(group)}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition ${
+                        allActive
+                          ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                          : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                      }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${allActive ? 'bg-green-500' : 'bg-gray-400'}`} />
+                      {allActive ? 'Active' : 'Inactive'}
+                    </button>
+                  </td>
+                  <td className="px-5 py-4">
+                    <div className="flex items-center justify-end gap-2">
+                      <button onClick={() => openEditGroup(group)}
+                        className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition font-medium">
+                        Edit series
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+
+            {filteredOneOff.map(session => (
               <tr key={session.id} className="hover:bg-gray-50 transition-colors">
                 <td className="px-5 py-4">
                   <p className="font-semibold text-gray-900">{session.name}</p>
                   {session.category && (
                     <span className="inline-block mt-1 px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-xs font-medium capitalize">
                       {session.category}
-                    </span>
-                  )}
-                  {session.recurring && (
-                    <span className="inline-block mt-1 ml-1 px-2 py-0.5 bg-gray-100 text-gray-500 rounded text-xs font-medium">
-                      recurring
                     </span>
                   )}
                 </td>
@@ -233,7 +340,8 @@ export default function SessionsPage() {
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && (
+
+            {totalShown === 0 && (
               <tr>
                 <td colSpan={7} className="px-5 py-12 text-center text-gray-400">No sessions match your filters.</td>
               </tr>
@@ -242,16 +350,26 @@ export default function SessionsPage() {
         </table>
       </div>
 
-      {/* Edit Modal */}
-      {editSession && (
+      {/* Edit Modal (single session or whole recurring series) */}
+      {(editSession || editGroup) && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="px-6 py-5 border-b border-gray-100">
-              <h2 className="text-lg font-bold text-gray-900">Edit Session</h2>
-              <p className="text-sm text-gray-500">{editSession.name} · {gymName(editSession)}</p>
+              <h2 className="text-lg font-bold text-gray-900">{editGroup ? 'Edit Series' : 'Edit Session'}</h2>
+              <p className="text-sm text-gray-500">
+                {editGroup
+                  ? `${editGroup.rep.name} · ${gymName(editGroup.rep)} · ${editGroup.all.length} occurrences`
+                  : `${editSession!.name} · ${gymName(editSession!)}`}
+              </p>
             </div>
             <div className="px-6 py-5 space-y-4">
               {editError && <div className="bg-red-50 text-red-600 text-sm px-4 py-3 rounded-lg">{editError}</div>}
+
+              {editGroup && (
+                <p className="text-xs text-blue-700 bg-blue-50 rounded-lg px-3 py-2">
+                  Changes apply to all {editGroup.all.length} occurrences of this series at once. Each occurrence keeps its own date.
+                </p>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
@@ -269,10 +387,12 @@ export default function SessionsPage() {
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Instructor</label>
                   <input className={inp} value={editForm.instructor || ''} onChange={e => setEditForm(p => ({ ...p, instructor: e.target.value }))} />
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Date</label>
-                  <input type="date" className={inp} value={editForm.date || ''} onChange={e => setEditForm(p => ({ ...p, date: e.target.value }))} />
-                </div>
+                {editSession && (
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Date</label>
+                    <input type="date" className={inp} value={editForm.date || ''} onChange={e => setEditForm(p => ({ ...p, date: e.target.value }))} />
+                  </div>
+                )}
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Time</label>
                   <input type="time" className={inp} value={editForm.time || ''} onChange={e => setEditForm(p => ({ ...p, time: e.target.value }))} />
@@ -295,21 +415,15 @@ export default function SessionsPage() {
                     value={editForm.description || ''} onChange={e => setEditForm(p => ({ ...p, description: e.target.value }))} />
                 </div>
               </div>
-
-              {editSession.recurring && (
-                <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
-                  This is one occurrence of a recurring session — changes here only apply to this date. Edit from the partner dashboard to update the whole series.
-                </p>
-              )}
             </div>
             <div className="px-6 py-4 border-t border-gray-100 flex gap-3 justify-end">
-              <button onClick={() => setEditSession(null)}
+              <button onClick={() => { setEditSession(null); setEditGroup(null); }}
                 className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg transition">
                 Cancel
               </button>
               <button onClick={saveEdit} disabled={editLoading}
                 className="px-5 py-2 text-sm font-semibold bg-gray-900 text-white rounded-lg hover:bg-gray-700 transition disabled:opacity-50">
-                {editLoading ? 'Saving…' : 'Save changes'}
+                {editLoading ? 'Saving…' : editGroup ? `Save all ${editGroup.all.length}` : 'Save changes'}
               </button>
             </div>
           </div>
