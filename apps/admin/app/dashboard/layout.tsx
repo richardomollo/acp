@@ -51,6 +51,7 @@ export default function DashboardLayout({
     { name: '📊 Analytics', href: '/dashboard/analytics' },
     { name: '💰 Wallets', href: '/dashboard/wallets' },
     { name: '🏢 Venues', href: '/dashboard/venues' },
+    { name: '📅 Sessions', href: '/dashboard/sessions' },
     { name: '🎟️ Experiences', href: '/dashboard/experiences' },
     { name: '🥗 Meals', href: '/dashboard/meals' },
     { name: '👥 Partners', href: '/dashboard/partners' },
