@@ -55,12 +55,28 @@ export default function SessionsPage() {
   useEffect(() => { loadSessions(); loadGyms(); loadCategories(); }, []);
 
   async function loadSessions() {
-    const { data, error } = await supabase
-      .from('sessions')
-      .select('*, gyms(name)')
-      .order('date', { ascending: false })
-      .order('time', { ascending: true });
-    if (!error) setSessions((data as any) || []);
+    // Supabase caps a single query at 1000 rows by default — this table has
+    // ~2000, so an unpaginated fetch silently truncated to whatever fell in
+    // the first 1000 (by date desc, i.e. the furthest-future dates), leaving
+    // recurring series only partially loaded/grouped and a bulk edit only
+    // reaching the rows that happened to be in that window. Page through
+    // everything explicitly.
+    const pageSize = 1000;
+    let from = 0;
+    let all: Session[] = [];
+    while (true) {
+      const { data, error } = await supabase
+        .from('sessions')
+        .select('*, gyms(name)')
+        .order('date', { ascending: false })
+        .order('time', { ascending: true })
+        .range(from, from + pageSize - 1);
+      if (error) { console.error(error); break; }
+      all = all.concat((data as any) || []);
+      if (!data || data.length < pageSize) break;
+      from += pageSize;
+    }
+    setSessions(all);
     setLoading(false);
   }
 
