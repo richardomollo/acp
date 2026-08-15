@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,6 +16,7 @@ type FilterType = 'upcoming' | 'today' | 'past';
 
 interface Session {
   id: string;
+  gym_id: string;
   name: string;
   date: string;
   time: string;
@@ -81,7 +82,7 @@ export default function SessionsScreen() {
     const today = new Date().toISOString().split('T')[0];
     let query = supabase
       .from('sessions')
-      .select('id, name, date, time, duration_minutes, max_capacity, drop_in_price, is_active, category, instructor, gyms(name)')
+      .select('id, gym_id, name, date, time, duration_minutes, max_capacity, drop_in_price, is_active, category, instructor, recurring, gyms(name)')
       .in('gym_id', ids);
 
     if (datePick) {
@@ -105,12 +106,12 @@ export default function SessionsScreen() {
           .from('bookings').select('*', { count: 'exact', head: true })
           .eq('session_id', s.id).eq('status', 'confirmed');
         return {
-          id: s.id, name: s.name, date: s.date, time: s.time,
+          id: s.id, gym_id: s.gym_id, name: s.name, date: s.date, time: s.time,
           duration_minutes: s.duration_minutes || 60,
           max_capacity: s.max_capacity, drop_in_price: s.drop_in_price ?? null,
           is_active: s.is_active, category: s.category || 'default',
           instructor: s.instructor || '', gym_name: s.gyms?.name || '',
-          bookings_count: count || 0,
+          bookings_count: count || 0, recurring: !!s.recurring,
         };
       })
     );
@@ -152,6 +153,20 @@ export default function SessionsScreen() {
       },
     ]);
   };
+
+  // Recurring occurrences share no linking column — grouped the same way the
+  // admin/web partner dashboards do, by gym_id + name + time + category.
+  const seriesCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const s of sessions) {
+      if (!s.recurring) continue;
+      const key = `${s.gym_id}||${s.name}||${s.time}||${s.category}`;
+      map.set(key, (map.get(key) ?? 0) + 1);
+    }
+    return map;
+  }, [sessions]);
+  const seriesCountFor = (s: Session) =>
+    s.recurring ? (seriesCounts.get(`${s.gym_id}||${s.name}||${s.time}||${s.category}`) ?? 1) : 1;
 
   if (loading) {
     return (
@@ -244,6 +259,12 @@ export default function SessionsScreen() {
                     <ThemedText style={styles.cardCategory}>
                       {s.category.replace(/_/g, ' ')}
                     </ThemedText>
+                    {seriesCountFor(s) > 1 ? (
+                      <View style={styles.recurringBadge}>
+                        <Ionicons name="repeat" size={10} color="#5b21b6" />
+                        <ThemedText style={styles.recurringBadgeText}>×{seriesCountFor(s)}</ThemedText>
+                      </View>
+                    ) : null}
                     <View style={[styles.activeBadge, { backgroundColor: s.is_active ? '#dcfce7' : '#f3f4f6' }]}>
                       <ThemedText style={[styles.activeBadgeText, { color: s.is_active ? '#16a34a' : '#9ca3af' }]}>
                         {s.is_active ? 'Active' : 'Inactive'}
@@ -356,6 +377,8 @@ const styles = StyleSheet.create({
   cardCategory: { fontSize: 11, fontWeight: '600', color: '#6b7280', textTransform: 'capitalize' },
   activeBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
   activeBadgeText: { fontSize: 11, fontWeight: '700' },
+  recurringBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#ede9fe', borderRadius: 20, paddingHorizontal: 7, paddingVertical: 2 },
+  recurringBadgeText: { fontSize: 10, fontWeight: '700', color: '#5b21b6' },
   cardActions: { flexDirection: 'row', gap: 4 },
   iconBtn: { padding: 4 },
 

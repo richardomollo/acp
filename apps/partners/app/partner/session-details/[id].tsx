@@ -130,6 +130,8 @@ export default function SessionDetailsScreen() {
   const [sessionImage, setSessionImage] = useState<string | null>(null);
   const [venuePolicy, setVenuePolicy] = useState<{ cutoff: number; deposit: number; grace: number } | null>(null);
   const [rateFloorPct, setRateFloorPct] = useState<number | null>(null);
+  const [seriesInfo, setSeriesInfo] = useState<{ ids: string[]; count: number } | null>(null);
+  const [applyToSeries, setApplyToSeries] = useState(false);
 
   // Accordion state — start with details open, rest collapsed
   const [detailsOpen, setDetailsOpen] = useState(true);
@@ -182,6 +184,23 @@ export default function SessionDetailsScreen() {
 
       setSession(sessionWithGym);
       setSessionImage(sessionData.image_url || null);
+
+      // Recurring occurrences share no linking column — grouped the same way
+      // the admin/web partner dashboards do, by gym_id + name + time + category.
+      if (sessionData.recurring) {
+        const { data: siblings } = await supabase
+          .from('sessions')
+          .select('id')
+          .eq('gym_id', sessionData.gym_id)
+          .eq('name', sessionData.name)
+          .eq('time', sessionData.time)
+          .eq('category', sessionData.category)
+          .eq('recurring', true);
+        setSeriesInfo(siblings && siblings.length > 1 ? { ids: siblings.map(s => s.id), count: siblings.length } : null);
+      } else {
+        setSeriesInfo(null);
+      }
+      setApplyToSeries(false);
 
       if (gymData?.rate_floor_percentage != null) {
         setRateFloorPct(gymData.rate_floor_percentage);
@@ -366,28 +385,31 @@ export default function SessionDetailsScreen() {
       const dateString = editForm.date.toISOString().split('T')[0];
 
       const dropInPriceNum = parseFloat(editForm.drop_in_price) || 0;
-      const { error } = await supabase
-        .from('sessions')
-        .update({
-          name: editForm.name.trim(),
-          instructor: editForm.instructor.trim() || null,
-          category: editForm.category,
-          date: dateString,
-          time: timeString,
-          duration_minutes: editForm.duration_minutes,
-          drop_in_price: dropInPriceNum,
-          max_capacity: editForm.max_capacity,
-          is_active: editForm.is_active,
-          cancellation_cutoff_hours: editForm.cancellation_cutoff_hours,
-          deposit_pct: editForm.deposit_pct,
-          no_show_grace_mins: editForm.no_show_grace_mins,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', id);
+      const bulkFields = {
+        name: editForm.name.trim(),
+        instructor: editForm.instructor.trim() || null,
+        category: editForm.category,
+        time: timeString,
+        duration_minutes: editForm.duration_minutes,
+        drop_in_price: dropInPriceNum,
+        max_capacity: editForm.max_capacity,
+        cancellation_cutoff_hours: editForm.cancellation_cutoff_hours,
+        deposit_pct: editForm.deposit_pct,
+        no_show_grace_mins: editForm.no_show_grace_mins,
+        updated_at: new Date().toISOString(),
+      };
+
+      const applyingToSeries = applyToSeries && !!seriesInfo;
+
+      const { error } = applyingToSeries
+        // date and is_active always stay per-occurrence, same convention the
+        // admin/web "edit series" actions use.
+        ? await supabase.from('sessions').update(bulkFields).in('id', seriesInfo!.ids)
+        : await supabase.from('sessions').update({ ...bulkFields, date: dateString, is_active: editForm.is_active }).eq('id', id);
 
       if (error) throw error;
 
-      Alert.alert('Success', 'Session updated successfully');
+      Alert.alert('Success', applyingToSeries ? `Updated all ${seriesInfo!.count} occurrences` : 'Session updated successfully');
       setEditMode(false);
       loadSessionData();
 
@@ -860,6 +882,24 @@ export default function SessionDetailsScreen() {
               );
             })()}
 
+            {/* Recurring series */}
+            {seriesInfo && (
+              <View style={styles.toggleRow}>
+                <View style={styles.toggleInfo}>
+                  <ThemedText style={styles.toggleLabel}>Apply to entire series</ThemedText>
+                  <ThemedText style={styles.toggleSubtext}>
+                    Part of a series of {seriesInfo.count} sessions. Date and Active status always stay per-occurrence.
+                  </ThemedText>
+                </View>
+                <Switch
+                  value={applyToSeries}
+                  onValueChange={setApplyToSeries}
+                  trackColor={{ false: '#e0e0e0', true: '#002fff' }}
+                  thumbColor="#fff"
+                />
+              </View>
+            )}
+
             {/* Active Toggle */}
             <View style={styles.toggleRow}>
               <View style={styles.toggleInfo}>
@@ -1081,7 +1121,7 @@ export default function SessionDetailsScreen() {
                     { icon: 'fitness-outline', label: 'Category', value: session.category || 'None' },
                     { icon: 'card-outline', label: 'Walk-in rate', value: session.drop_in_price ? `KES ${Number(session.drop_in_price).toLocaleString()}` : 'Not set' },
                     { icon: 'people-outline', label: 'Capacity', value: `${session.max_capacity} spots` },
-                    { icon: 'refresh-outline', label: 'Recurring', value: session.recurring ? 'Yes' : 'No' },
+                    { icon: 'refresh-outline', label: 'Recurring', value: session.recurring ? (seriesInfo ? `Yes — series of ${seriesInfo.count}` : 'Yes') : 'No' },
                   ].map((row, i, arr) => (
                     <View key={row.label} style={[styles.detailRow, i === arr.length - 1 && { borderBottomWidth: 0 }]}>
                       <View style={styles.detailIconWrap}>

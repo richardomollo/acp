@@ -6,7 +6,7 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { ThemedText } from '@/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
@@ -104,6 +104,8 @@ export default function ExperiencesScreen() {
   const [uploading, setUploading]     = useState(false);
   const [filter, setFilter]           = useState<'upcoming' | 'past' | 'all'>('upcoming');
   const [form, setForm]               = useState({ ...BLANK });
+  const [seriesInfo, setSeriesInfo]   = useState<{ ids: string[]; count: number } | null>(null);
+  const [applyToSeries, setApplyToSeries] = useState(false);
 
   const setF = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
 
@@ -151,12 +153,26 @@ export default function ExperiencesScreen() {
   function openNew() {
     const defaultGym = gymIds[0] ?? '';
     setEditingId(null);
+    setSeriesInfo(null);
+    setApplyToSeries(false);
     setForm({ ...BLANK, gym_id: defaultGym, includes: [''], itinerary: [{ time: '', activity: '', detail: '' }] });
     setShowModal(true);
   }
 
+  // Experiences have no linking column between recurring occurrences — grouped
+  // the same way sessions are, by gym_id + name + start_time + category.
+  async function findSeries(e: Experience) {
+    let q = supabase.from('experiences').select('id')
+      .eq('gym_id', e.gym_id).eq('name', e.name).eq('start_time', e.start_time);
+    q = e.category ? q.eq('category', e.category) : q.is('category', null);
+    const { data: siblings } = await q;
+    setSeriesInfo(siblings && siblings.length > 1 ? { ids: siblings.map(s => s.id), count: siblings.length } : null);
+  }
+
   function openEdit(e: Experience) {
     setEditingId(e.id);
+    setApplyToSeries(false);
+    findSeries(e);
     setForm({
       name: e.name,
       tagline: e.tagline ?? '',
@@ -253,8 +269,16 @@ export default function ExperiencesScreen() {
     try {
       if (editingId) {
         const { spots_left: _s, ...upd } = payload;
-        const { error } = await supabase.from('experiences').update(upd).eq('id', editingId);
-        if (error) throw error;
+        if (applyToSeries && seriesInfo) {
+          // date and is_active always stay per-occurrence, same convention the
+          // sessions "apply to series" toggle uses.
+          const { date: _d, is_active: _a, ...seriesUpd } = upd;
+          const { error } = await supabase.from('experiences').update(seriesUpd).in('id', seriesInfo.ids);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase.from('experiences').update(upd).eq('id', editingId);
+          if (error) throw error;
+        }
       } else {
         const { error } = await supabase.from('experiences').insert(payload);
         if (error) throw error;
@@ -311,6 +335,19 @@ export default function ExperiencesScreen() {
     filter === 'upcoming' ? e.date >= t :
     filter === 'past'     ? e.date < t  : true
   );
+
+  // Experiences have no linking column, so series size is derived the same
+  // way findSeries() computes it server-side, but locally for the badge.
+  const seriesCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const e of experiences) {
+      const key = `${e.gym_id}||${e.name}||${e.start_time}||${e.category ?? ''}`;
+      map.set(key, (map.get(key) ?? 0) + 1);
+    }
+    return map;
+  }, [experiences]);
+  const seriesCountFor = (e: Experience) =>
+    seriesCounts.get(`${e.gym_id}||${e.name}||${e.start_time}||${e.category ?? ''}`) ?? 1;
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
@@ -370,7 +407,15 @@ export default function ExperiencesScreen() {
               <View style={styles.cardBody}>
                 <View style={styles.cardTop}>
                   <View style={{ flex: 1 }}>
-                    <ThemedText style={styles.cardName}>{e.name}</ThemedText>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <ThemedText style={styles.cardName}>{e.name}</ThemedText>
+                      {seriesCountFor(e) > 1 ? (
+                        <View style={styles.recurringBadge}>
+                          <Ionicons name="repeat" size={10} color="#5b21b6" />
+                          <ThemedText style={styles.recurringBadgeText}>×{seriesCountFor(e)}</ThemedText>
+                        </View>
+                      ) : null}
+                    </View>
                     {e.tagline ? <ThemedText style={styles.cardTagline}>{e.tagline}</ThemedText> : null}
                   </View>
                   <Switch
@@ -696,6 +741,20 @@ export default function ExperiencesScreen() {
               </View>
             </View>
 
+            {/* Recurring series */}
+            {editingId && seriesInfo && (
+              <View style={styles.toggleRow}>
+                <View style={{ flex: 1, marginRight: 12 }}>
+                  <ThemedText style={styles.toggleLabel}>Apply to entire series</ThemedText>
+                  <ThemedText style={styles.toggleSub}>
+                    Part of a series of {seriesInfo.count} experiences. Date and visibility always stay per-occurrence.
+                  </ThemedText>
+                </View>
+                <Switch value={applyToSeries} onValueChange={setApplyToSeries}
+                  trackColor={{ false: '#e5e7eb', true: PRIMARY }} thumbColor="#fff" />
+              </View>
+            )}
+
             {/* Active toggle */}
             <View style={styles.toggleRow}>
               <ThemedText style={styles.toggleLabel}>Visible to members</ThemedText>
@@ -754,6 +813,8 @@ const styles = StyleSheet.create({
   cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 8 },
   cardName: { fontSize: 15, fontWeight: '700', color: '#111' },
   cardTagline: { fontSize: 12, color: '#6b7280', fontStyle: 'italic', marginTop: 2 },
+  recurringBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#ede9fe', borderRadius: 20, paddingHorizontal: 7, paddingVertical: 2 },
+  recurringBadgeText: { fontSize: 10, fontWeight: '700', color: '#5b21b6' },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },
   metaText: { fontSize: 12, color: '#6b7280' },
   metaDot: { fontSize: 12, color: '#d1d5db' },
@@ -832,6 +893,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14, borderTopWidth: 1, borderTopColor: '#f0f0f0', marginTop: 8,
   },
   toggleLabel: { fontSize: 15, fontWeight: '600', color: '#374151' },
+  toggleSub: { fontSize: 12, color: '#9ca3af', marginTop: 2, lineHeight: 16 },
 
   // Cancellation policy
   policySectionHeader: {
