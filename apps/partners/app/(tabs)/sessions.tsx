@@ -141,17 +141,37 @@ export default function SessionsScreen() {
     setSessions(prev => prev.map(s => s.id === id ? { ...s, is_active: !current } : s));
   };
 
-  const deleteSession = (id: string) => {
-    Alert.alert('Delete session', 'This cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete', style: 'destructive', onPress: async () => {
-          const { error } = await supabase.from('sessions').delete().eq('id', id);
-          if (error) { Alert.alert('Error', 'Could not delete session'); return; }
-          setSessions(prev => prev.filter(s => s.id !== id));
-        },
-      },
-    ]);
+  const performDelete = async (ids: string[]) => {
+    const { error } = await supabase.from('sessions').delete().in('id', ids);
+    if (error) { Alert.alert('Error', 'Could not delete session(s)'); return; }
+    setSessions(prev => prev.filter(s => !ids.includes(s.id)));
+  };
+
+  const deleteSeries = async (s: Session) => {
+    const { data: siblings, error } = await supabase
+      .from('sessions').select('id')
+      .eq('gym_id', s.gym_id).eq('name', s.name).eq('time', s.time).eq('category', s.category).eq('recurring', true);
+    if (error || !siblings) { Alert.alert('Error', 'Could not find the series'); return; }
+    await performDelete(siblings.map(x => x.id));
+  };
+
+  const deleteSession = (s: Session) => {
+    if (!s.recurring) {
+      Alert.alert('Delete session', 'This cannot be undone.', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => performDelete([s.id]) },
+      ]);
+      return;
+    }
+    Alert.alert(
+      'Delete recurring session',
+      'This session is part of a recurring series. What would you like to delete?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Just this occurrence', style: 'destructive', onPress: () => performDelete([s.id]) },
+        { text: 'Entire series', style: 'destructive', onPress: () => deleteSeries(s) },
+      ]
+    );
   };
 
   // Recurring occurrences share no linking column — grouped the same way the
@@ -288,7 +308,7 @@ export default function SessionsScreen() {
                     >
                       <Ionicons name="create-outline" size={20} color={PRIMARY} />
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.iconBtn} onPress={() => deleteSession(s.id)}>
+                    <TouchableOpacity style={styles.iconBtn} onPress={() => deleteSession(s)}>
                       <Ionicons name="trash-outline" size={20} color="#dc2626" />
                     </TouchableOpacity>
                   </View>

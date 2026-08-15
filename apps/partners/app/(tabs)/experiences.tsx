@@ -294,16 +294,37 @@ export default function ExperiencesScreen() {
 
   // ── Delete / toggle ───────────────────────────────────────────────────────────
 
+  const performDelete = async (ids: string[]) => {
+    await supabase.from('experiences').delete().in('id', ids);
+    setExperiences(prev => prev.filter(x => !ids.includes(x.id)));
+  };
+
+  const deleteExpSeries = async (e: Experience) => {
+    let q = supabase.from('experiences').select('id')
+      .eq('gym_id', e.gym_id).eq('name', e.name).eq('start_time', e.start_time);
+    q = e.category ? q.eq('category', e.category) : q.is('category', null);
+    const { data: siblings, error } = await q;
+    if (error || !siblings) { Alert.alert('Error', 'Could not find the series'); return; }
+    await performDelete(siblings.map(s => s.id));
+  };
+
   const deleteExp = (e: Experience) => {
-    Alert.alert('Delete Experience', `Delete "${e.name}"? This cannot be undone.`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete', style: 'destructive', onPress: async () => {
-          await supabase.from('experiences').delete().eq('id', e.id);
-          setExperiences(prev => prev.filter(x => x.id !== e.id));
-        },
-      },
-    ]);
+    if (seriesCountFor(e) <= 1) {
+      Alert.alert('Delete Experience', `Delete "${e.name}"? This cannot be undone.`, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => performDelete([e.id]) },
+      ]);
+      return;
+    }
+    Alert.alert(
+      'Delete recurring experience',
+      `"${e.name}" is part of a series of ${seriesCountFor(e)} experiences. What would you like to delete?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Just this occurrence', style: 'destructive', onPress: () => performDelete([e.id]) },
+        { text: 'Entire series', style: 'destructive', onPress: () => deleteExpSeries(e) },
+      ]
+    );
   };
 
   const toggleActive = async (e: Experience) => {

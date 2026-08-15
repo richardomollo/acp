@@ -2781,6 +2781,12 @@ function ExperiencesSection({ gym }: { gym: Gym; onRefresh: () => void }) {
     await loadExperiences();
   }
 
+  async function handleDeleteSeries(ids: string[], name: string) {
+    if (!confirm(`Delete all ${ids.length} occurrences of "${name}"?`)) return;
+    await supabase.from("experiences").delete().in("id", ids);
+    await loadExperiences();
+  }
+
   async function toggleActive(e: Experience) {
     await supabase.from("experiences").update({ is_active: !e.is_active }).eq("id", e.id);
     await loadExperiences();
@@ -3217,6 +3223,10 @@ function ExperiencesSection({ gym }: { gym: Gym; onRefresh: () => void }) {
                   )}
                   <button onClick={() => handleDelete(e.id)}
                     className="text-xs font-semibold text-red-500 hover:opacity-70 transition">Delete</button>
+                  {seriesFor(e).length > 1 && (
+                    <button onClick={() => handleDeleteSeries(seriesFor(e).map(x => x.id), e.name)}
+                      className="text-xs font-semibold text-red-500 hover:opacity-70 transition">Delete series</button>
+                  )}
                 </div>
               </div>
             </div>
