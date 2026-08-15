@@ -24,6 +24,27 @@ async function fetchExperience(slug: string) {
   return data;
 }
 
+// Experiences have no linking column between recurring occurrences — same
+// gym_id + name + start_time + category grouping used on the listing page
+// and the partner dashboard's "edit series" UI — so a recurring series'
+// other dates are found the same way, not stored anywhere.
+async function fetchSiblingDates(exp: any) {
+  let q = supabase
+    .from("experiences")
+    .select("id, slug, date")
+    .eq("gym_id", exp.gym_id)
+    .eq("name", exp.name)
+    .eq("start_time", exp.start_time)
+    .eq("is_active", true)
+    .neq("id", exp.id)
+    .gte("date", new Date().toISOString().slice(0, 10))
+    .order("date", { ascending: true })
+    .limit(12);
+  q = exp.category ? q.eq("category", exp.category) : q.is("category", null);
+  const { data } = await q;
+  return data ?? [];
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const exp = await fetchExperience(slug);
@@ -62,11 +83,16 @@ const fmtTime = (t: string) => {
   return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
 };
 
+const fmtDateShort = (d: string) =>
+  new Date(d).toLocaleDateString("en-KE", { weekday: "short", day: "numeric", month: "short" });
+
 export default async function ExperienceDetailPage({ params }: Props) {
   const { slug } = await params;
 
   const exp = await fetchExperience(slug);
   if (!exp) return notFound();
+
+  const siblingDates = await fetchSiblingDates(exp);
 
   const gym = Array.isArray(exp.gyms) ? exp.gyms[0] : exp.gyms as any;
   const pt = Array.isArray(exp.personal_trainers) ? exp.personal_trainers[0] : exp.personal_trainers as any;
@@ -153,6 +179,24 @@ export default async function ExperienceDetailPage({ params }: Props) {
               </p>
             </div>
           </div>
+
+          {/* Other upcoming dates in this recurring series */}
+          {siblingDates.length > 0 && (
+            <div className="mb-8">
+              <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Other upcoming dates</p>
+              <div className="flex flex-wrap gap-2">
+                {siblingDates.map((d: any) => (
+                  <Link
+                    key={d.id}
+                    href={`/experiences/${d.slug ?? d.id}`}
+                    className="px-3 py-1.5 rounded-full border border-gray-200 text-xs font-medium text-gray-700 hover:border-[#050040] hover:text-[#050040] transition"
+                  >
+                    {fmtDateShort(d.date)}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Logistics */}
           {(exp.meeting_point || exp.transport_info) && (

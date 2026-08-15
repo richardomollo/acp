@@ -58,7 +58,32 @@ const fmtDate = (dateStr: string) =>
     month: "short",
   });
 
-function ExperienceCard({ exp }: { exp: Experience }) {
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+// Experiences have no linking column between recurring occurrences — grouped
+// client-side the same way the partner dashboard already groups them for its
+// own "edit series" UI, by gym_id + name + start_time + category. The
+// soonest upcoming occurrence stands in as the card's representative.
+function groupExperiences(list: Experience[]): (Experience & { occurrenceDates?: string[] })[] {
+  const groups = new Map<string, Experience[]>();
+  for (const e of list) {
+    const key = `${e.gym_id}||${e.name}||${e.start_time}||${e.category ?? ""}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(e);
+  }
+  return [...groups.values()].map((occurrences) => {
+    const sorted = [...occurrences].sort((a, b) => a.date.localeCompare(b.date));
+    const rep = sorted[0];
+    return sorted.length > 1 ? { ...rep, occurrenceDates: sorted.map((o) => o.date) } : rep;
+  });
+}
+
+function weekdayLabel(dates: string[]): string | null {
+  const days = new Set(dates.map((d) => new Date(d + "T00:00:00").getDay()));
+  return days.size === 1 ? WEEKDAYS[[...days][0]] : null;
+}
+
+function ExperienceCard({ exp }: { exp: Experience & { occurrenceDates?: string[] } }) {
   const spotsLow = exp.spots_left > 0 && exp.spots_left <= 5;
   const soldOut = exp.spots_left <= 0;
   const discount = Number(exp.discount_kes) || 0;
@@ -107,12 +132,22 @@ function ExperienceCard({ exp }: { exp: Experience }) {
       </div>
 
       <div className="p-3.5">
-        <p className="font-black text-gray-900 text-base truncate">{exp.name}</p>
+        <div className="flex items-center gap-1.5">
+          <p className="font-black text-gray-900 text-base truncate">{exp.name}</p>
+          {exp.occurrenceDates && exp.occurrenceDates.length > 1 && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 text-[10px] font-bold flex-shrink-0">
+              {exp.occurrenceDates.length} dates
+            </span>
+          )}
+        </div>
         {exp.gyms?.name && (
           <p className="text-gray-400 text-xs italic mt-0.5 truncate">{exp.gyms.name}</p>
         )}
         <p className="text-gray-400 text-xs mt-1 truncate">
-          {fmtDate(exp.date)} · {fmtTime(exp.start_time)}{exp.end_time ? ` – ${fmtTime(exp.end_time)}` : ""}
+          {exp.occurrenceDates && exp.occurrenceDates.length > 1
+            ? (weekdayLabel(exp.occurrenceDates) ? `Every ${weekdayLabel(exp.occurrenceDates)}` : `Next: ${fmtDate(exp.date)}`)
+            : fmtDate(exp.date)
+          } · {fmtTime(exp.start_time)}{exp.end_time ? ` – ${fmtTime(exp.end_time)}` : ""}
         </p>
         <div className="mt-2.5 pt-2.5 border-t border-gray-100">
           {soldOut ? (
@@ -183,9 +218,11 @@ export default function ExperiencesClient() {
     return ["All", ...Array.from(new Set(cats))];
   }, [experiences]);
 
+  const grouped = useMemo(() => groupExperiences(experiences), [experiences]);
+
   const filtered = useMemo(() => {
     const q = debouncedSearch.toLowerCase();
-    return experiences.filter((e) => {
+    return grouped.filter((e) => {
       const matchSearch =
         !q ||
         e.name.toLowerCase().includes(q) ||
@@ -195,7 +232,7 @@ export default function ExperiencesClient() {
       const matchCat = cat === "All" || e.category === cat;
       return matchSearch && matchCat;
     });
-  }, [experiences, debouncedSearch, cat]);
+  }, [grouped, debouncedSearch, cat]);
 
   const clearFilters = () => { setSearch(""); setCat("All"); };
   const hasFilters = search || cat !== "All";
