@@ -179,6 +179,7 @@ export default function ProfileScreen() {
     { icon: 'notifications-outline', label: 'Notifications', badge: unreadCount > 0 ? unreadCount : null, onPress: () => router.push('/(tabs)/notifications' as any) },
     { icon: 'cash-outline', label: 'Payout information', badge: null, onPress: () => router.push('/partner/payout-information' as any) },
     { icon: 'business-outline', label: 'Manage venues', badge: null, onPress: () => router.push('/partner/venues' as any) },
+    { icon: 'trophy-outline', label: 'Programmes', badge: null, onPress: () => router.push('/(tabs)/programmes' as any) },
     { icon: 'walk-outline', label: 'Connect Strava', badge: null, onPress: () => router.push('/strava-settings' as any) },
     { icon: 'lock-closed-outline', label: 'Change password', badge: null, onPress: () => router.push('/partner/change-password' as any) },
     { icon: 'mail-outline', label: 'Change email', badge: null, onPress: () => router.push('/partner/change-email' as any) },

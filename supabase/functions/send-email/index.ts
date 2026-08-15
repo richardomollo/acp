@@ -509,6 +509,21 @@ function feedbackRequest(d: any) {
   `)
 }
 
+function programmeInstalmentReminder(d: any) {
+  return wrap(`
+    <h1 style="${h1}">Instalment due soon 💳</h1>
+    <p style="${p}">Hi ${d.name || 'there'},</p>
+    <p style="${p}">A payment for ${d.programmeName} at ${d.venueName} is coming up:</p>
+    <div style="${card}">
+      <p style="margin:0 0 6px;font-size:15px;font-weight:700;">KES ${Number(d.amount).toLocaleString()}</p>
+      <p style="margin:0;font-size:14px;color:#666;">Due ${d.dueDate}</p>
+    </div>
+    <p style="${p}">Pay via the app or at the venue before the due date to keep your programme active.</p>
+    <div style="${foot}">Active CityPass | Nairobi, Kenya<br>
+      <a href="mailto:info@activecitypass.com" style="color:#aaa;">info@activecitypass.com</a></div>
+  `)
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -630,6 +645,10 @@ serve(async (req) => {
       case 'feedback_request':
         html = feedbackRequest(data)
         subject = `How was ${data.activityName}?`
+        break
+      case 'programme_instalment_reminder':
+        html = programmeInstalmentReminder(data)
+        subject = `Instalment due ${data.dueDate} — ${data.programmeName}`
         break
       default:
         throw new Error(`Unknown email type: ${type}`)

@@ -51,6 +51,15 @@ interface Session {
   category: string | null;
 }
 
+interface Programme {
+  id: string;
+  title: string;
+  category: string | null;
+  programme_weeks: number;
+  programme_price_kes: number;
+  image_url: string | null;
+}
+
 const CATEGORY_ICONS: Record<string, string> = {
   yoga: 'leaf-outline', pilates: 'body-outline', hiit: 'flame-outline',
   cardio: 'heart-outline', strength: 'barbell-outline', weights: 'barbell-outline',
@@ -89,6 +98,7 @@ export default function GymDetailsScreen() {
 
   const [gym, setGym] = useState<Gym | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [programmes, setProgrammes] = useState<Programme[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -149,6 +159,14 @@ export default function GymDetailsScreen() {
         .order('date', { ascending: true }).order('time', { ascending: true });
       if (sessionsError) console.error('Sessions error:', sessionsError);
       setSessions(sessionsData || []);
+
+      const { data: programmesData, error: programmesError } = await supabase
+        .from('gym_programmes')
+        .select('id, title, category, programme_weeks, programme_price_kes, image_url')
+        .eq('gym_id', gymId).eq('is_active', true).eq('is_draft', false)
+        .order('created_at', { ascending: false });
+      if (programmesError) console.error('Programmes error:', programmesError);
+      setProgrammes(programmesData || []);
     } catch (err: any) {
       setError(err.message || 'Failed to load gym details');
       Alert.alert('Error', err.message || 'Failed to load gym details');
@@ -417,6 +435,43 @@ export default function GymDetailsScreen() {
             })
           )}
         </View>
+
+        {/* ── Programmes section ── */}
+        {programmes.length > 0 && (
+          <View style={styles.sectionHeader}>
+            <ThemedText style={styles.sectionTitle}>Programmes</ThemedText>
+          </View>
+        )}
+        {programmes.map(programme => (
+          <TouchableOpacity
+            key={programme.id}
+            style={styles.sessionRow}
+            activeOpacity={0.85}
+            onPress={() => router.push({ pathname: '/gym-programme-details', params: { programmeId: programme.id } })}
+          >
+            <View style={styles.sessionThumb}>
+              {programme.image_url ? (
+                <Image source={{ uri: programme.image_url }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
+              ) : (
+                <View style={[StyleSheet.absoluteFillObject, styles.sessionThumbFallback]}>
+                  <Ionicons name="trophy-outline" size={22} color="rgba(255,255,255,0.9)" />
+                </View>
+              )}
+            </View>
+            <View style={styles.sessionInfo}>
+              <View style={styles.sessionBadges}>
+                <View style={styles.catChip}>
+                  <Ionicons name="trophy-outline" size={11} color={palette.gray450} />
+                  <ThemedText style={styles.catChipText}>{programme.programme_weeks}-Week Programme</ThemedText>
+                </View>
+              </View>
+              <ThemedText style={styles.sessionName} numberOfLines={1}>{programme.title}</ThemedText>
+            </View>
+            <View style={styles.sessionPrice}>
+              <ThemedText style={styles.depositAmount}>KES {Number(programme.programme_price_kes).toLocaleString()}</ThemedText>
+            </View>
+          </TouchableOpacity>
+        ))}
 
         <View style={{ height: 40 }} />
       </ScrollView>

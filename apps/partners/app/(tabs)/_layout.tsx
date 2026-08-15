@@ -116,6 +116,7 @@ export default function TabLayout() {
       />
       {/* Hidden — keep file but exclude from tab bar */}
       <Tabs.Screen name="notifications" options={{ href: null }} />
+      <Tabs.Screen name="programmes" options={{ href: null }} />
     </Tabs>
     <UpdateBanner />
     </View>

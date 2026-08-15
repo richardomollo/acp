@@ -74,6 +74,14 @@ export default async function GymDetailPage({ params }: Props) {
     .order("date", { ascending: true })
     .order("time", { ascending: true });
 
+  const { data: programmes } = await supabase
+    .from("gym_programmes")
+    .select("id, slug, title, category, programme_weeks, programme_price_kes, image_url")
+    .eq("gym_id", gym.id)
+    .eq("is_active", true)
+    .eq("is_draft", false)
+    .order("created_at", { ascending: false });
+
   return (
     <div className="w-full px-6 py-12 max-w-7xl mx-auto">
       <Link href="/venues" className="text-sm text-gray-500 hover:underline mb-6 inline-block">
@@ -96,6 +104,36 @@ export default async function GymDetailPage({ params }: Props) {
             <VenueSessionsFilter sessions={sessions} />
           ) : (
             <p className="mt-6 text-gray-500 text-sm">No classes available at this venue yet.</p>
+          )}
+
+          {programmes && programmes.length > 0 && (
+            <div className="mt-10">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Programmes</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {programmes.map((p) => (
+                  <Link
+                    key={p.id}
+                    href={`/gym-programmes/${p.slug ?? p.id}`}
+                    className="group rounded-2xl overflow-hidden bg-white border border-gray-100 shadow-md block hover:shadow-lg transition-shadow"
+                  >
+                    <div className="relative overflow-hidden" style={{ height: 140 }}>
+                      {p.image_url ? (
+                        <img src={p.image_url} alt={p.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-indigo-900 to-blue-600" />
+                      )}
+                      <span className="absolute top-2.5 left-2.5 inline-flex items-center px-2.5 py-1 rounded-full bg-black/55 text-white text-[11px] font-bold">
+                        {p.programme_weeks}-Week Programme
+                      </span>
+                    </div>
+                    <div className="p-3.5">
+                      <p className="font-black text-gray-900 text-base truncate">{p.title}</p>
+                      <p className="text-sm font-bold text-gray-900 mt-1.5">KES {Number(p.programme_price_kes).toLocaleString()}</p>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
           )}
 
           {(gym.phone || gym.email || gym.address) && (
