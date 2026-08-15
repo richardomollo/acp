@@ -38,7 +38,7 @@ serve(async (req) => {
 
   const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
 
-  let body: { eventId?: unknown; phone?: unknown }
+  let body: { eventId?: unknown; phone?: unknown; platform?: unknown }
   try { body = await req.json() } catch { return Response.json({ error: 'Invalid JSON' }, { status: 400, headers: CORS }) }
   if (typeof body.eventId !== 'string') return Response.json({ error: 'eventId required' }, { status: 400, headers: CORS })
   if (typeof body.phone !== 'string') return Response.json({ error: 'phone required' }, { status: 400, headers: CORS })
@@ -97,6 +97,7 @@ serve(async (req) => {
       deposit_amount: price,
       remainder_amount: 0,
       payment_phone: phone,
+      platform: typeof body.platform === 'string' ? body.platform : null,
     })
     .select()
     .single()

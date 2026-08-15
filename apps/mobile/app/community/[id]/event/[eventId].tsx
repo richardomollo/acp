@@ -117,7 +117,7 @@ export default function CommunityEventDetailScreen() {
     const code = generateCode();
     const { error } = await supabase.from('community_event_attendees').insert({
       event_id: event.id, user_id: userId, confirmation_code: code,
-      qr_payload: `acp:community-event:pending:${code}`,
+      qr_payload: `acp:community-event:pending:${code}`, platform: Platform.OS,
     });
     setBooking(false);
     if (error) { Alert.alert('Could not RSVP', error.message); return; }

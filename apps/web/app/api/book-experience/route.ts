@@ -16,7 +16,7 @@ export async function POST(request: Request) {
         Authorization: authHeader,
         apikey: anonKey!,
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ ...body, platform: 'web' }),
     });
 
     const data = await res.json();

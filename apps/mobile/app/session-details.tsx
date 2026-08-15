@@ -182,7 +182,7 @@ export default function SessionDetailsScreen() {
     setBookingSubmitting(true);
     try {
       const { data, error } = await supabase.functions.invoke('book-session', {
-        body: { sessionId },
+        body: { sessionId, platform: Platform.OS },
       });
       if (error) throw new Error(error.message ?? 'Booking failed');
       if (data?.error) throw new Error(data.error);

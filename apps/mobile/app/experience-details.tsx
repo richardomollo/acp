@@ -157,7 +157,7 @@ export default function ExperienceDetailsScreen() {
     setBookingSubmitting(true);
     try {
       const { data, error } = await supabase.functions.invoke('book-experience', {
-        body: { experienceId: id },
+        body: { experienceId: id, platform: Platform.OS },
       });
       if (error) throw new Error(error.message ?? 'Booking failed');
       if (data?.error) throw new Error(data.error);

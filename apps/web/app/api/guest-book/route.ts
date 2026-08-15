@@ -19,7 +19,7 @@ export async function POST(request: Request) {
         Authorization: `Bearer ${anonKey}`,
         apikey: anonKey!,
       },
-      body: JSON.stringify({ sessionId, name, email, phone }),
+      body: JSON.stringify({ sessionId, name, email, phone, platform: 'web' }),
     });
 
     const data = await res.json();

@@ -498,6 +498,17 @@ function bookingReminder(d: any) {
   `)
 }
 
+function feedbackRequest(d: any) {
+  return wrap(`
+    <h1 style="${h1}">How was ${d.activityName}? 🙌</h1>
+    <p style="${p}">Hi ${d.name || 'there'},</p>
+    <p style="${p}">Thanks for joining ${d.activityName}. Got a minute to tell us how it went? It only takes 30 seconds and helps us make Active CityPass better.</p>
+    <a href="${d.link}" style="${btn}">Leave Feedback</a>
+    <div style="${foot}">Active CityPass | Nairobi, Kenya<br>
+      <a href="mailto:info@activecitypass.com" style="color:#aaa;">info@activecitypass.com</a></div>
+  `)
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -615,6 +626,10 @@ serve(async (req) => {
         subject = data.daysOut === 1
           ? `Tomorrow: ${data.activityName}`
           : `Reminder: ${data.activityName} in ${data.daysOut} days`
+        break
+      case 'feedback_request':
+        html = feedbackRequest(data)
+        subject = `How was ${data.activityName}?`
         break
       default:
         throw new Error(`Unknown email type: ${type}`)

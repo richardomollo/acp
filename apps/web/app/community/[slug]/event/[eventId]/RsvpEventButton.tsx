@@ -48,7 +48,7 @@ export default function RsvpEventButton({ eventId, isFull, className }: Props) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setBusy(false); return; }
     const { error } = await supabase.from("community_event_attendees").insert({
-      event_id: eventId, user_id: user.id, confirmation_code: generateCode(),
+      event_id: eventId, user_id: user.id, confirmation_code: generateCode(), platform: "web",
     });
     setBusy(false);
     if (!error) {

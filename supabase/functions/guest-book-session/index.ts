@@ -28,7 +28,7 @@ serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   )
 
-  let body: { sessionId?: unknown; name?: unknown; email?: unknown; phone?: unknown }
+  let body: { sessionId?: unknown; name?: unknown; email?: unknown; phone?: unknown; platform?: unknown }
   try { body = await req.json() } catch { return Response.json({ error: 'Invalid JSON' }, { status: 400, headers: CORS }) }
 
   if (typeof body.sessionId !== 'string') return Response.json({ error: 'sessionId required' }, { status: 400, headers: CORS })
@@ -102,6 +102,7 @@ serve(async (req) => {
       guest_name: guestName,
       guest_email: guestEmail,
       guest_phone: phoneProvided ? phone : null,
+      platform: typeof body.platform === 'string' ? body.platform : null,
     })
     .select()
     .single()

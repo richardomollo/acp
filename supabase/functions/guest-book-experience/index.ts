@@ -28,7 +28,7 @@ serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   )
 
-  let body: { experienceId?: unknown; name?: unknown; email?: unknown; phone?: unknown }
+  let body: { experienceId?: unknown; name?: unknown; email?: unknown; phone?: unknown; platform?: unknown }
   try { body = await req.json() } catch { return Response.json({ error: 'Invalid JSON' }, { status: 400, headers: CORS }) }
 
   if (typeof body.experienceId !== 'string') return Response.json({ error: 'experienceId required' }, { status: 400, headers: CORS })

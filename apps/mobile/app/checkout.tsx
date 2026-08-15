@@ -214,7 +214,7 @@ export default function CheckoutScreen() {
 
       } else if (bookingType === 'session') {
         const { data, error: fnErr } = await supabase.functions.invoke('book-session', {
-          body: { sessionId: itemId, phone: phone.trim() },
+          body: { sessionId: itemId, phone: phone.trim(), platform: Platform.OS },
         });
         if (fnErr) throw new Error(fnErr.message ?? 'Payment initiation failed');
         if (data.confirmationCode) setConfirmCode(data.confirmationCode);
@@ -223,7 +223,7 @@ export default function CheckoutScreen() {
 
       } else if (bookingType === 'experience') {
         const { data, error: fnErr } = await supabase.functions.invoke('book-experience', {
-          body: { experienceId: itemId, phone: phone.trim() },
+          body: { experienceId: itemId, phone: phone.trim(), platform: Platform.OS },
         });
         if (fnErr) throw new Error(fnErr.message ?? 'Payment initiation failed');
         if (data.confirmationCode) setConfirmCode(data.confirmationCode);
@@ -232,7 +232,7 @@ export default function CheckoutScreen() {
 
       } else if (bookingType === 'community_event') {
         const { data, error: fnErr } = await supabase.functions.invoke('book-community-event', {
-          body: { eventId: itemId, phone: phone.trim() },
+          body: { eventId: itemId, phone: phone.trim(), platform: Platform.OS },
         });
         if (fnErr) throw new Error(fnErr.message ?? 'Payment initiation failed');
         if (data.confirmationCode) setConfirmCode(data.confirmationCode);

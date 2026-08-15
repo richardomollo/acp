@@ -39,7 +39,7 @@ serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   )
 
-  let body: { sessionId?: unknown; phone?: unknown; manual?: unknown }
+  let body: { sessionId?: unknown; phone?: unknown; manual?: unknown; platform?: unknown }
   try { body = await req.json() } catch { return Response.json({ error: 'Invalid JSON' }, { status: 400, headers: CORS }) }
 
   const isManual = body.manual === true
@@ -116,6 +116,7 @@ serve(async (req) => {
       deposit_amount: depositAmount,
       remainder_amount: remainderAmount,
       payment_phone: isFree ? null : phone,
+      platform: typeof body.platform === 'string' ? body.platform : null,
     })
     .select()
     .single()
