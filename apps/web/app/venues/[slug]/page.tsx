@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import GymGallery from "@/app/components/GymGallery";
 import Link from "next/link";
 import VenueSessionsFilter from "./VenueSessionsFilter";
-import VenueDetailMapWrapper from "./VenueDetailMapWrapper";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -145,20 +144,10 @@ export default async function GymDetailPage({ params }: Props) {
           )}
         </div>
 
-        {/* ── Right: sticky map ── */}
+        {/* ── Right: venue info ── */}
         <div className="hidden md:block w-80 lg:w-96 flex-shrink-0">
           <div className="sticky top-[86px]">
-            <div className="rounded-2xl overflow-hidden border border-gray-200" style={{ height: 280 }}>
-              <VenueDetailMapWrapper
-                id={gym.id}
-                name={gym.name}
-                area={gym.area ?? gym.location ?? ""}
-                location={gym.location ?? ""}
-                lat={gym.lat}
-                lng={gym.lng}
-              />
-            </div>
-            <div className="mt-3 bg-white rounded-2xl border border-gray-200 p-4 text-sm space-y-3">
+            <div className="bg-white rounded-2xl border border-gray-200 p-4 text-sm space-y-3">
               <div>
                 <p className="font-semibold text-gray-900">{gym.name}</p>
                 <p className="text-gray-500 capitalize mt-0.5">{gym.type}</p>
