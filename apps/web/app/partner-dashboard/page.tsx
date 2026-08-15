@@ -2617,6 +2617,7 @@ function ExperiencesSection({ gym }: { gym: Gym; onRefresh: () => void }) {
   const [recurDays,    setRecurDays]    = useState<number[]>([]);
   const [recurEndDate, setRecurEndDate] = useState("");
   const [editId,      setEditId]      = useState<string | null>(null);
+  const [editGroupIds, setEditGroupIds] = useState<string[] | null>(null);
   const [saving,      setSaving]      = useState(false);
   const [uploading,   setUploading]   = useState(false);
   const [filter,      setFilter]      = useState<"upcoming" | "past" | "all">("upcoming");
@@ -2644,6 +2645,7 @@ function ExperiencesSection({ gym }: { gym: Gym; onRefresh: () => void }) {
   function openNew() {
     setForm({ ...EXP_EMPTY, includes: [""], itinerary: [{ time: "", activity: "", detail: "" }] });
     setEditId(null);
+    setEditGroupIds(null);
     resetRecurring();
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -2671,6 +2673,37 @@ function ExperiencesSection({ gym }: { gym: Gym; onRefresh: () => void }) {
       no_show_grace_mins: e.no_show_grace_mins ?? null,
     });
     setEditId(e.id);
+    setEditGroupIds(null);
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  // Experiences have no linking column between recurring occurrences —
+  // grouped client-side the same way the sessions section already does,
+  // by name + start_time + category.
+  function openEditGroup(rep: Experience, all: Experience[]) {
+    setForm({
+      name: rep.name,
+      tagline: rep.tagline ?? "",
+      description: rep.description ?? "",
+      date: rep.date,
+      start_time: rep.start_time,
+      end_time: rep.end_time ?? "",
+      meeting_point: rep.meeting_point ?? "",
+      transport_info: rep.transport_info ?? "",
+      price_kes: rep.price_kes,
+      max_capacity: rep.max_capacity,
+      image_url: rep.image_url,
+      category: rep.category ?? "",
+      is_active: rep.is_active,
+      includes: rep.includes.length ? rep.includes : [""],
+      itinerary: rep.itinerary.length ? rep.itinerary : [{ time: "", activity: "", detail: "" }],
+      cancellation_cutoff_hours: rep.cancellation_cutoff_hours ?? null,
+      deposit_pct: rep.deposit_pct ?? null,
+      no_show_grace_mins: rep.no_show_grace_mins ?? null,
+    });
+    setEditId(null);
+    setEditGroupIds(all.map(x => x.id));
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -2721,7 +2754,12 @@ function ExperiencesSection({ gym }: { gym: Gym; onRefresh: () => void }) {
       no_show_grace_mins: form.no_show_grace_mins ?? null,
     };
 
-    if (editId) {
+    if (editGroupIds) {
+      // date and is_active always stay per-occurrence, same convention the
+      // sessions section's "edit series" action uses.
+      const { spots_left: _s, is_active: _a, ...seriesPayload } = base;
+      await supabase.from("experiences").update(seriesPayload).in("id", editGroupIds);
+    } else if (editId) {
       const { spots_left: _s, ...updatePayload } = { ...base, date: form.date };
       await supabase.from("experiences").update(updatePayload).eq("id", editId);
     } else if (isRecurring) {
@@ -2732,6 +2770,7 @@ function ExperiencesSection({ gym }: { gym: Gym; onRefresh: () => void }) {
     }
     setSaving(false);
     setShowForm(false);
+    setEditGroupIds(null);
     resetRecurring();
     await loadExperiences();
   }
@@ -2765,6 +2804,18 @@ function ExperiencesSection({ gym }: { gym: Gym; onRefresh: () => void }) {
     filter === "past"     ? e.date < t  : true
   );
 
+  // Experiences have no linking column between recurring occurrences —
+  // grouped the same way the sessions section already does, by
+  // name + start_time + category, so the "Edit series" button can find
+  // every sibling for a given card.
+  const seriesGroups = new Map<string, Experience[]>();
+  for (const e of experiences) {
+    const key = `${e.name}||${e.start_time}||${e.category ?? ""}`;
+    if (!seriesGroups.has(key)) seriesGroups.set(key, []);
+    seriesGroups.get(key)!.push(e);
+  }
+  const seriesFor = (e: Experience) => seriesGroups.get(`${e.name}||${e.start_time}||${e.category ?? ""}`) ?? [e];
+
   if (loading) return (
     <div className="flex items-center justify-center py-20">
       <div className="w-7 h-7 border-[3px] border-[#050040] border-t-transparent rounded-full animate-spin" />
@@ -2791,8 +2842,17 @@ function ExperiencesSection({ gym }: { gym: Gym; onRefresh: () => void }) {
       {showForm && (
         <div className="bg-white rounded-2xl shadow-sm p-6 space-y-5">
           <div className="flex items-center justify-between mb-1">
-            <h2 className="font-semibold text-gray-900 text-lg">{editId ? "Edit Experience" : "New Experience"}</h2>
-            <button onClick={() => { setShowForm(false); resetRecurring(); }} className="text-gray-400 hover:text-gray-600 text-sm">Cancel</button>
+            <div>
+              <h2 className="font-semibold text-gray-900 text-lg">
+                {editGroupIds ? "Edit Recurring Series" : editId ? "Edit Experience" : "New Experience"}
+              </h2>
+              {editGroupIds && (
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Changes apply to all {editGroupIds.length} occurrences. Date and visibility always stay per-occurrence.
+                </p>
+              )}
+            </div>
+            <button onClick={() => { setShowForm(false); setEditGroupIds(null); resetRecurring(); }} className="text-gray-400 hover:text-gray-600 text-sm">Cancel</button>
           </div>
 
           {/* Cover image */}
@@ -2845,12 +2905,14 @@ function ExperiencesSection({ gym }: { gym: Gym; onRefresh: () => void }) {
 
           {/* Date + times */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-                {isRecurring ? "Start Date *" : "Date *"}
-              </label>
-              <input type="date" className={inp} value={form.date} onChange={e => setF("date", e.target.value)} />
-            </div>
+            {!editGroupIds && (
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                  {isRecurring ? "Start Date *" : "Date *"}
+                </label>
+                <input type="date" className={inp} value={form.date} onChange={e => setF("date", e.target.value)} />
+              </div>
+            )}
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Start Time *</label>
               <input type="time" className={inp} value={form.start_time} onChange={e => setF("start_time", e.target.value)} />
@@ -2862,7 +2924,7 @@ function ExperiencesSection({ gym }: { gym: Gym; onRefresh: () => void }) {
           </div>
 
           {/* Recurring toggle — only on new experiences */}
-          {!editId && (
+          {!editId && !editGroupIds && (
             <div>
               <label className="flex items-center gap-3 cursor-pointer select-none w-fit">
                 <div
@@ -3054,19 +3116,21 @@ function ExperiencesSection({ gym }: { gym: Gym; onRefresh: () => void }) {
           </div>
 
           {/* Active toggle */}
-          <div className="flex items-center gap-3">
-            <button onClick={() => setF("is_active", !form.is_active)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${form.is_active ? "bg-[#050040]" : "bg-gray-200"}`}>
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${form.is_active ? "translate-x-6" : "translate-x-1"}`} />
-            </button>
-            <span className="text-sm text-gray-600">Visible to members</span>
-          </div>
+          {!editGroupIds && (
+            <div className="flex items-center gap-3">
+              <button onClick={() => setF("is_active", !form.is_active)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${form.is_active ? "bg-[#050040]" : "bg-gray-200"}`}>
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${form.is_active ? "translate-x-6" : "translate-x-1"}`} />
+              </button>
+              <span className="text-sm text-gray-600">Visible to members</span>
+            </div>
+          )}
 
           {/* Save */}
           <div className="flex justify-end pt-2">
             <button onClick={handleSave} disabled={saving}
               className="bg-[#050040] text-white text-sm font-semibold px-6 py-2.5 rounded-xl hover:bg-indigo-900 transition disabled:opacity-50">
-              {saving ? "Saving…" : editId ? "Save Changes" : isRecurring ? "Create Recurring Experiences" : "Create Experience"}
+              {saving ? "Saving…" : editGroupIds ? `Update all ${editGroupIds.length} occurrences` : editId ? "Save Changes" : isRecurring ? "Create Recurring Experiences" : "Create Experience"}
             </button>
           </div>
         </div>
@@ -3104,7 +3168,14 @@ function ExperiencesSection({ gym }: { gym: Gym; onRefresh: () => void }) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <p className="font-semibold text-gray-900 text-sm">{e.name}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold text-gray-900 text-sm">{e.name}</p>
+                        {seriesFor(e).length > 1 && (
+                          <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-medium">
+                            Recurring ×{seriesFor(e).length}
+                          </span>
+                        )}
+                      </div>
                       {e.tagline && <p className="text-xs text-gray-400 italic mt-0.5">{e.tagline}</p>}
                     </div>
                     <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${
@@ -3140,6 +3211,10 @@ function ExperiencesSection({ gym }: { gym: Gym; onRefresh: () => void }) {
                 <div className="flex gap-3">
                   <button onClick={() => openEdit(e)}
                     className="text-xs font-semibold text-[#050040] hover:opacity-70 transition">Edit</button>
+                  {seriesFor(e).length > 1 && (
+                    <button onClick={() => openEditGroup(e, seriesFor(e))}
+                      className="text-xs font-semibold text-[#050040] hover:opacity-70 transition">Edit series</button>
+                  )}
                   <button onClick={() => handleDelete(e.id)}
                     className="text-xs font-semibold text-red-500 hover:opacity-70 transition">Delete</button>
                 </div>
