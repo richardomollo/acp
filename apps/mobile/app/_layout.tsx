@@ -5,8 +5,28 @@ import { AuthModalProvider } from "@/contexts/auth-modal-context";
 import { GlobalAuthModal } from "@/components/auth-modal";
 import { UpdateBanner } from "@/components/update-banner";
 import { supabase } from "@/lib/supabase";
+import * as Sentry from '@sentry/react-native';
 
-export default function Layout() {
+Sentry.init({
+  dsn: 'https://b9606caa5a1a649020ca77168019b9e2@o4511921771315200.ingest.de.sentry.io/4511921776033872',
+
+  // Adds more context data to events (IP address, cookies, user, etc.)
+  // For more information, visit: https://docs.sentry.io/platforms/react-native/data-management/data-collected/
+  sendDefaultPii: true,
+
+  // Enable Logs
+  enableLogs: true,
+
+  // Configure Session Replay
+  replaysSessionSampleRate: 0.1,
+  replaysOnErrorSampleRate: 1,
+  integrations: [Sentry.mobileReplayIntegration(), Sentry.feedbackIntegration()],
+
+  // uncomment the line below to enable Spotlight (https://spotlightjs.com)
+  // spotlight: __DEV__,
+});
+
+export default Sentry.wrap(function Layout() {
   const router = useRouter();
 
   useEffect(() => {
@@ -45,7 +65,7 @@ export default function Layout() {
       <UpdateBanner />
     </AuthModalProvider>
   );
-}
+});
 
 // Parses the hash fragment from a Supabase recovery URL and sets the session.
 // Supabase sends: acitypass://reset-password#access_token=...&type=recovery
