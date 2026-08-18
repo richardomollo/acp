@@ -148,7 +148,6 @@ export default async function GymDetailPage({ params }: Props) {
                         src={p.image_url}
                         alt={p.title}
                         className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
-                        onError={(e) => { e.currentTarget.style.display = "none"; }}
                       />
                     )}
                     <div className="flex-1 min-w-0">
@@ -193,7 +192,6 @@ export default async function GymDetailPage({ params }: Props) {
                           src={e.image_url}
                           alt={e.name}
                           className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
-                          onError={(ev) => { ev.currentTarget.style.display = "none"; }}
                         />
                       )}
                       <div className="flex-1 min-w-0">

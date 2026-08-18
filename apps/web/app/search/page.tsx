@@ -37,7 +37,6 @@ function ResultRow({
           src={imageUrl}
           alt={title}
           className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
-          onError={(e) => { e.currentTarget.style.display = "none"; }}
         />
       )}
       <div className="flex-1 min-w-0">
