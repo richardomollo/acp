@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 
@@ -18,10 +19,19 @@ const CATEGORY_LINKS = [
 ];
 
 export default function Header() {
+  const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const submitSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = searchQuery.trim();
+    if (!q) return;
+    router.push(`/search?q=${encodeURIComponent(q)}`);
+  };
 
   useEffect(() => {
     const checkUser = async () => {
@@ -69,6 +79,25 @@ export default function Header() {
           <Link href={user ? "/sessions" : "/"} className="flex-shrink-0">
             <img src="/images/logo.png" alt="Active CityPass" className="h-8 w-auto" />
           </Link>
+
+          {/* Search */}
+          <form onSubmit={submitSearch} className="hidden md:flex flex-1 max-w-md mx-6">
+            <div className="relative w-full">
+              <svg
+                className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
+                fill="none" stroke="currentColor" viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+              </svg>
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search classes, gyms, trainers..."
+                className="w-full h-10 pl-10 pr-4 text-sm bg-gray-50 border border-gray-200 rounded-full text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-200 focus:bg-white transition-colors"
+              />
+            </div>
+          </form>
 
           {/* Desktop right: Bookings + auth */}
           <div className="hidden md:flex items-center gap-2">
@@ -173,6 +202,23 @@ export default function Header() {
       {mobileMenuOpen && (
         <div className="md:hidden bg-white border-t border-gray-100">
           <div className="max-w-7xl mx-auto px-6 py-4">
+            <form onSubmit={(e) => { submitSearch(e); setMobileMenuOpen(false); }} className="mb-4">
+              <div className="relative w-full">
+                <svg
+                  className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
+                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+                </svg>
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search classes, gyms, trainers..."
+                  className="w-full h-10 pl-10 pr-4 text-sm bg-gray-50 border border-gray-200 rounded-full text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-200 focus:bg-white transition-colors"
+                />
+              </div>
+            </form>
             <div className="flex flex-col gap-1 mb-4">
               <Link
                 href="/bookings"

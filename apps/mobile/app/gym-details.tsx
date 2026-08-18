@@ -54,6 +54,7 @@ interface Session {
 interface Programme {
   id: string;
   title: string;
+  description: string | null;
   category: string | null;
   programme_weeks: number;
   programme_price_kes: number;
@@ -64,6 +65,7 @@ interface ExperienceRow {
   id: string;
   slug: string | null;
   name: string;
+  tagline: string | null;
   category: string | null;
   date: string;
   start_time: string;
@@ -183,7 +185,7 @@ export default function GymDetailsScreen() {
 
       const { data: programmesData, error: programmesError } = await supabase
         .from('gym_programmes')
-        .select('id, title, category, programme_weeks, programme_price_kes, image_url')
+        .select('id, title, description, category, programme_weeks, programme_price_kes, image_url')
         .eq('gym_id', gymId).eq('is_active', true).eq('is_draft', false)
         .order('created_at', { ascending: false });
       if (programmesError) console.error('Programmes error:', programmesError);
@@ -192,7 +194,7 @@ export default function GymDetailsScreen() {
       const todayStr = new Date().toISOString().split('T')[0];
       const { data: experiencesData, error: experiencesError } = await supabase
         .from('experiences')
-        .select('id, slug, name, category, date, start_time, price_kes, discount_kes, spots_left, image_url')
+        .select('id, slug, name, tagline, category, date, start_time, price_kes, discount_kes, spots_left, image_url')
         .eq('gym_id', gymId).eq('is_active', true).gte('date', todayStr)
         .order('date', { ascending: true }).order('start_time', { ascending: true });
       if (experiencesError) console.error('Experiences error:', experiencesError);
@@ -511,6 +513,9 @@ export default function GymDetailsScreen() {
                 </View>
               </View>
               <ThemedText style={styles.sessionName} numberOfLines={1}>{programme.title}</ThemedText>
+              {programme.description && (
+                <ThemedText style={styles.metaText} numberOfLines={1}>{programme.description}</ThemedText>
+              )}
             </View>
             <View style={styles.sessionPrice}>
               <ThemedText style={styles.depositAmount}>KES {Number(programme.programme_price_kes).toLocaleString()}</ThemedText>
@@ -559,6 +564,9 @@ export default function GymDetailsScreen() {
                   )}
                 </View>
                 <ThemedText style={styles.sessionName} numberOfLines={1}>{exp.name}</ThemedText>
+                {exp.tagline && (
+                  <ThemedText style={styles.metaText} numberOfLines={1}>{exp.tagline}</ThemedText>
+                )}
                 <View style={styles.sessionMeta}>
                   <Ionicons name="calendar-outline" size={12} color={palette.gray450} />
                   <ThemedText style={styles.metaText}>{dateLabel} · {formatTime(exp.start_time)}</ThemedText>

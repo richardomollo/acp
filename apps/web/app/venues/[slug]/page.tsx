@@ -75,7 +75,7 @@ export default async function GymDetailPage({ params }: Props) {
 
   const { data: programmes } = await supabase
     .from("gym_programmes")
-    .select("id, slug, title, category, programme_weeks, programme_price_kes, image_url")
+    .select("id, slug, title, description, category, programme_weeks, programme_price_kes, image_url")
     .eq("gym_id", gym.id)
     .eq("is_active", true)
     .eq("is_draft", false)
@@ -83,7 +83,7 @@ export default async function GymDetailPage({ params }: Props) {
 
   const { data: rawExperiences } = await supabase
     .from("experiences")
-    .select("id, slug, name, category, date, start_time, end_time, price_kes, discount_kes, spots_left, max_capacity, image_url")
+    .select("id, slug, name, tagline, category, date, start_time, end_time, price_kes, discount_kes, spots_left, max_capacity, image_url")
     .eq("gym_id", gym.id)
     .eq("is_active", true)
     .gte("date", todayStr)
@@ -136,26 +136,33 @@ export default async function GymDetailPage({ params }: Props) {
           {programmes && programmes.length > 0 && (
             <div className="mt-10">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Programmes</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="divide-y divide-gray-100 border border-gray-200 rounded-2xl overflow-hidden bg-white">
                 {programmes.map((p) => (
                   <Link
                     key={p.id}
                     href={`/gym-programmes/${p.slug ?? p.id}`}
-                    className="group rounded-2xl overflow-hidden bg-white border border-gray-100 shadow-md block hover:shadow-lg transition-shadow"
+                    className="flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors"
                   >
-                    <div className="relative overflow-hidden" style={{ height: 140 }}>
-                      {p.image_url ? (
-                        <img src={p.image_url} alt={p.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                      ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-indigo-900 to-blue-600" />
-                      )}
-                      <span className="absolute top-2.5 left-2.5 inline-flex items-center px-2.5 py-1 rounded-full bg-black/55 text-white text-[11px] font-bold">
+                    {p.image_url && (
+                      <img
+                        src={p.image_url}
+                        alt={p.title}
+                        className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
+                        onError={(e) => { e.currentTarget.style.display = "none"; }}
+                      />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-gray-400 uppercase tracking-wide mb-0.5">
                         {p.programme_weeks}-Week Programme
-                      </span>
+                      </p>
+                      <p className="text-sm font-semibold text-gray-900 truncate">{p.title}</p>
+                      {p.description && (
+                        <p className="text-xs text-gray-500 mt-0.5 truncate">{p.description}</p>
+                      )}
                     </div>
-                    <div className="p-3.5">
-                      <p className="font-black text-gray-900 text-base truncate">{p.title}</p>
-                      <p className="text-sm font-bold text-gray-900 mt-1.5">KES {Number(p.programme_price_kes).toLocaleString()}</p>
+                    <div className="flex-shrink-0 text-right">
+                      <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Price</p>
+                      <p className="text-sm font-bold text-gray-900">KES {Number(p.programme_price_kes).toLocaleString()}</p>
                     </div>
                   </Link>
                 ))}
@@ -166,7 +173,7 @@ export default async function GymDetailPage({ params }: Props) {
           {experiences.length > 0 && (
             <div className="mt-10">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Experiences</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="divide-y divide-gray-100 border border-gray-200 rounded-2xl overflow-hidden bg-white">
                 {experiences.map((e) => {
                   const discount = Number(e.discount_kes) || 0;
                   const hasDiscount = discount > 0;
@@ -179,27 +186,31 @@ export default async function GymDetailPage({ params }: Props) {
                     <Link
                       key={e.id}
                       href={`/experiences/${e.slug ?? e.id}`}
-                      className="group rounded-2xl overflow-hidden bg-white border border-gray-100 shadow-md block hover:shadow-lg transition-shadow"
+                      className="flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors"
                     >
-                      <div className="relative overflow-hidden" style={{ height: 140 }}>
-                        {e.image_url ? (
-                          <img src={e.image_url} alt={e.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                        ) : (
-                          <div className="w-full h-full bg-gradient-to-br from-indigo-900 to-blue-600" />
+                      {e.image_url && (
+                        <img
+                          src={e.image_url}
+                          alt={e.name}
+                          className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
+                          onError={(ev) => { ev.currentTarget.style.display = "none"; }}
+                        />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-gray-400 uppercase tracking-wide mb-0.5">
+                          {e.category || "Experience"}{e.occurrenceCount > 1 ? ` · ${e.occurrenceCount} dates` : ""}
+                        </p>
+                        <p className="text-sm font-semibold text-gray-900 truncate">{e.name}</p>
+                        {e.tagline && (
+                          <p className="text-xs text-gray-500 mt-0.5 truncate">{e.tagline}</p>
                         )}
-                        <span className="absolute top-2.5 left-2.5 inline-flex items-center px-2.5 py-1 rounded-full bg-black/55 text-white text-[11px] font-bold">
-                          {e.category || "Experience"}
-                        </span>
-                        {e.occurrenceCount > 1 && (
-                          <span className="absolute top-2.5 right-2.5 inline-flex items-center px-2 py-1 rounded-full bg-indigo-600 text-white text-[10px] font-bold">
-                            {e.occurrenceCount} dates
-                          </span>
-                        )}
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {dateLabel}{e.start_time ? ` · ${e.start_time.slice(0, 5)}` : ""}
+                        </p>
                       </div>
-                      <div className="p-3.5">
-                        <p className="font-black text-gray-900 text-base truncate">{e.name}</p>
-                        <p className="text-gray-400 text-xs mt-1">{dateLabel}</p>
-                        <p className="text-sm font-bold text-gray-900 mt-1.5">
+                      <div className="flex-shrink-0 text-right">
+                        <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Price</p>
+                        <p className="text-sm font-bold text-gray-900">
                           {soldOut ? (
                             "Sold out"
                           ) : hasDiscount ? (
