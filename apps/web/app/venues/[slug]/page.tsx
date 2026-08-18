@@ -81,6 +81,34 @@ export default async function GymDetailPage({ params }: Props) {
     .eq("is_draft", false)
     .order("created_at", { ascending: false });
 
+  const { data: rawExperiences } = await supabase
+    .from("experiences")
+    .select("id, slug, name, category, date, start_time, end_time, price_kes, discount_kes, spots_left, max_capacity, image_url")
+    .eq("gym_id", gym.id)
+    .eq("is_active", true)
+    .gte("date", todayStr)
+    .order("date", { ascending: true })
+    .order("start_time", { ascending: true });
+
+  // Experiences have no linking column between recurring occurrences — grouped
+  // client-side the same way the main /experiences listing and the partner
+  // dashboard's "edit series" already do, by name + start_time + category, so
+  // a recurring series shows one card here instead of one per date.
+  const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const experienceGroups = new Map<string, typeof rawExperiences>();
+  for (const e of rawExperiences ?? []) {
+    const key = `${e.name}||${e.start_time}||${e.category ?? ""}`;
+    if (!experienceGroups.has(key)) experienceGroups.set(key, []);
+    experienceGroups.get(key)!.push(e);
+  }
+  const experiences = [...experienceGroups.values()].map((occurrences) => {
+    const sorted = [...occurrences!].sort((a, b) => a.date.localeCompare(b.date));
+    const rep = sorted[0];
+    const days = new Set(sorted.map((o) => new Date(o.date + "T00:00:00").getDay()));
+    const weekdayLabel = sorted.length > 1 && days.size === 1 ? WEEKDAYS[[...days][0]] : null;
+    return { ...rep, occurrenceCount: sorted.length, weekdayLabel };
+  });
+
   return (
     <div className="w-full px-6 py-12 max-w-7xl mx-auto">
       <Link href="/venues" className="text-sm text-gray-500 hover:underline mb-6 inline-block">
@@ -131,6 +159,62 @@ export default async function GymDetailPage({ params }: Props) {
                     </div>
                   </Link>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {experiences.length > 0 && (
+            <div className="mt-10">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Experiences</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {experiences.map((e) => {
+                  const discount = Number(e.discount_kes) || 0;
+                  const hasDiscount = discount > 0;
+                  const finalPrice = Number(e.price_kes) - discount;
+                  const soldOut = e.spots_left <= 0;
+                  const dateLabel = e.weekdayLabel
+                    ? `Every ${e.weekdayLabel}`
+                    : new Date(e.date + "T00:00:00").toLocaleDateString("en-KE", { weekday: "short", day: "numeric", month: "short" });
+                  return (
+                    <Link
+                      key={e.id}
+                      href={`/experiences/${e.slug ?? e.id}`}
+                      className="group rounded-2xl overflow-hidden bg-white border border-gray-100 shadow-md block hover:shadow-lg transition-shadow"
+                    >
+                      <div className="relative overflow-hidden" style={{ height: 140 }}>
+                        {e.image_url ? (
+                          <img src={e.image_url} alt={e.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-br from-indigo-900 to-blue-600" />
+                        )}
+                        <span className="absolute top-2.5 left-2.5 inline-flex items-center px-2.5 py-1 rounded-full bg-black/55 text-white text-[11px] font-bold">
+                          {e.category || "Experience"}
+                        </span>
+                        {e.occurrenceCount > 1 && (
+                          <span className="absolute top-2.5 right-2.5 inline-flex items-center px-2 py-1 rounded-full bg-indigo-600 text-white text-[10px] font-bold">
+                            {e.occurrenceCount} dates
+                          </span>
+                        )}
+                      </div>
+                      <div className="p-3.5">
+                        <p className="font-black text-gray-900 text-base truncate">{e.name}</p>
+                        <p className="text-gray-400 text-xs mt-1">{dateLabel}</p>
+                        <p className="text-sm font-bold text-gray-900 mt-1.5">
+                          {soldOut ? (
+                            "Sold out"
+                          ) : hasDiscount ? (
+                            <>
+                              <span className="text-gray-400 line-through text-xs font-medium mr-1.5">KES {Number(e.price_kes).toLocaleString()}</span>
+                              KES {finalPrice.toLocaleString()}
+                            </>
+                          ) : (
+                            `KES ${Number(e.price_kes).toLocaleString()}`
+                          )}
+                        </p>
+                      </div>
+                    </Link>
+                  );
+                })}
               </div>
             </div>
           )}
