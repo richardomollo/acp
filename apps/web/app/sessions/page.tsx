@@ -241,25 +241,22 @@ const COMMUNITY_CATEGORY_LABEL: Record<string, string> = {
   outdoor_fitness: "Outdoor Fitness", football: "Football", other: "Other",
 };
 
+const COMMUNITY_FALLBACK_IMAGE =
+  "https://kdmhmkwzanqnwehcddvr.supabase.co/storage/v1/object/public/fitpass-images/communities/temp/1786512184762-569kw.jpg";
+
 function CommunityCard({ community }: { community: any }) {
-  const img = community.cover_url ?? community.logo_url;
+  const img = community.cover_url ?? community.logo_url ?? COMMUNITY_FALLBACK_IMAGE;
   return (
     <Link
       href={`/community/${community.slug ?? community.id}`}
       className="group flex-shrink-0 w-56 rounded-2xl overflow-hidden bg-white border border-gray-100 shadow-sm hover:shadow-md transition-shadow block"
     >
       <div className="relative overflow-hidden" style={{ height: 156 }}>
-        {img ? (
-          <img
-            src={img}
-            alt={community.name}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-          />
-        ) : (
-          <div className="w-full h-full bg-gradient-to-br from-emerald-800 to-emerald-500 flex items-center justify-center">
-            <span className="text-4xl font-black text-white/30">{community.name?.[0] ?? "?"}</span>
-          </div>
-        )}
+        <img
+          src={img}
+          alt={community.name}
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+        />
         <span className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-full bg-black/55 text-white text-[10px] font-bold capitalize">
           {COMMUNITY_CATEGORY_LABEL[community.category] ?? community.category}
         </span>
