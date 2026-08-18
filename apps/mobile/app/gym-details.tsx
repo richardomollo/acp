@@ -60,6 +60,26 @@ interface Programme {
   image_url: string | null;
 }
 
+interface ExperienceRow {
+  id: string;
+  slug: string | null;
+  name: string;
+  category: string | null;
+  date: string;
+  start_time: string;
+  price_kes: number;
+  discount_kes: number | null;
+  spots_left: number;
+  image_url: string | null;
+}
+
+interface ExperienceGroup extends ExperienceRow {
+  occurrenceCount: number;
+  weekdayLabel: string | null;
+}
+
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
 const CATEGORY_ICONS: Record<string, string> = {
   yoga: 'leaf-outline', pilates: 'body-outline', hiit: 'flame-outline',
   cardio: 'heart-outline', strength: 'barbell-outline', weights: 'barbell-outline',
@@ -99,6 +119,7 @@ export default function GymDetailsScreen() {
   const [gym, setGym] = useState<Gym | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [programmes, setProgrammes] = useState<Programme[]>([]);
+  const [experiences, setExperiences] = useState<ExperienceGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -167,6 +188,30 @@ export default function GymDetailsScreen() {
         .order('created_at', { ascending: false });
       if (programmesError) console.error('Programmes error:', programmesError);
       setProgrammes(programmesData || []);
+
+      const todayStr = new Date().toISOString().split('T')[0];
+      const { data: experiencesData, error: experiencesError } = await supabase
+        .from('experiences')
+        .select('id, slug, name, category, date, start_time, price_kes, discount_kes, spots_left, image_url')
+        .eq('gym_id', gymId).eq('is_active', true).gte('date', todayStr)
+        .order('date', { ascending: true }).order('start_time', { ascending: true });
+      if (experiencesError) console.error('Experiences error:', experiencesError);
+      // Experiences have no linking column between recurring occurrences —
+      // grouped the same way the web venue page and main /experiences listing
+      // already do, by name + start_time + category.
+      const groups = new Map<string, ExperienceRow[]>();
+      for (const e of (experiencesData ?? []) as ExperienceRow[]) {
+        const key = `${e.name}||${e.start_time}||${e.category ?? ''}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key)!.push(e);
+      }
+      setExperiences([...groups.values()].map(occurrences => {
+        const sorted = [...occurrences].sort((a, b) => a.date.localeCompare(b.date));
+        const rep = sorted[0];
+        const days = new Set(sorted.map(o => new Date(o.date + 'T00:00:00').getDay()));
+        const weekdayLabel = sorted.length > 1 && days.size === 1 ? WEEKDAYS[[...days][0]] : null;
+        return { ...rep, occurrenceCount: sorted.length, weekdayLabel };
+      }));
     } catch (err: any) {
       setError(err.message || 'Failed to load gym details');
       Alert.alert('Error', err.message || 'Failed to load gym details');
@@ -472,6 +517,68 @@ export default function GymDetailsScreen() {
             </View>
           </TouchableOpacity>
         ))}
+
+        {/* ── Experiences section ── */}
+        {experiences.length > 0 && (
+          <View style={styles.sectionHeader}>
+            <ThemedText style={styles.sectionTitle}>Experiences</ThemedText>
+          </View>
+        )}
+        {experiences.map(exp => {
+          const discount = Number(exp.discount_kes) || 0;
+          const hasDiscount = discount > 0;
+          const finalPrice = Number(exp.price_kes) - discount;
+          const soldOut = exp.spots_left <= 0;
+          const dateLabel = exp.weekdayLabel ? `Every ${exp.weekdayLabel}` : formatDate(exp.date);
+          return (
+            <TouchableOpacity
+              key={exp.id}
+              style={styles.sessionRow}
+              activeOpacity={0.85}
+              onPress={() => router.push({ pathname: '/experience-details', params: { id: exp.id } })}
+            >
+              <View style={styles.sessionThumb}>
+                {exp.image_url ? (
+                  <Image source={{ uri: exp.image_url }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
+                ) : (
+                  <View style={[StyleSheet.absoluteFillObject, styles.sessionThumbFallback]}>
+                    <Ionicons name="sparkles" size={22} color="rgba(255,255,255,0.9)" />
+                  </View>
+                )}
+              </View>
+              <View style={styles.sessionInfo}>
+                <View style={styles.sessionBadges}>
+                  <View style={styles.catChip}>
+                    <Ionicons name="sparkles-outline" size={11} color={palette.gray450} />
+                    <ThemedText style={styles.catChipText}>{exp.category || 'Experience'}</ThemedText>
+                  </View>
+                  {exp.occurrenceCount > 1 && (
+                    <View style={styles.catChip}>
+                      <ThemedText style={styles.catChipText}>{exp.occurrenceCount} dates</ThemedText>
+                    </View>
+                  )}
+                </View>
+                <ThemedText style={styles.sessionName} numberOfLines={1}>{exp.name}</ThemedText>
+                <View style={styles.sessionMeta}>
+                  <Ionicons name="calendar-outline" size={12} color={palette.gray450} />
+                  <ThemedText style={styles.metaText}>{dateLabel} · {formatTime(exp.start_time)}</ThemedText>
+                </View>
+              </View>
+              <View style={styles.sessionPrice}>
+                {soldOut ? (
+                  <ThemedText style={styles.depositAmount}>Sold out</ThemedText>
+                ) : hasDiscount ? (
+                  <>
+                    <ThemedText style={styles.depositLabel}>KES {Number(exp.price_kes).toLocaleString()}</ThemedText>
+                    <ThemedText style={styles.depositAmount}>KES {finalPrice.toLocaleString()}</ThemedText>
+                  </>
+                ) : (
+                  <ThemedText style={styles.depositAmount}>KES {Number(exp.price_kes).toLocaleString()}</ThemedText>
+                )}
+              </View>
+            </TouchableOpacity>
+          );
+        })}
 
         <View style={{ height: 40 }} />
       </ScrollView>
