@@ -483,6 +483,8 @@ export default function GymDetailsScreen() {
           )}
         </View>
 
+        <View style={styles.belowCard}>
+
         {/* ── Programmes section ── */}
         {programmes.length > 0 && (
           <View style={styles.sectionHeader}>
@@ -588,6 +590,8 @@ export default function GymDetailsScreen() {
           );
         })}
 
+        </View>
+
         <View style={{ height: 40 }} />
       </ScrollView>
     </View>
@@ -648,6 +652,10 @@ const styles = StyleSheet.create({
     borderTopRightRadius: radii['2xl'],
     marginTop: -24,
     padding: 24,
+  },
+  belowCard: {
+    backgroundColor: palette.white,
+    paddingHorizontal: 24,
   },
 
   nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
