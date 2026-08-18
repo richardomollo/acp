@@ -13,7 +13,7 @@ const supabase = createBrowserClient(
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type Section = "overview" | "venue" | "sessions" | "experiences" | "revenue" | "checkin" | "trainers";
+type Section = "overview" | "venue" | "sessions" | "experiences" | "programmes" | "revenue" | "checkin" | "trainers";
 
 type Gym = {
   id: string;
@@ -202,6 +202,12 @@ const Ic = {
         d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-3.13a4 4 0 10-4-4 4 4 0 004 4zm7 3a4 4 0 10-4-4" />
     </svg>
   ),
+  Trophy: (p: React.ComponentPropsWithoutRef<"svg">) => (
+    <svg {...p} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+        d="M8 21h8m-4-4v4m-6-17h12v4a6 6 0 01-12 0V4zM4 6h2v2a3 3 0 01-3-3V4a1 1 0 011-1zm16 0h-2v2a3 3 0 003-3V4a1 1 0 00-1-1z" />
+    </svg>
+  ),
 };
 
 const NAV: { key: Section; label: string; Icon: typeof Ic.Grid }[] = [
@@ -209,6 +215,7 @@ const NAV: { key: Section; label: string; Icon: typeof Ic.Grid }[] = [
   { key: "venue",     label: "Venue",     Icon: Ic.Building },
   { key: "sessions",     label: "Sessions",     Icon: Ic.Calendar },
   { key: "experiences",  label: "Experiences",  Icon: Ic.Sparkles },
+  { key: "programmes",   label: "Programmes",   Icon: Ic.Trophy },
   { key: "revenue",      label: "Revenue",      Icon: Ic.Chart },
   { key: "checkin",   label: "Check-in",  Icon: Ic.Check },
   { key: "trainers",  label: "Trainers",  Icon: Ic.Users },
@@ -608,6 +615,9 @@ export default function PartnerDashboard() {
             )}
             {section === "experiences" && (
               <ExperiencesSection gym={gym} onRefresh={() => {}} />
+            )}
+            {section === "programmes" && (
+              <ProgrammesSection gym={gym} />
             )}
             {section === "revenue" && (
               <RevenueSection bookings={bookings} expBookings={expBookings} targetMargin={targetMargin} />
@@ -3227,6 +3237,489 @@ function ExperiencesSection({ gym }: { gym: Gym; onRefresh: () => void }) {
                     <button onClick={() => handleDeleteSeries(seriesFor(e).map(x => x.id), e.name)}
                       className="text-xs font-semibold text-red-500 hover:opacity-70 transition">Delete series</button>
                   )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Programmes ───────────────────────────────────────────────────────────────
+
+type Programme = {
+  id: string;
+  gym_id: string;
+  instructor_id: string | null;
+  intro_session_id: string;
+  title: string;
+  description: string | null;
+  category: string | null;
+  duration_minutes: number;
+  max_participants: number;
+  programme_weeks: number;
+  programme_price_kes: number;
+  deposit_pct: number;
+  instalment_frequency_weeks: number;
+  image_url: string | null;
+  slug: string | null;
+  is_active: boolean;
+  is_draft: boolean;
+  cancellation_cutoff_hours: number | null;
+  no_show_grace_mins: number | null;
+  created_at: string;
+};
+
+type ProgSessionOption = { id: string; name: string; time: string; category: string | null; recurring?: boolean };
+type ProgTrainerOption = { id: string; full_name: string };
+
+const PROG_EMPTY = {
+  title: "",
+  description: "",
+  category: "",
+  duration_minutes: "60",
+  max_participants: "20",
+  programme_weeks: "12",
+  programme_price_kes: "",
+  deposit_pct: "30",
+  instalment_frequency_weeks: "4",
+  intro_session_id: "",
+  instructor_id: "",
+  image_url: "",
+  is_active: true,
+  is_draft: false,
+  cancellation_cutoff_hours: null as number | null,
+  no_show_grace_mins: null as number | null,
+};
+
+const PROG_BOOKING_BASE = "https://activecitypass.com/gym-programmes/";
+
+function ProgrammesSection({ gym }: { gym: Gym }) {
+  const [programmes, setProgrammes] = useState<Programme[]>([]);
+  const [sessionOptions, setSessionOptions] = useState<ProgSessionOption[]>([]);
+  const [trainerOptions, setTrainerOptions] = useState<ProgTrainerOption[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ ...PROG_EMPTY });
+  const [editId, setEditId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { load(); }, [gym.id]);
+
+  async function load() {
+    setLoading(true);
+    const [{ data: progs }, { data: sessions }, { data: trainers }] = await Promise.all([
+      supabase.from("gym_programmes").select("*").eq("gym_id", gym.id).order("created_at", { ascending: false }),
+      supabase.from("sessions").select("id, name, time, category, recurring").eq("gym_id", gym.id).order("name"),
+      supabase.from("gym_trainers").select("id, full_name").eq("gym_id", gym.id).eq("status", "active"),
+    ]);
+    setProgrammes((progs as any) || []);
+    setSessionOptions((sessions as any) || []);
+    setTrainerOptions((trainers as any) || []);
+    setLoading(false);
+  }
+
+  const setF = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
+
+  function openNew() {
+    setForm({ ...PROG_EMPTY });
+    setEditId(null);
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function openEdit(p: Programme) {
+    setForm({
+      title: p.title, description: p.description ?? "", category: p.category ?? "",
+      duration_minutes: String(p.duration_minutes), max_participants: String(p.max_participants),
+      programme_weeks: String(p.programme_weeks), programme_price_kes: String(p.programme_price_kes),
+      deposit_pct: String(p.deposit_pct), instalment_frequency_weeks: String(p.instalment_frequency_weeks),
+      intro_session_id: p.intro_session_id, instructor_id: p.instructor_id ?? "", image_url: p.image_url ?? "",
+      is_active: p.is_active, is_draft: p.is_draft,
+      cancellation_cutoff_hours: p.cancellation_cutoff_hours ?? null,
+      no_show_grace_mins: p.no_show_grace_mins ?? null,
+    });
+    setEditId(p.id);
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function handlePhotoUpload(ev: React.ChangeEvent<HTMLInputElement>) {
+    const file = ev.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const url = await uploadPhoto(file, "fitpass-images", `gym-programmes/prog-${gym.id}`);
+      setF("image_url", url);
+    } catch (err: any) { alert("Upload failed: " + err.message); }
+    finally { setUploading(false); }
+  }
+
+  async function handleSave() {
+    if (!form.title.trim()) { alert("Please enter a title."); return; }
+    if (!form.intro_session_id) { alert("Please choose an intro session — an existing class customers book as a trial before committing to the programme."); return; }
+    if (!form.programme_weeks || !form.programme_price_kes) { alert("Please set the programme length and price."); return; }
+    setSaving(true);
+
+    const payload: any = {
+      gym_id: gym.id,
+      instructor_id: form.instructor_id || null,
+      intro_session_id: form.intro_session_id,
+      title: form.title.trim(),
+      description: form.description.trim() || null,
+      category: form.category.trim() || null,
+      duration_minutes: parseInt(form.duration_minutes) || 60,
+      max_participants: parseInt(form.max_participants) || 20,
+      programme_weeks: parseInt(form.programme_weeks),
+      programme_price_kes: parseFloat(form.programme_price_kes),
+      deposit_pct: parseInt(form.deposit_pct) || 30,
+      instalment_frequency_weeks: parseInt(form.instalment_frequency_weeks) || 4,
+      image_url: form.image_url || null,
+      is_active: form.is_active,
+      is_draft: form.is_draft,
+      cancellation_cutoff_hours: form.cancellation_cutoff_hours,
+      no_show_grace_mins: form.no_show_grace_mins,
+    };
+
+    try {
+      if (editId) {
+        const { error } = await supabase.from("gym_programmes").update(payload).eq("id", editId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("gym_programmes").insert(payload);
+        if (error) throw error;
+      }
+      setShowForm(false);
+      await load();
+    } catch (e: any) {
+      alert(e.message || "Failed to save programme");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function toggleActive(p: Programme) {
+    setProgrammes(prev => prev.map(x => x.id === p.id ? { ...x, is_active: !x.is_active } : x));
+    const { error } = await supabase.from("gym_programmes").update({ is_active: !p.is_active }).eq("id", p.id);
+    if (error) {
+      setProgrammes(prev => prev.map(x => x.id === p.id ? { ...x, is_active: p.is_active } : x));
+      alert("Could not update programme visibility");
+    }
+  }
+
+  async function handleDelete(p: Programme) {
+    if (!confirm(`Delete "${p.title}"? Existing enrollments are kept but the programme will no longer be bookable.`)) return;
+    const { error } = await supabase.from("gym_programmes").delete().eq("id", p.id);
+    if (error) { alert("Could not delete programme"); return; }
+    setProgrammes(prev => prev.filter(x => x.id !== p.id));
+  }
+
+  function copyLink(slug: string) {
+    navigator.clipboard.writeText(PROG_BOOKING_BASE + slug);
+    setCopied(slug);
+    setTimeout(() => setCopied(null), 2000);
+  }
+
+  if (loading) return (
+    <div className="flex items-center justify-center py-20">
+      <div className="w-7 h-7 border-[3px] border-[#050040] border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Programmes</h1>
+          <p className="text-sm text-gray-400 mt-0.5">Multi-week courses with deposits and instalments</p>
+        </div>
+        {!showForm && (
+          <button onClick={openNew}
+            className="flex items-center gap-2 bg-[#050040] text-white text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-indigo-900 transition">
+            <Ic.Plus className="w-4 h-4" /> New Programme
+          </button>
+        )}
+      </div>
+
+      {/* Form */}
+      {showForm && (
+        <div className="bg-white rounded-2xl shadow-sm p-6 space-y-5">
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="font-semibold text-gray-900 text-lg">{editId ? "Edit Programme" : "New Programme"}</h2>
+            <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600 text-sm">Cancel</button>
+          </div>
+
+          {/* Cover image */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Programme Photo</label>
+            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+            {form.image_url ? (
+              <div className="relative w-full aspect-[16/7] rounded-xl overflow-hidden group cursor-pointer"
+                onClick={() => fileRef.current?.click()}>
+                <img src={form.image_url} className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                  <span className="text-white text-sm font-medium">Change photo</span>
+                </div>
+              </div>
+            ) : (
+              <button onClick={() => fileRef.current?.click()} disabled={uploading}
+                className="w-full h-36 border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center gap-2 text-gray-400 hover:border-gray-300 hover:text-gray-500 transition">
+                {uploading
+                  ? <div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                  : <>
+                      <Ic.Upload className="w-6 h-6" />
+                      <span className="text-sm">Upload programme photo</span>
+                      <span className="text-xs text-gray-300">16:9 recommended</span>
+                    </>
+                }
+              </button>
+            )}
+          </div>
+
+          {/* Title + category */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Title *</label>
+              <input className={inp} placeholder="e.g. Martial Arts Fundamentals" value={form.title}
+                onChange={e => setF("title", e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Category</label>
+              <input className={inp} placeholder="e.g. Martial Arts" value={form.category}
+                onChange={e => setF("category", e.target.value)} />
+            </div>
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Description</label>
+            <textarea className={inp + " resize-none"} rows={3} placeholder="Describe what the programme covers…"
+              value={form.description} onChange={e => setF("description", e.target.value)} />
+          </div>
+
+          {/* Intro session */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Intro Session *</label>
+            <p className="text-xs text-gray-400 mb-2">An existing class at this venue customers book as a trial before committing to the full programme.</p>
+            {sessionOptions.length === 0 ? (
+              <p className="text-xs text-gray-400">No sessions found for this venue — create one first from the Sessions tab.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {sessionOptions.map(s => (
+                  <button key={s.id} type="button" onClick={() => setF("intro_session_id", s.id)}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-semibold border transition ${
+                      form.intro_session_id === s.id ? "bg-[#050040] text-white border-[#050040]" : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+                    }`}>
+                    {s.name}{s.recurring ? " (recurring)" : ""}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Instructor */}
+          {trainerOptions.length > 0 && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Instructor (optional)</label>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => setF("instructor_id", "")}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-semibold border transition ${
+                    !form.instructor_id ? "bg-[#050040] text-white border-[#050040]" : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+                  }`}>Unassigned</button>
+                {trainerOptions.map(t => (
+                  <button key={t.id} type="button" onClick={() => setF("instructor_id", t.id)}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-semibold border transition ${
+                      form.instructor_id === t.id ? "bg-[#050040] text-white border-[#050040]" : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+                    }`}>{t.full_name}</button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Weeks + duration */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Programme weeks *</label>
+              <input type="number" className={inp} placeholder="12" value={form.programme_weeks}
+                onChange={e => setF("programme_weeks", e.target.value.replace(/[^0-9]/g, ""))} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Session duration (min)</label>
+              <input type="number" className={inp} placeholder="60" value={form.duration_minutes}
+                onChange={e => setF("duration_minutes", e.target.value.replace(/[^0-9]/g, ""))} />
+            </div>
+          </div>
+
+          {/* Price + capacity */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Full programme price (KES) *</label>
+              <input type="number" className={inp} placeholder="e.g. 24000" value={form.programme_price_kes}
+                onChange={e => setF("programme_price_kes", e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Max participants</label>
+              <input type="number" className={inp} placeholder="20" value={form.max_participants}
+                onChange={e => setF("max_participants", e.target.value.replace(/[^0-9]/g, ""))} />
+            </div>
+          </div>
+
+          {/* Deposit + instalment */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Deposit %</label>
+              <input type="number" className={inp} placeholder="30" value={form.deposit_pct}
+                onChange={e => setF("deposit_pct", e.target.value.replace(/[^0-9]/g, ""))} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Instalment every X weeks</label>
+              <input type="number" className={inp} placeholder="4" value={form.instalment_frequency_weeks}
+                onChange={e => setF("instalment_frequency_weeks", e.target.value.replace(/[^0-9]/g, ""))} />
+            </div>
+          </div>
+
+          {/* Visibility */}
+          <div className="border-t border-gray-100 pt-5 space-y-4">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Visibility</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-700 font-medium">Show to customers</p>
+                <p className="text-xs text-gray-400">Toggle off to hide this programme without deleting it</p>
+              </div>
+              <button onClick={() => setF("is_active", !form.is_active)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${form.is_active ? "bg-[#050040]" : "bg-gray-200"}`}>
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${form.is_active ? "translate-x-6" : "translate-x-1"}`} />
+              </button>
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-700 font-medium">Draft</p>
+                <p className="text-xs text-gray-400">Keep as draft while you finish setting it up — hidden from customers even if active</p>
+              </div>
+              <button onClick={() => setF("is_draft", !form.is_draft)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${form.is_draft ? "bg-[#050040]" : "bg-gray-200"}`}>
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${form.is_draft ? "translate-x-6" : "translate-x-1"}`} />
+              </button>
+            </div>
+          </div>
+
+          {/* Cancellation policy */}
+          <div className="border-t border-gray-100 pt-5 space-y-4">
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-0.5">Cancellation Policy</p>
+              <p className="text-xs text-gray-400 mb-4">Leave at "Venue default" to inherit your venue policy. Override only for this programme.</p>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-2">Free cancellation window</label>
+              <div className="flex flex-wrap gap-2">
+                {CUTOFF_OPTIONS.map(h => {
+                  const label = h === null ? "Venue default" : h === 0 ? "None" : `${h}h`;
+                  const active = form.cancellation_cutoff_hours === (h ?? null);
+                  return (
+                    <button key={String(h)} type="button" onClick={() => setF("cancellation_cutoff_hours", h ?? null)}
+                      className={`px-3.5 py-2 rounded-xl text-xs font-semibold border transition ${
+                        active ? "bg-[#050040] text-white border-[#050040]" : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+                      }`}>{label}</button>
+                  );
+                })}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-2">No-show grace period</label>
+              <div className="flex flex-wrap gap-2">
+                {GRACE_OPTIONS.map(m => {
+                  const label = m === null ? "Venue default" : m === 0 ? "Immediate" : `${m} min`;
+                  const active = form.no_show_grace_mins === (m ?? null);
+                  return (
+                    <button key={String(m)} type="button" onClick={() => setF("no_show_grace_mins", m ?? null)}
+                      className={`px-3.5 py-2 rounded-xl text-xs font-semibold border transition ${
+                        active ? "bg-[#050040] text-white border-[#050040]" : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+                      }`}>{label}</button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Save */}
+          <div className="flex justify-end pt-2">
+            <button onClick={handleSave} disabled={saving}
+              className="bg-[#050040] text-white text-sm font-semibold px-6 py-2.5 rounded-xl hover:bg-indigo-900 transition disabled:opacity-50">
+              {saving ? "Saving…" : editId ? "Save Changes" : "Create Programme"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* List */}
+      {!showForm && (
+        <div className="space-y-3">
+          {programmes.length === 0 ? (
+            <div className="bg-white rounded-2xl shadow-sm p-10 text-center">
+              <p className="text-sm text-gray-400 mb-4">No programmes yet. Create a multi-week programme — e.g. a 12-week martial arts course — with a deposit and instalment schedule.</p>
+              <button onClick={openNew}
+                className="bg-[#050040] text-white text-sm font-semibold px-5 py-2.5 rounded-xl hover:bg-indigo-900 transition">
+                Create first programme
+              </button>
+            </div>
+          ) : programmes.map(p => (
+            <div key={p.id} className="bg-white rounded-2xl shadow-sm overflow-hidden">
+              <div className="flex gap-4 p-4">
+                {p.image_url ? (
+                  <img src={p.image_url} className="w-24 h-20 object-cover rounded-xl flex-shrink-0" />
+                ) : (
+                  <div className="w-24 h-20 bg-gradient-to-br from-[#050040] to-indigo-400 rounded-xl flex-shrink-0" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold text-gray-900 text-sm">{p.title}</p>
+                        <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-medium">
+                          {p.programme_weeks}W Programme
+                        </span>
+                        {p.is_draft && (
+                          <span className="px-2 py-0.5 bg-amber-50 text-amber-700 rounded-full text-[10px] font-medium">Draft</span>
+                        )}
+                      </div>
+                    </div>
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${
+                      p.is_active ? "bg-green-50 text-green-600" : "bg-gray-100 text-gray-400"
+                    }`}>
+                      {p.is_active ? "Active" : "Hidden"}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
+                    <span className="text-xs font-semibold text-gray-900">{fmtKes(Number(p.programme_price_kes))}</span>
+                    <span className="text-xs text-gray-500">{p.deposit_pct}% deposit</span>
+                    <span className="text-xs text-gray-500">every {p.instalment_frequency_weeks}w</span>
+                  </div>
+                  {p.slug && (
+                    <button onClick={() => copyLink(p.slug!)}
+                      className="flex items-center gap-1.5 mt-2 text-xs text-blue-600 hover:underline">
+                      <Ic.Share className="w-3 h-3" />
+                      <span className="truncate max-w-[220px]">activecitypass.com/gym-programmes/{p.slug}</span>
+                      {copied === p.slug && <span className="text-green-600 font-semibold">Copied!</span>}
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="border-t border-gray-50 px-4 py-2.5 flex items-center justify-between">
+                <button onClick={() => toggleActive(p)}
+                  className="text-xs text-gray-400 hover:text-gray-600 transition">
+                  {p.is_active ? "Hide" : "Make active"}
+                </button>
+                <div className="flex gap-3">
+                  <button onClick={() => openEdit(p)}
+                    className="text-xs font-semibold text-[#050040] hover:opacity-70 transition">Edit</button>
+                  <button onClick={() => handleDelete(p)}
+                    className="text-xs font-semibold text-red-500 hover:opacity-70 transition">Delete</button>
                 </div>
               </div>
             </div>
