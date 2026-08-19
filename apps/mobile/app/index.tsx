@@ -3,6 +3,7 @@ import { View, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase';
+import { getPostAuthDestination } from '@/lib/onboarding-auth';
 import { WALKTHROUGH_KEY } from './walkthrough';
 import { palette } from '@/constants/theme';
 
@@ -18,7 +19,8 @@ export default function Index() {
       }
 
       const { data: { session } } = await supabase.auth.getSession();
-      router.replace('/(tabs)');
+      if (!session) { router.replace('/login'); return; }
+      router.replace((await getPostAuthDestination(session.user.id, '/(tabs)')) as any);
     };
 
     bootstrap();

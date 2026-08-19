@@ -3,244 +3,178 @@ import {
   StyleSheet,
   TouchableOpacity,
   View,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
   Image,
   Text,
+  Dimensions,
 } from 'react-native';
-import { useState } from 'react';
-import { authService } from '@/services/auth';
-import { GoogleSignInButton, isGoogleSignInSupported } from '@/components/google-signin-button';
-import { AppleSignInButton } from '@/components/apple-signin-button';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuthModal } from '@/contexts/auth-modal-context';
+import { getPostAuthDestination } from '@/lib/onboarding-auth';
 import { palette, radii, fontSize } from '@/constants/theme';
+
+const SCREEN_HEIGHT = Dimensions.get('window').height;
+const HERO_HEIGHT = SCREEN_HEIGHT * 0.5;
+const HERO_IMAGE = require('@/assets/images/pt.jpeg');
 
 export default function LoginScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const insets = useSafeAreaInsets();
+  const { showAuthModal } = useAuthModal();
 
   const redirectTo = (params.redirect as string) || '/(tabs)';
+  const signupHref = `/signup${params.redirect ? `?redirect=${params.redirect}` : ''}`;
 
-  const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
-
-  const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
-      return;
-    }
-    if (!isValidEmail(email)) {
-      Alert.alert('Error', 'Please enter a valid email address');
-      return;
-    }
-    setLoading(true);
-    try {
-      await authService.login({ email, password });
-      router.replace(redirectTo as any);
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to login');
-    } finally {
-      setLoading(false);
-    }
+  const openLogin = () => {
+    showAuthModal(async (userId) => {
+      const dest = await getPostAuthDestination(userId, redirectTo);
+      const href = dest === '/onboarding/goal' ? `${dest}?redirect=${encodeURIComponent(redirectTo)}` : dest;
+      router.replace(href as any);
+    }, { defaultTab: 'login' });
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Logo */}
-        <View style={styles.logoRow}>
-          <Image
-            source={require('@/assets/images/icon.png')}
-            style={styles.logoIcon}
-            resizeMode="contain"
-          />
-          <Text style={styles.logoText}>Active CityPass</Text>
-        </View>
+    <View style={styles.choiceContainer}>
+      <View style={[styles.heroImageWrap, { top: -insets.top, height: HERO_HEIGHT + insets.top }]}>
+        <Image
+          source={HERO_IMAGE}
+          style={styles.heroImage}
+          resizeMode="contain"
+        />
+      </View>
+      <LinearGradient
+        colors={['transparent', 'rgba(255,255,255,0.75)', palette.white]}
+        locations={[0, 0.55, 1]}
+        style={[styles.heroFade, { top: -insets.top, height: HERO_HEIGHT + insets.top }]}
+      />
 
-        {/* Hero */}
-        <Text style={styles.headline}>Welcome back</Text>
-        <Text style={styles.subheadline}>Sign in to book your next session</Text>
+      <View style={styles.choiceCenter}>
+        <Image
+          source={require('@/assets/images/icon.png')}
+          style={styles.bigLogo}
+          resizeMode="contain"
+        />
+        <Text style={styles.brandName}>Active CityPass</Text>
+        <Text style={styles.title}>Your goals. Your plan. Your active and healthy life.</Text>
+        <Text style={styles.subtitle}>Science-backed wellness, fitness, nutrition and experiences</Text>
+      </View>
 
-        {/* Form */}
-        <View style={styles.form}>
-          <TextInput
-            style={styles.input}
-            placeholder="Email address"
-            placeholderTextColor={palette.gray300}
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            editable={!loading}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            placeholderTextColor={palette.gray300}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            autoCapitalize="none"
-            editable={!loading}
-            returnKeyType="go"
-            onSubmitEditing={handleLogin}
-          />
-
-          <TouchableOpacity onPress={() => router.push('/forgot-password')} style={styles.forgotRow}>
-            <Text style={styles.forgotText}>Forgot password?</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.ctaBtn, loading && { opacity: 0.6 }]}
-            onPress={handleLogin}
-            disabled={loading}
-            activeOpacity={0.85}
-          >
-            {loading ? (
-              <ActivityIndicator color={palette.white} />
-            ) : (
-              <Text style={styles.ctaBtnText}>Sign in</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* Social */}
-        {(isGoogleSignInSupported || Platform.OS === 'ios') && (
-          <>
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>or</Text>
-              <View style={styles.dividerLine} />
-            </View>
-            <View style={{ gap: 12, marginBottom: 20 }}>
-              <AppleSignInButton
-                onSuccess={() => router.replace(redirectTo as any)}
-                onError={(message) => Alert.alert('Error', message)}
-              />
-              {isGoogleSignInSupported && (
-                <GoogleSignInButton
-                  disabled={loading}
-                  onSuccess={() => router.replace(redirectTo as any)}
-                  onError={(message) => Alert.alert('Error', message)}
-                />
-              )}
-            </View>
-          </>
-        )}
-
-        {/* Divider */}
-        <View style={styles.divider}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>New to Active CityPass?</Text>
-          <View style={styles.dividerLine} />
-        </View>
+      <View style={styles.choiceBottom}>
+        <Text style={styles.changeStarts}>Change starts here</Text>
 
         <TouchableOpacity
-          style={styles.signupBtn}
-          onPress={() => router.push(`/signup${params.redirect ? `?redirect=${params.redirect}` : ''}` as any)}
+          style={styles.ctaBtn}
+          onPress={() => router.push(signupHref as any)}
           activeOpacity={0.85}
         >
-          <Text style={styles.signupBtnText}>Create a free account</Text>
+          <Text style={styles.ctaBtnText}>Register</Text>
         </TouchableOpacity>
 
-        {/* Guest */}
+        <View style={[styles.divider, { marginBottom: 0 }]}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.accountLineText}>Already have an account?</Text>
+          <View style={styles.dividerLine} />
+        </View>
+
         <TouchableOpacity
-          style={styles.guestBtn}
-          onPress={() => router.push('/(tabs)')}
-          disabled={loading}
+          style={styles.loginBtn}
+          onPress={openLogin}
+          activeOpacity={0.85}
         >
-          <Text style={styles.guestText}>Continue as guest</Text>
+          <Text style={styles.loginBtnText}>Login</Text>
         </TouchableOpacity>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  choiceContainer: {
     flex: 1,
     backgroundColor: palette.white,
-  },
-  scroll: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingTop: 72,
+    paddingHorizontal: 28,
     paddingBottom: 40,
+    justifyContent: 'space-between',
   },
-
-  logoRow: {
-    flexDirection: 'row',
+  heroImageWrap: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: HERO_HEIGHT,
+    backgroundColor: palette.surfaceMuted,
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 32,
+    justifyContent: 'flex-start',
+    overflow: 'hidden',
   },
-  logoIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: radii.sm,
+  heroImage: {
+    width: '100%',
+    height: '100%',
   },
-  logoText: {
+  heroFade: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: HERO_HEIGHT,
+  },
+  choiceCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bigLogo: {
+    width: 80,
+    height: 80,
+    borderRadius: radii.lg,
+    marginBottom: 12,
+  },
+  brandName: {
     fontSize: fontSize.lg,
-    fontWeight: '700',
-    color: palette.ink700,
-    letterSpacing: -0.2,
+    fontWeight: '800',
+    color: palette.blue500,
+    letterSpacing: 0.4,
+    marginBottom: 22,
   },
-
-  headline: {
-    fontSize: fontSize['3xl'],
+  title: {
+    fontSize: fontSize['2xl'],
     fontWeight: '800',
     color: palette.ink700,
-    lineHeight: 38,
+    textAlign: 'center',
+    lineHeight: 32,
     letterSpacing: -0.5,
-    marginBottom: 8,
+    marginBottom: 12,
+    maxWidth: 300,
   },
-  subheadline: {
+  subtitle: {
     fontSize: fontSize.base,
+    fontWeight: '500',
     color: palette.gray450,
-    marginBottom: 32,
+    textAlign: 'center',
+    lineHeight: 21,
+    maxWidth: 270,
   },
-
-  form: {
-    gap: 12,
-    marginBottom: 32,
+  choiceBottom: {
+    gap: 16,
   },
-  input: {
-    backgroundColor: palette.white,
-    borderRadius: radii.md,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: fontSize.base,
-    borderWidth: 1.5,
-    borderColor: palette.border,
+  changeStarts: {
+    fontSize: fontSize.xl,
+    fontWeight: '800',
     color: palette.ink700,
+    textAlign: 'center',
+    letterSpacing: -0.3,
   },
-  forgotRow: {
-    alignItems: 'flex-end',
-    marginTop: -4,
-  },
-  forgotText: {
-    fontSize: fontSize.sm,
+  accountLineText: {
+    fontSize: fontSize.base,
     color: palette.gray450,
     fontWeight: '500',
   },
   ctaBtn: {
-    backgroundColor: palette.ink900,
+    backgroundColor: palette.blue500,
     paddingVertical: 16,
     borderRadius: radii.pill,
     alignItems: 'center',
-    marginTop: 4,
   },
   ctaBtnText: {
     color: palette.white,
@@ -248,7 +182,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: -0.1,
   },
-
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -260,32 +193,16 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: palette.hairline,
   },
-  dividerText: {
-    fontSize: fontSize.xs,
-    color: palette.gray300,
-    fontWeight: '500',
-  },
-
-  signupBtn: {
+  loginBtn: {
     borderWidth: 2,
-    borderColor: palette.ink900,
+    borderColor: palette.blue500,
     paddingVertical: 15,
     borderRadius: radii.pill,
     alignItems: 'center',
-    marginBottom: 12,
   },
-  signupBtnText: {
-    color: palette.ink900,
+  loginBtnText: {
+    color: palette.blue500,
     fontSize: fontSize.base,
     fontWeight: '700',
-  },
-
-  guestBtn: {
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  guestText: {
-    fontSize: fontSize.base,
-    color: palette.gray300,
   },
 });

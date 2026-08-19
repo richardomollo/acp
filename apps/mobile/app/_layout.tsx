@@ -30,10 +30,14 @@ export default Sentry.wrap(function Layout() {
   const router = useRouter();
 
   useEffect(() => {
-    // Navigate to reset-password when Supabase signals a recovery session
+    // Navigate to reset-password when Supabase signals a recovery session,
+    // and back to login the moment a session ends for any reason — the app
+    // is login-only, so nothing should keep rendering without one.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') {
         router.replace('/reset-password');
+      } else if (event === 'SIGNED_OUT') {
+        router.replace('/login');
       }
     });
     return () => subscription.unsubscribe();

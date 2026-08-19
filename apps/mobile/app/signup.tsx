@@ -24,8 +24,6 @@ export default function SignUpScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const redirectTo = (params.redirect as string) || '/(tabs)';
-
   const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
   const handleSignUp = async () => {
@@ -53,8 +51,12 @@ export default function SignUpScreen() {
       if (data.user) {
         // handle_new_user() DB trigger already created the profile row with
         // this name from options.data above — nothing left to do here.
+        // Every brand-new account goes through goal-setting onboarding
+        // first; the plan screen's "Start my journey" carries redirectTo
+        // forward from there.
+        const onboardingHref = `/onboarding/goal${params.redirect ? `?redirect=${params.redirect}` : ''}`;
         Alert.alert('Welcome!', 'Your account has been created.', [
-          { text: 'Get started', onPress: () => router.replace(redirectTo as any) },
+          { text: 'Get started', onPress: () => router.replace(onboardingHref as any) },
         ]);
       }
     } catch (error: any) {
@@ -148,13 +150,6 @@ export default function SignUpScreen() {
               <Text style={styles.footerLink}>Sign in</Text>
             </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={styles.guestBtn}
-            onPress={() => router.push('/(tabs)')}
-            disabled={loading}
-          >
-            <Text style={styles.guestText}>Continue as guest</Text>
-          </TouchableOpacity>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -255,12 +250,5 @@ const styles = StyleSheet.create({
     fontSize: fontSize.base,
     color: palette.ink700,
     fontWeight: '700',
-  },
-  guestBtn: {
-    paddingVertical: 10,
-  },
-  guestText: {
-    fontSize: fontSize.base,
-    color: palette.gray300,
   },
 });
