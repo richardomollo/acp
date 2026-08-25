@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   validateAssessment, checkAuthorization, buildUserPrompt,
   deriveCategoryCounts, sumDurationMinutes, enforceTimeBudget, getWeeklyMinutesBudget,
+  AI_REQUEST_CONFIG, SYSTEM_PROMPT,
 } from '../assessment.ts';
 
 const VALID_ASSESSMENT = {
@@ -111,7 +112,7 @@ describe('sumDurationMinutes', () => {
 });
 
 describe('getWeeklyMinutesBudget', () => {
-  test('maps known activity levels to a conservative minutes budget', () => {
+  test('maps known activity levels to a conservative minutes budget when no explicit hours are given', () => {
     assert.equal(getWeeklyMinutesBudget('inactive'), 90);
     assert.equal(getWeeklyMinutesBudget('occasional'), 120);
     assert.equal(getWeeklyMinutesBudget('active_2_3'), 180);
@@ -123,6 +124,21 @@ describe('getWeeklyMinutesBudget', () => {
     assert.equal(getWeeklyMinutesBudget(null), 120);
     assert.equal(getWeeklyMinutesBudget(undefined), 120);
     assert.equal(getWeeklyMinutesBudget('made_up_value'), 120);
+  });
+
+  test('prefers the user\'s own stated weekly training hours over the activityLevel proxy when given', () => {
+    // 5 hours/week stated explicitly should win over the "inactive" bucket's 90-min proxy.
+    assert.equal(getWeeklyMinutesBudget('inactive', 5), 300);
+  });
+
+  test('treats 0 stated hours as canonical too (not "missing")', () => {
+    assert.equal(getWeeklyMinutesBudget('active_4_plus', 0), 0);
+  });
+
+  test('ignores an invalid sportHoursPerWeek value and falls back to the activityLevel proxy', () => {
+    assert.equal(getWeeklyMinutesBudget('occasional', -5), 120);
+    assert.equal(getWeeklyMinutesBudget('occasional', NaN), 120);
+    assert.equal(getWeeklyMinutesBudget('occasional', 'not a number' as any), 120);
   });
 });
 
@@ -176,12 +192,55 @@ describe('buildUserPrompt', () => {
   test('includes the onboarding answers as JSON in the prompt', () => {
     const answers = { goal: 'lose_weight', startingWeightKg: 80, goalWeightKg: 72 };
     const prompt = buildUserPrompt(answers);
-    assert.ok(prompt.includes('"goal": "lose_weight"'));
-    assert.ok(prompt.includes('"startingWeightKg": 80'));
+    assert.ok(prompt.includes('"goal":"lose_weight"'));
+    assert.ok(prompt.includes('"startingWeightKg":80'));
   });
 
-  test('includes an explicit weekly minutes budget derived from activityLevel', () => {
+  test('includes an explicit weekly minutes budget derived from activityLevel when no explicit hours are given', () => {
     const prompt = buildUserPrompt({ goal: 'lose_weight', activityLevel: 'active_2_3' });
     assert.ok(prompt.includes('180 minutes'));
+    assert.ok(prompt.includes('estimated from their current activity level'));
+  });
+
+  test('uses the user\'s own stated training hours as the canonical budget when given, and says so', () => {
+    const prompt = buildUserPrompt({ goal: 'lose_weight', activityLevel: 'inactive' }, 5);
+    assert.ok(prompt.includes('300 minutes')); // 5 hrs * 60, not the "inactive" 90-min proxy
+    assert.ok(prompt.includes("user's own stated 5 training hours/week"));
+  });
+});
+
+describe('SYSTEM_PROMPT guardrails (regression coverage — not testing exact AI prose)', () => {
+  test('explicitly rules out personal_training preference alone as a support-recommendation trigger', () => {
+    assert.ok(SYSTEM_PROMPT.toLowerCase().includes('personal_training') && SYSTEM_PROMPT.toLowerCase().includes('not by itself enough'));
+  });
+
+  test('still instructs commercial neutrality (self_directed as default, no named providers)', () => {
+    assert.ok(SYSTEM_PROMPT.includes('self_directed'));
+    assert.ok(SYSTEM_PROMPT.toLowerCase().includes('never name a specific'));
+  });
+
+  test('still instructs the core safety constraints', () => {
+    assert.ok(SYSTEM_PROMPT.toLowerCase().includes('no diagnosis'));
+    assert.ok(SYSTEM_PROMPT.toLowerCase().includes('no guaranteed outcomes'));
+  });
+
+  test('still instructs that starting_plan.activities is the single source of truth for counts', () => {
+    assert.ok(SYSTEM_PROMPT.includes('starting_plan.activities'));
+    assert.ok(SYSTEM_PROMPT.toLowerCase().includes('single source of truth'));
+  });
+});
+
+describe('AI_REQUEST_CONFIG (latency optimisation)', () => {
+  test('uses minimal reasoning effort', () => {
+    assert.equal(AI_REQUEST_CONFIG.reasoning_effort, 'minimal');
+  });
+
+  test('caps output tokens', () => {
+    assert.ok(AI_REQUEST_CONFIG.max_completion_tokens > 0);
+    assert.ok(AI_REQUEST_CONFIG.max_completion_tokens < 3000);
+  });
+
+  test('never sets temperature — this model only supports its default and errors on any other value (confirmed empirically)', () => {
+    assert.equal((AI_REQUEST_CONFIG as any).temperature, undefined);
   });
 });

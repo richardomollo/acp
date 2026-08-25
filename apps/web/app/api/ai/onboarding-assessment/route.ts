@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  AI_ASSESSMENT_MODEL, ASSESSMENT_JSON_SCHEMA, SYSTEM_PROMPT,
+  AI_ASSESSMENT_MODEL, AI_REQUEST_CONFIG, ASSESSMENT_JSON_SCHEMA, SYSTEM_PROMPT,
   buildUserPrompt, validateAssessment, checkAuthorization,
   getWeeklyMinutesBudget, enforceTimeBudget,
 } from './assessment';
@@ -12,9 +12,16 @@ const adminSupabase = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } }
 );
 
+// Generous on purpose: the client's own UX timeout is much shorter (~15s —
+// see apps/mobile/lib/ai-assessment.ts), but that's only about what the
+// user waits looking at a spinner. This route keeps running to completion
+// and saves server-side even if the client has already shown its fallback,
+// so a slower-than-ideal generation still isn't wasted work.
+export const maxDuration = 60;
+
 export async function POST(req: NextRequest) {
   try {
-    const { userId, onboardingAnswers, accessToken } = await req.json();
+    const { userId, onboardingAnswers, accessToken, sportHoursPerWeek } = await req.json();
 
     if (!accessToken || typeof accessToken !== 'string') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -47,7 +54,7 @@ export async function POST(req: NextRequest) {
         model: AI_ASSESSMENT_MODEL,
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: buildUserPrompt(onboardingAnswers) },
+          { role: 'user', content: buildUserPrompt(onboardingAnswers, sportHoursPerWeek) },
         ],
         response_format: {
           type: 'json_schema',
@@ -57,6 +64,7 @@ export async function POST(req: NextRequest) {
             schema: ASSESSMENT_JSON_SCHEMA,
           },
         },
+        ...AI_REQUEST_CONFIG,
       }),
     });
 
@@ -86,7 +94,9 @@ export async function POST(req: NextRequest) {
 
     // Available time is a hard constraint, not a suggestion to the model —
     // enforce it programmatically in case the response doesn't fully comply.
-    const budget = getWeeklyMinutesBudget((onboardingAnswers as Record<string, unknown>)?.activityLevel);
+    // Prefers the user's own stated weekly training hours when given
+    // (canonical); falls back to the activityLevel-based proxy otherwise.
+    const budget = getWeeklyMinutesBudget((onboardingAnswers as Record<string, unknown>)?.activityLevel, sportHoursPerWeek);
     assessment.starting_plan.activities = enforceTimeBudget(assessment.starting_plan.activities, budget);
 
     const generatedAt = new Date().toISOString();
