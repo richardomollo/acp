@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   AI_ASSESSMENT_MODEL, ASSESSMENT_JSON_SCHEMA, SYSTEM_PROMPT,
   buildUserPrompt, validateAssessment, checkAuthorization,
+  getWeeklyMinutesBudget, enforceTimeBudget,
 } from './assessment';
 
 const adminSupabase = createClient(
@@ -82,6 +83,11 @@ export async function POST(req: NextRequest) {
       console.error('onboarding-assessment: response failed validation', raw);
       return NextResponse.json({ error: 'AI response failed validation' }, { status: 502 });
     }
+
+    // Available time is a hard constraint, not a suggestion to the model —
+    // enforce it programmatically in case the response doesn't fully comply.
+    const budget = getWeeklyMinutesBudget((onboardingAnswers as Record<string, unknown>)?.activityLevel);
+    assessment.starting_plan.activities = enforceTimeBudget(assessment.starting_plan.activities, budget);
 
     const generatedAt = new Date().toISOString();
     // upsert, not update: this route is only ever called after
