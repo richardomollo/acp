@@ -6,7 +6,7 @@
 // candidate banners (Strava/ExerciseDB/ACP-booking auto-match confirmation)
 // are left out; mark done/undo stays the only completion action here.
 import { useCallback, useState } from 'react';
-import { View, ScrollView, TouchableOpacity, ActivityIndicator, Image, Modal, StyleSheet } from 'react-native';
+import { View, ScrollView, TouchableOpacity, ActivityIndicator, Modal, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -24,6 +24,7 @@ import {
   type PlanActivityFulfilment, type MarketplaceInventoryItem,
 } from '@/lib/fulfilment';
 import { getCompletionProgress, type PlanActivityCompletion } from '@/lib/completion';
+import { ActivityFulfilmentCard } from '@/components/activity-fulfilment-card';
 import { palette, radii, fontSize } from '@/constants/theme';
 
 // A calendar week always has all 7 days, even when the plan itself only
@@ -75,59 +76,6 @@ interface WeekDay {
   dateNum: number;
   activity: StartingPlanActivity | null;
   activityIndex: number | null;
-}
-
-/** Same "DO IT YOURSELF" / "RECOMMENDED FOR YOU" blocks as My Plan/Home, reused here for every planned day, not just today. */
-function FulfilmentSuggestions({
-  fulfilment, onInfoPress,
-}: { fulfilment: PlanActivityFulfilment | undefined; onInfoPress: () => void }) {
-  const router = useRouter();
-  if (!fulfilment) return null;
-  return (
-    <>
-      {fulfilment.selfDirected && (
-        <View style={s.fulfilmentBlock}>
-          <ThemedText style={s.fulfilmentHeader}>
-            {fulfilment.selfDirected.source === 'exercise_db' ? 'DO IT YOURSELF' : 'TRACK YOUR ACTIVITY'}
-          </ThemedText>
-          <TouchableOpacity onPress={() => router.push(fulfilment.selfDirected!.navigationTarget as any)} activeOpacity={0.7}>
-            <ThemedText style={s.fulfilmentLink}>{fulfilment.selfDirected.title} →</ThemedText>
-          </TouchableOpacity>
-        </View>
-      )}
-      {fulfilment.marketplaceMatches.length > 0 && (
-        <View style={s.fulfilmentBlock}>
-          <View style={s.fulfilmentHeaderRow}>
-            <ThemedText style={[s.fulfilmentHeader, { marginBottom: 0 }]}>DO IT WITH ACP</ThemedText>
-            <TouchableOpacity onPress={onInfoPress} hitSlop={8} activeOpacity={0.7}>
-              <Ionicons name="information-circle-outline" size={12} color={palette.gray300} />
-            </TouchableOpacity>
-          </View>
-          {fulfilment.marketplaceMatches.map(m => (
-            <TouchableOpacity key={m.id} style={s.marketplaceMatchRow} onPress={() => router.push(m.navigationTarget as any)} activeOpacity={0.7}>
-              {m.imageUrl ? (
-                <Image source={{ uri: m.imageUrl }} style={s.marketplaceMatchImage} />
-              ) : (
-                <View style={[s.marketplaceMatchImage, s.marketplaceMatchImageFallback]}>
-                  <Ionicons name={m.type === 'experience' ? 'sparkles-outline' : 'barbell-outline'} size={20} color={palette.gray300} />
-                </View>
-              )}
-              <View style={{ flex: 1 }}>
-                <ThemedText style={s.dayTitle}>{m.title}</ThemedText>
-                <ThemedText style={s.dayMeta}>
-                  {m.isAlternateDay ? 'Available on ACP · ' : ''}
-                  {new Date(m.date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long' })}
-                  {m.startTime ? ` · ${m.startTime.slice(0, 5)}` : ''}
-                  {m.priceKes != null ? ` · KES ${m.priceKes.toLocaleString()}` : ''}
-                </ThemedText>
-              </View>
-              <ThemedText style={s.fulfilmentLink}>View activity →</ThemedText>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-    </>
-  );
 }
 
 function StreakRow({
@@ -481,7 +429,12 @@ export default function WeeklyPlanScreen() {
                               <ThemedText style={s.markDoneBtnText}>Mark as done</ThemedText>
                             </TouchableOpacity>
                           )}
-                          <FulfilmentSuggestions fulfilment={fulfilments[d.activityIndex!]} onInfoPress={() => setShowIntelligenceInfo(true)} />
+                          <ActivityFulfilmentCard
+                            userId={userId}
+                            activity={d.activity}
+                            fulfilment={fulfilments[d.activityIndex!]}
+                            onInfoPress={() => setShowIntelligenceInfo(true)}
+                          />
                         </View>
                       )}
                     </View>
@@ -514,7 +467,12 @@ export default function WeeklyPlanScreen() {
                       <ThemedText style={s.markDoneBtnText}>Mark as done</ThemedText>
                     </TouchableOpacity>
                   )}
-                  <FulfilmentSuggestions fulfilment={fulfilments[selectedWeekDay.activityIndex!]} onInfoPress={() => setShowIntelligenceInfo(true)} />
+                  <ActivityFulfilmentCard
+                    userId={userId}
+                    activity={selectedWeekDay.activity}
+                    fulfilment={fulfilments[selectedWeekDay.activityIndex!]}
+                    onInfoPress={() => setShowIntelligenceInfo(true)}
+                  />
                 </>
               ) : (
                 <ThemedText style={s.restDayBody}>Nothing planned for this day — rest is part of the plan.</ThemedText>
@@ -588,6 +546,8 @@ const s = StyleSheet.create({
   marketplaceMatchRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
   marketplaceMatchImage: { width: 56, height: 56, borderRadius: radii.lg, flexShrink: 0 },
   marketplaceMatchImageFallback: { backgroundColor: palette.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
+  aiBody: { fontSize: fontSize.sm, color: palette.ink600, marginTop: 6, lineHeight: 20 },
+  providerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderTopWidth: 1, borderTopColor: palette.hairline },
 
   toggleWrap: {
     flexDirection: 'row', alignSelf: 'flex-end', marginBottom: 16,

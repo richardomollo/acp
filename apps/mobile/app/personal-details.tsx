@@ -9,6 +9,7 @@ import { authService } from '@/services/auth';
 import { GOAL_OPTIONS } from '@/lib/onboarding';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 
 interface UserProfile {
   id: string;
@@ -216,6 +217,11 @@ export default function PersonalDetailsScreen() {
   return (
     <View style={s.root}>
       <Stack.Screen options={{ headerShown: false }} />
+      <LinearGradient
+        colors={[palette.blue100, 'rgba(208,224,255,0)']}
+        style={s.topFadeBg}
+        pointerEvents="none"
+      />
 
       <SafeAreaView edges={['top']} style={s.header}>
         <TouchableOpacity style={s.backBtn} onPress={() => router.back()} hitSlop={12}>
@@ -498,12 +504,11 @@ function DetailRow({ label, value, editing, children, isLast }: {
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: palette.surfaceApp },
+  topFadeBg: { position: 'absolute', top: 0, left: 0, right: 0, height: 320 },
 
   header: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
     paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16,
-    backgroundColor: palette.white,
-    borderBottomWidth: 1, borderBottomColor: palette.hairline,
   },
   backBtn: {
     width: 38, height: 38, borderRadius: 19,

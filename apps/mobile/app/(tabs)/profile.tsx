@@ -11,6 +11,7 @@ import { TourOverlay, type TourStep } from '@/components/tour-overlay';
 import { useTour } from '@/hooks/use-tour';
 import { useAuthModal } from '@/contexts/auth-modal-context';
 import * as ImagePicker from 'expo-image-picker';
+import { LinearGradient } from 'expo-linear-gradient';
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 
@@ -21,12 +22,6 @@ interface UserProfile {
   phone: string | null;
   created_at: string;
   avatar_url: string | null;
-}
-
-interface WeightGoal {
-  initialWeightKg: number;
-  currentWeightKg: number;
-  targetWeightKg: number;
 }
 
 // ─── Avatar upload ────────────────────────────────────────────────────────────
@@ -82,7 +77,6 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { showAuthModal } = useAuthModal();
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [weightGoal, setWeightGoal] = useState<WeightGoal | null>(null);
   const [loading, setLoading] = useState(true);
   const [isGuest, setIsGuest] = useState(false);
 
@@ -122,10 +116,7 @@ export default function ProfileScreen() {
       if (!session?.user) { setIsGuest(true); return; }
       setIsGuest(false);
 
-      const [{ data }, { data: fp }] = await Promise.all([
-        supabase.from('users').select('id, email, name, phone, created_at, avatar_url').eq('id', session.user.id).maybeSingle(),
-        supabase.from('fitness_profile').select('initial_weight_kg, starting_weight_kg, goal_weight_kg').eq('user_id', session.user.id).maybeSingle(),
-      ]);
+      const { data } = await supabase.from('users').select('id, email, name, phone, created_at, avatar_url').eq('id', session.user.id).maybeSingle();
 
       const profile = data ?? {
         id: session.user.id,
@@ -137,18 +128,6 @@ export default function ProfileScreen() {
       };
 
       setUser(profile);
-
-      // Only worth showing once there's an actual starting point and target
-      // to measure progress between.
-      if (fp?.initial_weight_kg != null && fp?.starting_weight_kg != null && fp?.goal_weight_kg != null) {
-        setWeightGoal({
-          initialWeightKg: fp.initial_weight_kg,
-          currentWeightKg: fp.starting_weight_kg,
-          targetWeightKg: fp.goal_weight_kg,
-        });
-      } else {
-        setWeightGoal(null);
-      }
     } catch (err) {
       console.error('Profile load error:', err);
     } finally {
@@ -224,22 +203,15 @@ export default function ProfileScreen() {
     );
   }
 
-  // ── Weight progress ────────────────────────────────────────────────────────
-
-  const weightProgressPct = (() => {
-    if (!weightGoal) return 0;
-    const { initialWeightKg, currentWeightKg, targetWeightKg } = weightGoal;
-    const totalDelta = targetWeightKg - initialWeightKg;
-    if (totalDelta === 0) return currentWeightKg === targetWeightKg ? 100 : 0;
-    const progressDelta = currentWeightKg - initialWeightKg;
-    const pct = (progressDelta / totalDelta) * 100;
-    return Math.max(0, Math.min(100, Math.round(pct)));
-  })();
-
   // ── Authenticated ──────────────────────────────────────────────────────────
 
   return (
     <SafeAreaView style={styles.container}>
+      <LinearGradient
+        colors={[palette.blue100, 'rgba(208,224,255,0)']}
+        style={styles.topFadeBg}
+        pointerEvents="none"
+      />
       <ScrollView showsVerticalScrollIndicator={false}>
 
         {/* ── Hero ── */}
@@ -259,25 +231,6 @@ export default function ProfileScreen() {
           <ThemedText style={styles.heroName}>{user?.name ?? 'User'}</ThemedText>
           <ThemedText style={styles.heroEmail}>{user?.email}</ThemedText>
         </View>
-
-        {/* ── Your Weight ── */}
-        {weightGoal && (
-          <View style={styles.weightCard}>
-            <View style={styles.weightCardHeader}>
-              <ThemedText style={styles.weightCardTitle}>Your Weight</ThemedText>
-              <TouchableOpacity style={styles.weightUpdateBtn} onPress={() => router.push('/progress-hub' as any)}>
-                <ThemedText style={styles.weightUpdateBtnText}>Update Progress</ThemedText>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.weightProgressTrack}>
-              <View style={[styles.weightProgressFill, { width: `${weightProgressPct}%` }]} />
-            </View>
-            <ThemedText style={styles.weightProgressPct}>{weightProgressPct}%</ThemedText>
-            <ThemedText style={styles.weightSummary}>
-              Current weight {weightGoal.currentWeightKg} kg / target weight {weightGoal.targetWeightKg} kg
-            </ThemedText>
-          </View>
-        )}
 
         {/* ── Lifestyle ── */}
         <View style={styles.menuSection}>
@@ -323,7 +276,7 @@ export default function ProfileScreen() {
               <Ionicons name="chevron-forward" size={18} color={palette.gray200} />
             </TouchableOpacity>
             <View style={styles.menuDivider} />
-            <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/workout-hub' as any)}>
+            <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/my-plan' as any)}>
               <View style={styles.menuItemLeft}>
                 <Ionicons name="barbell-outline" size={20} color={palette.ink600} />
                 <ThemedText style={styles.menuText}>My Training Plan</ThemedText>
@@ -349,14 +302,6 @@ export default function ProfileScreen() {
               <View style={styles.menuItemLeft}>
                 <Ionicons name="heart-outline" size={20} color={palette.ink600} />
                 <ThemedText style={styles.menuText}>Apple Health</ThemedText>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={palette.gray200} />
-            </TouchableOpacity>
-            <View style={styles.menuDivider} />
-            <TouchableOpacity style={styles.menuItem}>
-              <View style={styles.menuItemLeft}>
-                <Ionicons name="language-outline" size={20} color={palette.ink600} />
-                <ThemedText style={styles.menuText}>Language</ThemedText>
               </View>
               <Ionicons name="chevron-forward" size={18} color={palette.gray200} />
             </TouchableOpacity>
@@ -424,6 +369,7 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: palette.surfaceApp },
+  topFadeBg: { position: 'absolute', top: 0, left: 0, right: 0, height: 320 },
   center: { justifyContent: 'center', alignItems: 'center' },
 
   header: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12 },
@@ -451,7 +397,6 @@ const styles = StyleSheet.create({
 
   // Hero
   hero: {
-    backgroundColor: palette.white,
     paddingTop: 32, paddingBottom: 28, paddingHorizontal: 20,
     alignItems: 'center', gap: 6,
     marginBottom: 8,
@@ -471,28 +416,6 @@ const styles = StyleSheet.create({
   },
   heroName: { fontSize: 22, fontWeight: 'bold', color: palette.ink900 },
   heroEmail: { fontSize: fontSize.base, color: palette.gray450 },
-
-  // Weight progress card
-  weightCard: {
-    marginHorizontal: 16, marginBottom: 8,
-    borderRadius: radii.lg, padding: 18, backgroundColor: palette.white,
-  },
-  weightCardHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginBottom: 18,
-  },
-  weightCardTitle: { fontSize: fontSize.lg, fontWeight: '800', color: palette.ink900 },
-  weightUpdateBtn: {
-    backgroundColor: palette.blue500, borderRadius: radii.pill,
-    paddingVertical: 10, paddingHorizontal: 16,
-  },
-  weightUpdateBtnText: { fontSize: fontSize.sm, fontWeight: '700', color: palette.white },
-  weightProgressTrack: {
-    height: 6, borderRadius: 3, backgroundColor: palette.surfaceMuted, overflow: 'hidden',
-  },
-  weightProgressFill: { height: '100%', borderRadius: 3, backgroundColor: palette.blue500 },
-  weightProgressPct: { fontSize: fontSize.sm, color: palette.gray450, marginTop: 8 },
-  weightSummary: { fontSize: fontSize.base, color: palette.gray450, marginTop: 20 },
 
   // Menu sections
   menuSection: { marginHorizontal: 16, marginBottom: 8 },

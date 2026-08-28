@@ -543,13 +543,10 @@ export default function WorkoutHubScreen() {
             <Ionicons name="chevron-forward" size={18} color={palette.gray300} />
           </TouchableOpacity>
 
-         <View style={s.bodyPartHeader}>
-            <ThemedText style={s.bodyPartEyebrow}>WORKOUT BUILDER</ThemedText>
-            <ThemedText style={s.bodyPartTitle}>Your Own Workouts</ThemedText>
-          </View>
-
-          {/* ── My Workouts ── */}
-          {ownWorkouts.length > 0 && (
+          {/* ── My Workouts — ACP Intelligence™ auto-generates these
+              (services/activity-recommendation-service.ts); there is no
+              manual workout builder any more. */}
+          {ownWorkouts.length > 0 ? (
             <>
               <View style={s.mySectionRow}>
                 <ThemedText style={[s.mySectionLabel, { marginBottom: 0 }]}>My Workouts</ThemedText>
@@ -564,24 +561,25 @@ export default function WorkoutHubScreen() {
                 onPress={() => router.push({ pathname: '/workout-detail', params: { workoutId: ownWorkouts[0].id } })}
               />
             </>
+          ) : (
+            <>
+              <ThemedText style={s.mySectionLabel}>My Workouts</ThemedText>
+              <TouchableOpacity
+                style={s.browseCta}
+                onPress={() => router.push('/my-plan' as any)}
+                activeOpacity={0.85}
+              >
+                <View style={s.browseCtaIcon}>
+                  <Ionicons name="sparkles-outline" size={22} color={palette.blue500} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <ThemedText style={s.createCtaTitle}>ACP builds your workouts for you</ThemedText>
+                  <ThemedText style={s.createCtaSub}>See My Plan for your personalized strength recommendation</ThemedText>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={palette.gray300} />
+              </TouchableOpacity>
+            </>
           )}
-
-           {/* ── Create Your Workout CTA ── */}
-            <ThemedText style={s.mySectionLabel}>Create New</ThemedText>
-          <TouchableOpacity
-            style={s.createCta}
-            onPress={() => router.push('/create-workout' as any)}
-            activeOpacity={0.85}
-          >
-            <View style={s.createCtaIcon}>
-              <Ionicons name="add" size={22} color={palette.blue500} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <ThemedText style={s.createCtaTitle}>Create Your Own Workout</ThemedText>
-              <ThemedText style={s.createCtaSub}>Pick exercises, set reps & rest · home or gym</ThemedText>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={palette.gray300} />
-          </TouchableOpacity>
 
           <View style={{ height: 100 }} />
         </ScrollView>

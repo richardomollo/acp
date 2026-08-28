@@ -1,130 +1,184 @@
-import { StyleSheet, View, ScrollView, TouchableOpacity } from 'react-native';
+import {
+  StyleSheet, View, ScrollView, TouchableOpacity, Image,
+  ActivityIndicator,
+} from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { useRouter } from 'expo-router';
 import { palette, radii, fontSize, shadows } from '@/constants/theme';
+import { useState, useEffect, useMemo } from 'react';
+import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
+import { DateRail, buildDateRange } from '@/components/date-rail';
+import { LinearGradient } from 'expo-linear-gradient';
 
-interface HubTile {
-  key: string;
-  route: string;
-  title: string;
-  subtitle: string;
-  icon: string;
-  iconBg: string;
-  iconColor?: string;
-  emoji?: string;
+// ── Types ──────────────────────────────────────────────────────────────────────
+
+interface FitnessSession {
+  id: string;
+  name: string;
+  category: string | null;
+  image_url: string | null;
+  duration_minutes: number;
+  date: string;
+  gyms: { name: string } | null;
 }
 
-const TILES: HubTile[] = [
-  {
-    key: 'nutrition',
-    route: '/nutrition-hub',
-    title: 'Nutrition Hub',
-    subtitle: 'Kenyan meals, meal plans & nutritionist coaching',
-    icon: '',
-    emoji: '🥗',
-    iconBg: palette.success50,
-  },
-  {
-    key: 'workouts',
-    route: '/workout-hub',
-    title: 'Workout Hub',
-    subtitle: 'Browse exercises, your workouts & trainer plans',
-    icon: 'barbell-outline',
-    iconBg: palette.blue25,
-    iconColor: palette.blue500,
-  },
-  {
-    key: 'outdoor',
-    route: '/outdoor-activities',
-    title: 'Outdoor Activities',
-    subtitle: 'Runs, walks & rides synced from Strava',
-    icon: 'walk-outline',
-    iconBg: '#fff1eb',
-    iconColor: '#FC4C02',
-  },
-  {
-    key: 'challenges',
-    route: '/challenges',
-    title: 'Challenges',
-    subtitle: 'Compete against yourself this month',
-    icon: 'trophy-outline',
-    iconBg: palette.warning100,
-    iconColor: palette.warning700,
-  },
-  {
-    key: 'history',
-    route: '/workout-history',
-    title: 'Workout History',
-    subtitle: 'Your completed sessions',
-    icon: 'time-outline',
-    iconBg: palette.surfaceMuted,
-    iconColor: palette.ink900,
-  },
-  {
-    key: 'journey',
-    route: '/fitness-journey',
-    title: 'Fitness Journey',
-    subtitle: 'Streaks, achievements, goals & body stats',
-    icon: 'stats-chart-outline',
-    iconBg: palette.blue25,
-    iconColor: palette.blue500,
-  },
-  {
-    key: 'discover',
-    route: '/(tabs)/discover',
-    title: 'Discover',
-    subtitle: 'Find gyms, classes, trainers & experiences near you',
-    icon: 'search-outline',
-    iconBg: palette.navy + '1a',
-    iconColor: palette.navy,
-  },
-];
+// Real `sessions.category` values seen in production — bucketed into two
+// honest, non-fabricated rails. Anything not recognised as a self-directed
+// workout style falls into Classes (the safer default for instructor-led
+// content like pilates/martial arts/dance).
+const WORKOUT_CATEGORIES = new Set(['hiit', 'strength training', 'cardio', 'crossfit', 'strength']);
+
+function isWorkoutCategory(category: string | null): boolean {
+  return WORKOUT_CATEGORIES.has((category ?? '').toLowerCase());
+}
+
+// ── Card ───────────────────────────────────────────────────────────────────────
+
+function SessionCard({ session, onPress }: { session: FitnessSession; onPress: () => void }) {
+  return (
+    <TouchableOpacity style={s.card} onPress={onPress} activeOpacity={0.85}>
+      {session.image_url ? (
+        <Image source={{ uri: session.image_url }} style={s.cardImage} />
+      ) : (
+        <View style={[s.cardImage, s.cardImageFallback]}>
+          <Ionicons name="barbell-outline" size={28} color={palette.gray300} />
+        </View>
+      )}
+      {session.category ? (
+        <View style={s.cardBadge}>
+          <ThemedText style={s.cardBadgeText}>{session.category}</ThemedText>
+        </View>
+      ) : null}
+      <View style={s.cardBody}>
+        <ThemedText style={s.cardTitle} numberOfLines={2}>{session.name}</ThemedText>
+        <ThemedText style={s.cardMeta}>
+          {session.gyms?.name ? `${session.gyms.name} · ` : ''}{session.duration_minutes} min
+        </ThemedText>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function SessionRail({
+  title, sessions, loading, onSeeAll, onPressSession,
+}: {
+  title: string; sessions: FitnessSession[]; loading: boolean;
+  onSeeAll: () => void; onPressSession: (s: FitnessSession) => void;
+}) {
+  if (!loading && sessions.length === 0) return null;
+  return (
+    <View style={s.section}>
+      <View style={s.sectionHeaderRow}>
+        <ThemedText style={s.sectionTitle}>{title}</ThemedText>
+        <TouchableOpacity onPress={onSeeAll} activeOpacity={0.7} style={s.seeAllRow}>
+          <ThemedText style={s.seeAllText}>See all</ThemedText>
+          <Ionicons name="chevron-forward" size={14} color={palette.blue600} />
+        </TouchableOpacity>
+      </View>
+      {loading ? (
+        <ActivityIndicator color={palette.blue500} style={{ marginVertical: 20 }} />
+      ) : (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.railContent}>
+          {sessions.map(session => (
+            <SessionCard key={session.id} session={session} onPress={() => onPressSession(session)} />
+          ))}
+        </ScrollView>
+      )}
+    </View>
+  );
+}
+
+// ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function FitnessScreen() {
   const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [sessions, setSessions] = useState<FitnessSession[]>([]);
+  const today = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const [selectedDate, setSelectedDate] = useState(today);
+  const days = useMemo(() => buildDateRange(14), []);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      const { data } = await supabase
+        .from('sessions')
+        .select('id, name, category, image_url, duration_minutes, date, gyms(name)')
+        .gte('date', today)
+        .order('date', { ascending: true })
+        .limit(40);
+      setSessions((data as unknown as FitnessSession[]) ?? []);
+      setLoading(false);
+    })();
+  }, [today]);
+
+  const sessionDates = useMemo(() => new Set(sessions.map(sess => sess.date)), [sessions]);
+  const workoutSessions = useMemo(() => sessions.filter(sess => isWorkoutCategory(sess.category)), [sessions]);
+  const classSessions = useMemo(() => sessions.filter(sess => !isWorkoutCategory(sess.category)), [sessions]);
+  const plannedToday = sessionDates.has(selectedDate);
+
+  const openSession = (session: FitnessSession) => {
+    router.push({ pathname: '/session-details', params: { sessionId: session.id, gymName: session.gyms?.name || 'Gym' } } as any);
+  };
 
   return (
     <View style={s.root}>
+      <LinearGradient
+        colors={[palette.blue100, 'rgba(208,224,255,0)']}
+        style={s.topFadeBg}
+        pointerEvents="none"
+      />
       <View style={s.header}>
-        <ThemedText style={s.headerTitle}>Fitness Hub</ThemedText>
-        <ThemedText style={s.headerSub}>Everything you need to stay active</ThemedText>
+        <ThemedText style={s.headerTitle}>Fitness</ThemedText>
+        <ThemedText style={s.headerSub}>Plan your workouts and classes</ThemedText>
       </View>
 
       <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
-        {TILES.map(tile => (
-          <TouchableOpacity
-            key={tile.key}
-            style={s.tile}
-            onPress={() => router.push(tile.route as any)}
-            activeOpacity={0.85}
-          >
-            <View style={[s.tileIcon, { backgroundColor: tile.iconBg }]}>
-              {tile.emoji ? (
-                <ThemedText style={{ fontSize: 20 }}>{tile.emoji}</ThemedText>
-              ) : (
-                <Ionicons name={tile.icon as any} size={22} color={tile.iconColor ?? palette.ink900} />
-              )}
-            </View>
-            <View style={{ flex: 1 }}>
-              <ThemedText style={s.tileTitle}>{tile.title}</ThemedText>
-              <ThemedText style={s.tileSub}>{tile.subtitle}</ThemedText>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={palette.gray300} />
+        <ThemedText style={s.todayLabel}>Today</ThemedText>
+        <DateRail days={days} selected={selectedDate} sessionDates={sessionDates} onSelect={setSelectedDate} />
+
+        <View style={s.emptyCard}>
+          <View style={s.emptyIconWrap}>
+            <Ionicons name="calendar-outline" size={22} color={palette.blue600} />
+          </View>
+          <ThemedText style={s.emptyText}>
+            {plannedToday ? 'Sessions are available this day' : "You've got nothing planned for this day"}
+          </ThemedText>
+          <TouchableOpacity onPress={() => router.push('/workout-hub' as any)} activeOpacity={0.7}>
+            <ThemedText style={s.emptyCta}>Plan something</ThemedText>
           </TouchableOpacity>
-        ))}
+        </View>
+
+        <SessionRail
+          title="Workouts"
+          sessions={workoutSessions}
+          loading={loading}
+          onSeeAll={() => router.push('/(tabs)/discover' as any)}
+          onPressSession={openSession}
+        />
+        <SessionRail
+          title="Classes"
+          sessions={classSessions}
+          loading={loading}
+          onSeeAll={() => router.push('/(tabs)/discover' as any)}
+          onPressSession={openSession}
+        />
+
         <View style={{ height: 100 }} />
       </ScrollView>
     </View>
   );
 }
 
+const CARD_WIDTH = 220;
+const CARD_IMAGE_HEIGHT = 130;
+
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: palette.white },
+  topFadeBg: { position: 'absolute', top: 0, left: 0, right: 0, height: 320 },
 
   header: {
-    backgroundColor: palette.white,
-    borderBottomWidth: 1, borderBottomColor: palette.hairline,
     paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 20,
@@ -132,18 +186,52 @@ const s = StyleSheet.create({
   headerTitle: { fontSize: 28, fontWeight: '800', letterSpacing: -0.56, color: palette.ink900, paddingTop: 10 },
   headerSub: { fontSize: fontSize.sm, color: palette.gray450, marginTop: 2 },
 
-  content: { paddingHorizontal: 20, paddingTop: 20 },
+  content: { paddingTop: 4 },
 
-  tile: {
-    flexDirection: 'row', alignItems: 'center', gap: 14,
-    borderRadius: radii.xl, borderWidth: 1,
-    borderColor: palette.hairline, backgroundColor: palette.white,
-    padding: 16, marginBottom: 14, ...shadows.sm,
+  todayLabel: {
+    fontSize: 13, fontWeight: '700', color: palette.gray300,
+    textTransform: 'uppercase', letterSpacing: 0.5,
+    paddingHorizontal: 20, marginTop: 16,
   },
-  tileIcon: {
-    width: 44, height: 44, borderRadius: 22,
-    alignItems: 'center', justifyContent: 'center',
+
+  emptyCard: {
+    marginHorizontal: 20, marginTop: 4, marginBottom: 24,
+    backgroundColor: palette.surfaceMuted, borderRadius: radii.xl,
+    paddingVertical: 28, paddingHorizontal: 20,
+    alignItems: 'center', gap: 8,
   },
-  tileTitle: { fontSize: 15, fontWeight: '800', color: palette.ink900 },
-  tileSub: { fontSize: 12, color: palette.gray300, marginTop: 2 },
+  emptyIconWrap: {
+    width: 44, height: 44, borderRadius: 22, backgroundColor: palette.blue25,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 4,
+  },
+  emptyText: { fontSize: 14, fontWeight: '600', color: palette.ink700, textAlign: 'center' },
+  emptyCta: { fontSize: 13, fontWeight: '700', color: palette.blue600 },
+
+  section: { marginBottom: 24 },
+  sectionHeaderRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, marginBottom: 12,
+  },
+  sectionTitle: { fontSize: 20, fontWeight: '800', color: palette.ink900, letterSpacing: -0.3 },
+  seeAllRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  seeAllText: { fontSize: 13, fontWeight: '700', color: palette.blue600 },
+
+  railContent: { paddingHorizontal: 20, gap: 14 },
+
+  card: {
+    width: CARD_WIDTH, borderRadius: radii.xl, overflow: 'hidden',
+    backgroundColor: palette.white, borderWidth: 1, borderColor: palette.hairline,
+    ...shadows.sm,
+  },
+  cardImage: { width: CARD_WIDTH, height: CARD_IMAGE_HEIGHT },
+  cardImageFallback: { backgroundColor: palette.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
+  cardBadge: {
+    position: 'absolute', top: 10, left: 10,
+    backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: radii.pill,
+    paddingHorizontal: 9, paddingVertical: 4,
+  },
+  cardBadgeText: { fontSize: 10.5, fontWeight: '700', color: '#fff', textTransform: 'capitalize' },
+  cardBody: { padding: 12 },
+  cardTitle: { fontSize: 14, fontWeight: '700', color: palette.ink900, lineHeight: 18 },
+  cardMeta: { fontSize: 12, color: palette.gray450, marginTop: 3 },
 });

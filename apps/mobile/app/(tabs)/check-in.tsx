@@ -20,6 +20,7 @@ import { TourOverlay, type TourStep } from '@/components/tour-overlay';
 import { useTour } from '@/hooks/use-tour';
 import { useAuthModal } from '@/contexts/auth-modal-context';
 import QRCode from 'react-native-qrcode-svg';
+import { LinearGradient } from 'expo-linear-gradient';
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 
@@ -380,6 +381,11 @@ export default function BookingsScreen() {
   if (isGuest) {
     return (
       <SafeAreaView style={styles.container}>
+        <LinearGradient
+          colors={[palette.blue100, 'rgba(208,224,255,0)']}
+          style={styles.topFadeBg}
+          pointerEvents="none"
+        />
         <View style={styles.header}>
           <ThemedText style={styles.headerTitle}>My Bookings</ThemedText>
         </View>
@@ -432,6 +438,11 @@ export default function BookingsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <LinearGradient
+        colors={[palette.blue100, 'rgba(208,224,255,0)']}
+        style={styles.topFadeBg}
+        pointerEvents="none"
+      />
       {/* Header */}
       <View style={styles.header}>
         <ThemedText style={styles.headerTitle}>My Bookings</ThemedText>
@@ -956,6 +967,7 @@ export default function BookingsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: palette.white },
+  topFadeBg: { position: 'absolute', top: 0, left: 0, right: 0, height: 320 },
   center: { justifyContent: 'center', alignItems: 'center' },
 
   // Header

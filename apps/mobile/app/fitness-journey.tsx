@@ -8,7 +8,6 @@ import { palette, radii, fontSize, shadows } from '@/constants/theme';
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { authService } from '@/services/auth';
-import { type Recurrence } from '@/services/notifications';
 import { computeStreak, buildAchievements, type Stats, type Achievement } from '@/services/fitnessStats';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,6 +15,9 @@ import { getProgressSnapshot } from '@/services/progress-service';
 import { interpretProgress } from '@/lib/progress-interpreter';
 import type { ProgressSnapshot, ProgressInterpretation } from '@/lib/progress-types';
 import { getHumanSupportInsight, dismissHumanSupportInsight, type HumanSupportInsight } from '@/services/human-support-service';
+import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Path, Circle, Line as SvgLine } from 'react-native-svg';
+import { computeWeightProgress } from '@/lib/weight-progress';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -63,22 +65,6 @@ interface MeasurementRow {
   logged_at: string;
 }
 
-interface CheckinRow {
-  id: string;
-  mood: number;
-  checkin_date: string;
-}
-
-interface TaskRow {
-  id: string;
-  title: string;
-  due_date: string | null;
-  status: 'pending' | 'done';
-  recurrence: Recurrence;
-  weekdays: number[];
-  last_completed_date: string | null;
-}
-
 interface NutritionStats {
   streak: number;
   mealsLogged: number;
@@ -101,18 +87,6 @@ interface ActivityRow {
   duration_seconds: number | null;
   moving_time_seconds: number | null;
   distance_meters: number | null;
-}
-
-const MOODS = [
-  { value: 1, emoji: '😞' },
-  { value: 2, emoji: '🙁' },
-  { value: 3, emoji: '😐' },
-  { value: 4, emoji: '🙂' },
-  { value: 5, emoji: '😄' },
-] as const;
-
-function todayDateStr(): string {
-  return new Date().toISOString().slice(0, 10);
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
@@ -146,6 +120,105 @@ function AchievementBadge({ a }: { a: Achievement }) {
   );
 }
 
+function monthYear(iso: string): string {
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}
+
+// Dark, standalone visual treatment for the weight-trend card — ported
+// verbatim from fitness-goals.tsx's "My Progress" section so both screens
+// show the exact same card.
+const TREND_BG = '#17181d';
+const TREND_ACCENT = '#d7f24e';
+const TREND_ICON_BG = '#5b3fae';
+const TREND_CHART_W = 300;
+const TREND_CHART_H = 90;
+
+function WeightTrendCard({
+  points, idealWeight, onPress,
+}: {
+  points: { weight: number; loggedAt: string }[];
+  idealWeight: number | null;
+  onPress: () => void;
+}) {
+  const weights = points.map(p => p.weight);
+  const minW = Math.min(...weights);
+  const maxW = Math.max(...weights);
+  const range = maxW - minW || 10;
+  const yMin = minW - range * 0.25;
+  const yMax = maxW + range * 0.25;
+  const axisTop = Math.ceil(yMax / 10) * 10;
+  const axisBottom = Math.floor(yMin / 10) * 10;
+
+  const coords = points.map((p, i) => ({
+    x: points.length > 1 ? (i / (points.length - 1)) * TREND_CHART_W : TREND_CHART_W / 2,
+    y: TREND_CHART_H - ((p.weight - yMin) / (yMax - yMin)) * TREND_CHART_H,
+  }));
+  const pathD = coords.map((c, i) => `${i === 0 ? 'M' : 'L'} ${c.x} ${c.y}`).join(' ');
+  const current = coords[coords.length - 1];
+
+  return (
+    <TouchableOpacity style={ts.card} onPress={onPress} activeOpacity={0.85}>
+      <View style={ts.headerRow}>
+        <View style={ts.headerLeft}>
+          <View style={ts.iconCircle}>
+            <Ionicons name="body-outline" size={18} color={TREND_ACCENT} />
+          </View>
+          <View>
+            <ThemedText style={ts.title}>Weight</ThemedText>
+            <ThemedText style={ts.subtitle}>The range of healthy</ThemedText>
+          </View>
+        </View>
+        {idealWeight != null && (
+          <View style={{ alignItems: 'flex-end' }}>
+            <ThemedText style={ts.idealLabel}>Ideal weight</ThemedText>
+            <ThemedText style={ts.idealValue}>{Math.round(idealWeight)} <ThemedText style={ts.idealUnit}>kg</ThemedText></ThemedText>
+          </View>
+        )}
+      </View>
+
+      <View style={ts.chartRow}>
+        <View style={ts.axisCol}>
+          <ThemedText style={ts.axisText}>{axisTop}</ThemedText>
+          <ThemedText style={ts.axisText}>{axisBottom}</ThemedText>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Svg width="100%" height={TREND_CHART_H} viewBox={`0 0 ${TREND_CHART_W} ${TREND_CHART_H}`} preserveAspectRatio="none">
+            {current && (
+              <SvgLine
+                x1={current.x} y1={0} x2={current.x} y2={TREND_CHART_H}
+                stroke={TREND_ACCENT} strokeOpacity={0.25} strokeWidth={10}
+              />
+            )}
+            <Path d={pathD} stroke={TREND_ACCENT} strokeWidth={2.5} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            {coords.map((c, i) => (
+              <Circle key={i} cx={c.x} cy={c.y} r={i === coords.length - 1 ? 5 : 4} fill={TREND_ACCENT} />
+            ))}
+          </Svg>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+const ts = StyleSheet.create({
+  card: { backgroundColor: TREND_BG, borderRadius: radii.xl, padding: 18, marginBottom: 12 },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  iconCircle: {
+    width: 34, height: 34, borderRadius: 17, backgroundColor: TREND_ICON_BG,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  title: { fontSize: 16, fontWeight: '800', color: '#fff' },
+  subtitle: { fontSize: 11.5, color: 'rgba(255,255,255,0.5)', marginTop: 1 },
+  idealLabel: { fontSize: 11, color: 'rgba(255,255,255,0.5)' },
+  idealValue: { fontSize: 20, fontWeight: '800', color: '#fff', marginTop: 2 },
+  idealUnit: { fontSize: 13, fontWeight: '700', color: 'rgba(255,255,255,0.6)' },
+  chartRow: { flexDirection: 'row', alignItems: 'stretch' },
+  axisCol: { justifyContent: 'space-between', paddingRight: 10, paddingBottom: 4 },
+  axisText: { fontSize: 12, color: 'rgba(255,255,255,0.45)', fontWeight: '600' },
+});
+
 // ── Day 6 — human-support insight copy ──────────────────────────────────────
 // Never phrased as ACP failing — a trainer is framed as an expert layer on
 // top of ACP, and this card only ever renders when a real signal fired.
@@ -174,8 +247,7 @@ export default function FitnessJourneyScreen() {
   const [goalWeight, setGoalWeight] = useState<number | null>(null);
   const [initialWeightKg, setInitialWeightKg] = useState<number | null>(null);
   const [measurements, setMeasurements] = useState<MeasurementRow[]>([]);
-  const [checkins, setCheckins] = useState<CheckinRow[]>([]);
-  const [tasks, setTasks] = useState<TaskRow[]>([]);
+  const [goalTargetDate, setGoalTargetDate] = useState<string | null>(null);
   const [nutrition, setNutrition] = useState<NutritionStats>({ streak: 0, mealsLogged: 0, avgProtein: 0, avgHydration: 0 });
   const [communityActivity, setCommunityActivity] = useState<CommunityActivityRow[]>([]);
   const [progressInsight, setProgressInsight] = useState<ProgressInterpretation | null>(null);
@@ -217,7 +289,7 @@ export default function FitnessJourneyScreen() {
 
       const [
         { data }, { data: profileData }, { data: measurementData }, { data: checkinData },
-        { data: taskData }, { data: mealLogsData }, { data: activitiesData }, { data: communityActivityData },
+        { data: mealLogsData }, { data: activitiesData }, { data: communityActivityData },
       ] = await Promise.all([
         supabase
           .from('workout_history')
@@ -227,7 +299,7 @@ export default function FitnessJourneyScreen() {
           .limit(500),
         supabase
           .from('fitness_profile')
-          .select('goals, experience_level, starting_weight_kg, goal_weight_kg, initial_weight_kg')
+          .select('goals, experience_level, starting_weight_kg, goal_weight_kg, initial_weight_kg, goal_target_date')
           .eq('user_id', session.user.id)
           .maybeSingle(),
         supabase
@@ -235,19 +307,13 @@ export default function FitnessJourneyScreen() {
           .select('id, weight_kg, waist_cm, chest_cm, hips_cm, logged_at')
           .eq('user_id', session.user.id)
           .order('logged_at', { ascending: false })
-          .limit(2),
+          .limit(8),
         supabase
           .from('daily_checkins')
           .select('id, mood, checkin_date, water_liters')
           .eq('user_id', session.user.id)
           .order('checkin_date', { ascending: false })
           .limit(7),
-        supabase
-          .from('client_tasks')
-          .select('id, title, due_date, status, recurrence, weekdays, last_completed_date')
-          .eq('client_user_id', session.user.id)
-          .order('created_at', { ascending: false })
-          .limit(20),
         supabase
           .from('meal_logs')
           .select('log_date, meal_plan_items(meals(protein_g))')
@@ -276,9 +342,8 @@ export default function FitnessJourneyScreen() {
       if (active) setStartingWeight(profileData?.starting_weight_kg ?? null);
       if (active) setGoalWeight(profileData?.goal_weight_kg ?? null);
       if (active) setInitialWeightKg(profileData?.initial_weight_kg ?? null);
+      if (active) setGoalTargetDate(profileData?.goal_target_date ?? null);
       if (active) setMeasurements((measurementData as unknown as MeasurementRow[]) ?? []);
-      if (active) setCheckins((checkinData as unknown as CheckinRow[]) ?? []);
-      if (active) setTasks((taskData as unknown as TaskRow[]) ?? []);
       if (active) setCommunityActivity((communityActivityData as unknown as CommunityActivityRow[]) ?? []);
 
       if (active) {
@@ -322,46 +387,28 @@ export default function FitnessJourneyScreen() {
   const achievements = buildAchievements(stats);
   const unlockedCount = achievements.filter(a => a.unlocked).length;
 
-  const todayMood = checkins.find(c => c.checkin_date === todayDateStr())?.mood ?? null;
+  // My Progress (ported from fitness-goals.tsx) — measurements is fetched
+  // newest-first (limit 8) for this exact purpose: [0] is "current", the
+  // reversed list is oldest→newest for the chart.
+  const latestMeasurementWeight = measurements[0]?.weight_kg ?? null;
+  const weightHistoryPoints = [...measurements].reverse()
+    .filter((m): m is MeasurementRow & { weight_kg: number } => m.weight_kg != null)
+    .map(m => ({ weight: m.weight_kg, loggedAt: m.logged_at }));
+  const chartPoints = weightHistoryPoints.length > 0
+    ? weightHistoryPoints
+    : (startingWeight != null ? [{ weight: startingWeight, loggedAt: new Date().toISOString() }] : []);
+  const weightProgress = computeWeightProgress(initialWeightKg, latestMeasurementWeight, goalWeight);
 
-  // Date-only sibling of computeNextOccurrence — tasks have no time-of-day,
-  // only a day granularity.
-  const currentTaskPeriod = (task: TaskRow, today: Date = new Date()): string => {
-    const todayStr = today.toISOString().slice(0, 10);
-    if (task.recurrence === 'daily') return todayStr;
-    if (task.recurrence === 'weekly') {
-      const dow = today.getDay();
-      if (task.weekdays.includes(dow)) return todayStr;
-      for (let back = 1; back <= 7; back++) {
-        const d = new Date(today);
-        d.setDate(d.getDate() - back);
-        if (task.weekdays.includes(d.getDay())) return d.toISOString().slice(0, 10);
-      }
-    }
-    return task.due_date ?? todayStr;
-  };
-
-  const isTaskDoneNow = (task: TaskRow): boolean =>
-    task.recurrence === 'once' ? task.status === 'done' : task.last_completed_date === currentTaskPeriod(task);
-
-  const pendingTaskCount = tasks.filter(t => !isTaskDoneNow(t)).length;
-
-  // Moved here from the Profile tab — same calc: progress between the
-  // one-time initial-weight snapshot and the goal, using the latest
-  // self-reported weight as "current".
-  const weightProgressPct = (() => {
-    if (initialWeightKg == null || startingWeight == null || goalWeight == null) return 0;
-    const totalDelta = goalWeight - initialWeightKg;
-    if (totalDelta === 0) return startingWeight === goalWeight ? 100 : 0;
-    const progressDelta = startingWeight - initialWeightKg;
-    const pct = (progressDelta / totalDelta) * 100;
-    return Math.max(0, Math.min(100, Math.round(pct)));
-  })();
 
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={s.root}>
+        <LinearGradient
+          colors={[palette.blue100, 'rgba(208,224,255,0)']}
+          style={s.topFadeBg}
+          pointerEvents="none"
+        />
         {/* ── Header ── */}
         <SafeAreaView edges={['top']} style={s.header}>
           <TouchableOpacity style={s.backBtn} onPress={() => router.back()} hitSlop={12}>
@@ -388,6 +435,45 @@ export default function FitnessJourneyScreen() {
           </View>
         ) : (
           <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
+            {/* ── My Progress (ported from fitness-goals.tsx) ── */}
+            <View style={s.mpSectionRow}>
+              <ThemedText style={s.mpSectionTitle}>My Progress</ThemedText>
+              <TouchableOpacity style={s.mpViewPlanLink} onPress={() => router.push('/my-plan' as any)} activeOpacity={0.7}>
+                <ThemedText style={s.mpViewPlanLinkText}>View my plan</ThemedText>
+                <Ionicons name="chevron-forward" size={14} color={palette.blue600} />
+              </TouchableOpacity>
+            </View>
+
+            {chartPoints.length > 0 ? (
+              <WeightTrendCard
+                points={chartPoints}
+                idealWeight={goalWeight}
+                onPress={() => router.push('/log-progress' as any)}
+              />
+            ) : (
+              <View style={s.mpCard}>
+                <ThemedText style={s.mpEmptyText}>Add your first progress update</ThemedText>
+                <TouchableOpacity style={s.mpUpdateBtn} onPress={() => router.push('/log-progress' as any)} activeOpacity={0.85}>
+                  <ThemedText style={s.mpUpdateBtnText}>Update progress</ThemedText>
+                </TouchableOpacity>
+              </View>
+            )}
+            {weightProgress && (
+              <View style={s.mpWeightSummary}>
+                <ThemedText style={s.mpWeightCurrent}>{Math.round(weightProgress.currentKg)} kg</ThemedText>
+                <ThemedText style={s.mpWeightCurrentLabel}>Current weight</ThemedText>
+                <View style={s.mpWeightEndsRow}>
+                  <ThemedText style={s.mpWeightEnd}>Starting {Math.round(weightProgress.startingKg)} kg</ThemedText>
+                  <View style={s.mpWeightLine} />
+                  <ThemedText style={s.mpWeightEnd}>Goal {Math.round(weightProgress.goalKg)} kg</ThemedText>
+                </View>
+                <ThemedText style={s.mpCaptionOutside}>
+                  {Math.round(weightProgress.remainingKg * 10) / 10} kg to goal
+                  {goalTargetDate ? ` · Target ${monthYear(goalTargetDate)}` : ''}
+                </ThemedText>
+              </View>
+            )}
+
             {/* ── ACP Progress Intelligence (Day 4) — leads the screen, ── */}
             {/* charts/stats stay below as supporting detail. ── */}
             {progressInsight && progressSnapshot && (
@@ -485,41 +571,6 @@ export default function FitnessJourneyScreen() {
               <StatCard value={`${stats.longestStreak}d`} label="Best" icon="trophy-outline" />
             </View>
 
-            {/* ── Your Weight ── */}
-            {initialWeightKg != null && startingWeight != null && goalWeight != null && (
-              <View style={s.weightCard}>
-                <View style={s.weightCardHeader}>
-                  <ThemedText style={s.weightCardTitle}>Your Weight</ThemedText>
-                  <TouchableOpacity style={s.weightUpdateBtn} onPress={() => router.push('/progress-hub' as any)}>
-                    <ThemedText style={s.weightUpdateBtnText}>Update Progress</ThemedText>
-                  </TouchableOpacity>
-                </View>
-                <View style={s.weightProgressTrack}>
-                  <View style={[s.weightProgressFill, { width: `${weightProgressPct}%` }]} />
-                </View>
-                <ThemedText style={s.weightProgressPctText}>{weightProgressPct}%</ThemedText>
-                <ThemedText style={s.weightSummary}>
-                  Current weight {startingWeight} kg / target weight {goalWeight} kg
-                </ThemedText>
-              </View>
-            )}
-
-            {/* ── Analytics ── */}
-            <TouchableOpacity
-              style={s.goalTeaserCard}
-              onPress={() => router.push('/analytics' as any)}
-              activeOpacity={0.85}
-            >
-              <View style={s.goalTeaserIcon}>
-                <Ionicons name="stats-chart-outline" size={20} color={palette.blue500} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <ThemedText style={s.goalTeaserTitle}>Analytics</ThemedText>
-                <ThemedText style={s.goalTeaserSub}>Progress graphs, muscle load, weight lifted & more</ThemedText>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={palette.gray300} />
-            </TouchableOpacity>
-
             {/* ── Achievements ── */}
             <ThemedText style={s.sectionTitle}>
               Achievements · {unlockedCount}/{achievements.length}
@@ -527,6 +578,36 @@ export default function FitnessJourneyScreen() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.achievementsRow}>
               {achievements.map(a => <AchievementBadge key={a.id} a={a} />)}
             </ScrollView>
+
+            {/* ── Nutrition ── */}
+            <ThemedText style={s.sectionTitle}>Nutrition</ThemedText>
+            <View style={s.statsGrid}>
+              <StatCard value={`${nutrition.streak}d`} label="Streak" icon="flame-outline" color={palette.success700} />
+              <StatCard value={String(nutrition.mealsLogged)} label="Meals Logged" icon="restaurant-outline" color={palette.success700} />
+              <StatCard value={`${nutrition.avgProtein}g`} label="Avg Protein" icon="fitness-outline" color={palette.success700} />
+              <StatCard value={`${nutrition.avgHydration}L`} label="Avg Hydration" icon="water-outline" color={palette.success700} />
+            </View>
+
+            {(startingWeight || goalWeight || measurements[0]?.weight_kg) && (
+              <View style={s.weightProgressCard}>
+                <View style={s.weightProgressRow}>
+                  <View style={s.weightProgressItem}>
+                    <ThemedText style={s.weightProgressLabel}>Starting</ThemedText>
+                    <ThemedText style={s.weightProgressVal}>{startingWeight ? `${startingWeight}kg` : '—'}</ThemedText>
+                  </View>
+                  <View style={s.weightProgressItem}>
+                    <ThemedText style={s.weightProgressLabel}>Current</ThemedText>
+                    <ThemedText style={[s.weightProgressVal, { color: palette.success700 }]}>
+                      {measurements[0]?.weight_kg ? `${measurements[0].weight_kg}kg` : '—'}
+                    </ThemedText>
+                  </View>
+                  <View style={s.weightProgressItem}>
+                    <ThemedText style={s.weightProgressLabel}>Goal</ThemedText>
+                    <ThemedText style={s.weightProgressVal}>{goalWeight ? `${goalWeight}kg` : '—'}</ThemedText>
+                  </View>
+                </View>
+              </View>
+            )}
 
             {/* ── Community Activity ── */}
             {communityActivity.length > 0 && (
@@ -586,165 +667,6 @@ export default function FitnessJourneyScreen() {
               <Ionicons name="chevron-forward" size={16} color={palette.gray300} />
             </TouchableOpacity>
 
-            {/* ── Body Stats ── */}
-            <ThemedText style={s.sectionTitle}>Body Stats</ThemedText>
-            <TouchableOpacity
-              style={s.bodyStatsCard}
-              onPress={() => router.push('/body-stats' as any)}
-              activeOpacity={0.85}
-            >
-              {measurements.length === 0 ? (
-                <ThemedText style={s.bodyStatsEmpty}>No measurements logged yet</ThemedText>
-              ) : (
-                <View style={s.bodyStatsInfo}>
-                  <ThemedText style={s.bodyStatsValue}>{measurements[0].weight_kg} kg</ThemedText>
-                  {measurements.length > 1 && measurements[0].weight_kg != null && measurements[1].weight_kg != null && (
-                    <View style={s.bodyStatsDeltaRow}>
-                      <Ionicons
-                        name={measurements[0].weight_kg! >= measurements[1].weight_kg! ? 'arrow-up' : 'arrow-down'}
-                        size={12} color={palette.gray300}
-                      />
-                      <ThemedText style={s.bodyStatsDelta}>
-                        {Math.abs(measurements[0].weight_kg! - measurements[1].weight_kg!).toFixed(1)} kg since last log
-                      </ThemedText>
-                    </View>
-                  )}
-                  <ThemedText style={s.bodyStatsDate}>
-                    Logged {new Date(measurements[0].logged_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                  </ThemedText>
-                </View>
-              )}
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <TouchableOpacity
-                  style={s.logMeasurementBtn}
-                  onPress={() => router.push('/log-measurement' as any)}
-                >
-                  <Ionicons name="add" size={16} color={palette.blue500} />
-                  <ThemedText style={s.logMeasurementBtnText}>Log Measurement</ThemedText>
-                </TouchableOpacity>
-                <Ionicons name="chevron-forward" size={16} color={palette.gray300} />
-              </View>
-            </TouchableOpacity>
-
-            {/* ── Nutrition ── */}
-            <ThemedText style={s.sectionTitle}>Nutrition</ThemedText>
-            <View style={s.statsGrid}>
-              <StatCard value={`${nutrition.streak}d`} label="Streak" icon="flame-outline" color={palette.success700} />
-              <StatCard value={String(nutrition.mealsLogged)} label="Meals Logged" icon="restaurant-outline" color={palette.success700} />
-              <StatCard value={`${nutrition.avgProtein}g`} label="Avg Protein" icon="fitness-outline" color={palette.success700} />
-              <StatCard value={`${nutrition.avgHydration}L`} label="Avg Hydration" icon="water-outline" color={palette.success700} />
-            </View>
-
-            {(startingWeight || goalWeight || measurements[0]?.weight_kg) && (
-              <View style={s.weightProgressCard}>
-                <View style={s.weightProgressRow}>
-                  <View style={s.weightProgressItem}>
-                    <ThemedText style={s.weightProgressLabel}>Starting</ThemedText>
-                    <ThemedText style={s.weightProgressVal}>{startingWeight ? `${startingWeight}kg` : '—'}</ThemedText>
-                  </View>
-                  <View style={s.weightProgressItem}>
-                    <ThemedText style={s.weightProgressLabel}>Current</ThemedText>
-                    <ThemedText style={[s.weightProgressVal, { color: palette.success700 }]}>
-                      {measurements[0]?.weight_kg ? `${measurements[0].weight_kg}kg` : '—'}
-                    </ThemedText>
-                  </View>
-                  <View style={s.weightProgressItem}>
-                    <ThemedText style={s.weightProgressLabel}>Goal</ThemedText>
-                    <ThemedText style={s.weightProgressVal}>{goalWeight ? `${goalWeight}kg` : '—'}</ThemedText>
-                  </View>
-                </View>
-              </View>
-            )}
-
-            <TouchableOpacity
-              style={s.hubCta}
-              onPress={() => router.push('/nutrition-hub' as any)}
-              activeOpacity={0.85}
-            >
-              <View style={[s.hubCtaIcon, { backgroundColor: palette.success50 }]}>
-                <ThemedText style={{ fontSize: 20 }}>🥗</ThemedText>
-              </View>
-              <View style={{ flex: 1 }}>
-                <ThemedText style={s.hubCtaTitle}>Nutrition Hub</ThemedText>
-                <ThemedText style={s.hubCtaSub}>Meal library, meal plans &amp; today's plan</ThemedText>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={palette.gray300} />
-            </TouchableOpacity>
-
-            {/* ── Mood ── */}
-            <ThemedText style={s.sectionTitle}>How are you feeling?</ThemedText>
-            <TouchableOpacity
-              style={s.moodTeaserCard}
-              onPress={() => router.push('/mood-checkin' as any)}
-              activeOpacity={0.85}
-            >
-              <ThemedText style={s.moodTeaserEmoji}>
-                {todayMood ? MOODS.find(m => m.value === todayMood)?.emoji : '🙂'}
-              </ThemedText>
-              <View style={{ flex: 1 }}>
-                <ThemedText style={s.moodTeaserTitle}>
-                  {todayMood ? 'Logged for today' : 'Tap to check in'}
-                </ThemedText>
-                <ThemedText style={s.moodTeaserSub}>See your mood history</ThemedText>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={palette.gray300} />
-            </TouchableOpacity>
-
-            {/* ── Tasks ── */}
-            {tasks.length > 0 && (
-              <>
-                <ThemedText style={s.sectionTitle}>Tasks from your trainer</ThemedText>
-                <TouchableOpacity
-                  style={s.taskTeaserCard}
-                  onPress={() => router.push('/trainer-tasks' as any)}
-                  activeOpacity={0.85}
-                >
-                  <View style={s.taskTeaserIcon}>
-                    <Ionicons name="checkbox-outline" size={20} color={palette.blue500} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <ThemedText style={s.taskTeaserTitle}>
-                      {pendingTaskCount > 0 ? `${pendingTaskCount} to do` : 'All caught up'}
-                    </ThemedText>
-                    <ThemedText style={s.taskTeaserSub}>{tasks.length} total</ThemedText>
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color={palette.gray300} />
-                </TouchableOpacity>
-              </>
-            )}
-
-            {/* ── Browse Fitness Hub CTA ── */}
-            <TouchableOpacity
-              style={s.hubCta}
-              onPress={() => router.push('/workout-hub' as any)}
-              activeOpacity={0.85}
-            >
-              <View style={s.hubCtaIcon}>
-                <Ionicons name="barbell-outline" size={22} color={palette.blue500} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <ThemedText style={s.hubCtaTitle}>Browse Exercises & Workouts</ThemedText>
-                <ThemedText style={s.hubCtaSub}>Explore the Fitness Hub for new workouts to try</ThemedText>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={palette.gray300} />
-            </TouchableOpacity>
-
-            {/* ── My Trainers ── */}
-            <TouchableOpacity
-              style={s.hubCta}
-              onPress={() => router.push('/my-trainers' as any)}
-              activeOpacity={0.85}
-            >
-              <View style={s.hubCtaIcon}>
-                <Ionicons name="people-outline" size={22} color={palette.blue500} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <ThemedText style={s.hubCtaTitle}>My Trainers</ThemedText>
-                <ThemedText style={s.hubCtaSub}>Manage which trainers can see your workout progress</ThemedText>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={palette.gray300} />
-            </TouchableOpacity>
-
             <View style={{ height: 100 }} />
           </ScrollView>
         )}
@@ -757,6 +679,35 @@ export default function FitnessJourneyScreen() {
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: palette.white },
+  topFadeBg: { position: 'absolute', top: 0, left: 0, right: 0, height: 320 },
+
+  // My Progress (ported from fitness-goals.tsx — prefixed "mp" to avoid
+  // colliding with this screen's own pre-existing progressCard/progressRow
+  // styles, which style a completely different card).
+  mpSectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
+  mpSectionTitle: {
+    fontSize: 12, fontWeight: '700', color: palette.gray300,
+    textTransform: 'uppercase', letterSpacing: 0.5,
+  },
+  mpViewPlanLink: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  mpViewPlanLinkText: { fontSize: 13, fontWeight: '700', color: palette.blue600 },
+  mpCard: {
+    backgroundColor: palette.surfaceMuted, borderRadius: radii.xl,
+    padding: 16, marginBottom: 12,
+  },
+  mpWeightSummary: { marginBottom: 12 },
+  mpWeightCurrent: { fontSize: 24, fontWeight: '800', color: palette.ink900 },
+  mpWeightCurrentLabel: { fontSize: 12, color: palette.gray300, marginTop: 1, marginBottom: 10 },
+  mpWeightEndsRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  mpWeightEnd: { fontSize: 12.5, fontWeight: '700', color: palette.ink700 },
+  mpWeightLine: { flex: 1, height: 1, backgroundColor: palette.border },
+  mpCaptionOutside: { fontSize: 12, color: palette.gray450, marginTop: 6 },
+  mpEmptyText: { fontSize: 13, color: palette.gray450, marginBottom: 12 },
+  mpUpdateBtn: {
+    alignSelf: 'flex-start', backgroundColor: palette.ink900,
+    paddingHorizontal: 16, paddingVertical: 10, borderRadius: radii.pill, marginTop: 4,
+  },
+  mpUpdateBtnText: { fontSize: 13, fontWeight: '700', color: palette.white },
 
   progressCard: {
     borderRadius: radii.xl, backgroundColor: palette.ink900,
@@ -790,7 +741,7 @@ const s = StyleSheet.create({
   supportReason: { fontSize: 13, color: palette.gray450, lineHeight: 18 },
   supportCta: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    marginTop: 12, paddingVertical: 11, borderRadius: radii.pill, backgroundColor: palette.blue500,
+    marginTop: 12, paddingVertical: 11, borderRadius: radii.pill, backgroundColor: palette.ink900,
   },
   supportCtaText: { fontSize: 13, fontWeight: '700', color: '#fff' },
   supportEmptyText: { fontSize: 12, color: palette.gray300, marginTop: 10, fontStyle: 'italic' },
@@ -800,7 +751,6 @@ const s = StyleSheet.create({
   header: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
     paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16,
-    borderBottomWidth: 1, borderBottomColor: palette.hairline,
   },
   backBtn: {
     width: 38, height: 38, borderRadius: 19,
@@ -813,20 +763,6 @@ const s = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 20, paddingTop: 24 },
 
-  // Browse Fitness Hub CTA
-  hubCta: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    borderRadius: radii.xl, borderWidth: 1,
-    borderColor: palette.hairline, backgroundColor: palette.white,
-    padding: 14, marginBottom: 24, ...shadows.sm,
-  },
-  hubCtaIcon: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: palette.blue25,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  hubCtaTitle: { fontSize: 15, fontWeight: '800', color: palette.ink900 },
-  hubCtaSub: { fontSize: 12, color: palette.gray300, marginTop: 2 },
 
   // Stats
   statsGrid: { flexDirection: 'row', gap: 10, marginBottom: 24 },
@@ -838,20 +774,6 @@ const s = StyleSheet.create({
   statValue: { fontSize: 22, fontWeight: '900', color: palette.ink900, letterSpacing: -0.5 },
   statLabel: { fontSize: 10, fontWeight: '700', color: palette.gray300, textTransform: 'uppercase', letterSpacing: 0.5 },
 
-  // Body stats
-  bodyStatsCard: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: palette.white, borderRadius: radii.lg,
-    borderWidth: 1, borderColor: palette.hairline,
-    padding: 16, marginBottom: 24, ...shadows.sm,
-  },
-  bodyStatsEmpty: { fontSize: 13, color: palette.gray300 },
-  bodyStatsInfo: { gap: 2 },
-  bodyStatsValue: { fontSize: 22, fontWeight: '900', color: palette.ink900, letterSpacing: -0.5 },
-  bodyStatsDeltaRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  bodyStatsDelta: { fontSize: 12, fontWeight: '600', color: palette.gray450 },
-  bodyStatsDate: { fontSize: 11, color: palette.gray300, marginTop: 2 },
-
   // Nutrition weight progress
   weightProgressCard: {
     backgroundColor: palette.success50, borderRadius: radii.lg,
@@ -861,59 +783,6 @@ const s = StyleSheet.create({
   weightProgressItem: { alignItems: 'center' },
   weightProgressLabel: { fontSize: 10.5, fontWeight: '700', color: palette.success700, opacity: 0.7, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.4 },
   weightProgressVal: { fontSize: 16, fontWeight: '800', color: palette.ink900 },
-
-  // Your Weight card (moved here from the Profile tab)
-  weightCard: {
-    marginHorizontal: 16, marginTop: 16, marginBottom: 8,
-    borderRadius: radii.lg, padding: 18, backgroundColor: palette.white, ...shadows.sm,
-  },
-  weightCardHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginBottom: 18,
-  },
-  weightCardTitle: { fontSize: fontSize.lg, fontWeight: '800', color: palette.ink900 },
-  weightUpdateBtn: {
-    backgroundColor: palette.blue500, borderRadius: radii.pill,
-    paddingVertical: 10, paddingHorizontal: 16,
-  },
-  weightUpdateBtnText: { fontSize: fontSize.sm, fontWeight: '700', color: palette.white },
-  weightProgressTrack: {
-    height: 6, borderRadius: 3, backgroundColor: palette.surfaceMuted, overflow: 'hidden',
-  },
-  weightProgressFill: { height: '100%', borderRadius: 3, backgroundColor: palette.blue500 },
-  weightProgressPctText: { fontSize: fontSize.sm, color: palette.gray450, marginTop: 8 },
-  weightSummary: { fontSize: fontSize.base, color: palette.gray450, marginTop: 20 },
-  logMeasurementBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: palette.blue25, borderRadius: radii.pill,
-    paddingHorizontal: 12, paddingVertical: 8,
-  },
-  logMeasurementBtnText: { fontSize: 12.5, fontWeight: '700', color: palette.blue500 },
-
-  // Mood check-in (teaser card — full check-in lives on its own page)
-  moodTeaserCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 14,
-    backgroundColor: palette.white, borderRadius: radii.lg,
-    borderWidth: 1, borderColor: palette.hairline,
-    padding: 16, marginBottom: 24, ...shadows.sm,
-  },
-  moodTeaserEmoji: { fontSize: 30 },
-  moodTeaserTitle: { fontSize: 14, fontWeight: '700', color: palette.ink900 },
-  moodTeaserSub: { fontSize: 12, color: palette.gray300, marginTop: 1 },
-
-  // Tasks (teaser card — full list lives on its own page)
-  taskTeaserCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 14,
-    backgroundColor: palette.white, borderRadius: radii.lg,
-    borderWidth: 1, borderColor: palette.hairline,
-    padding: 16, marginBottom: 24, ...shadows.sm,
-  },
-  taskTeaserIcon: {
-    width: 40, height: 40, borderRadius: 20, backgroundColor: palette.blue25,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  taskTeaserTitle: { fontSize: 14, fontWeight: '700', color: palette.ink900 },
-  taskTeaserSub: { fontSize: 12, color: palette.gray300, marginTop: 1 },
 
   sectionTitle: {
     fontSize: 13, fontWeight: '700', color: palette.gray300,
@@ -956,6 +825,6 @@ const s = StyleSheet.create({
   authIcon: { width: 80, height: 80, borderRadius: 40, backgroundColor: palette.surfaceMuted, alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
   authTitle: { fontSize: 20, fontWeight: '800', color: palette.ink900, marginBottom: 10, textAlign: 'center' },
   authSub: { fontSize: 14, color: palette.gray450, textAlign: 'center', lineHeight: 20, marginBottom: 24 },
-  signInBtn: { backgroundColor: palette.blue500, paddingHorizontal: 28, paddingVertical: 14, borderRadius: radii.xl },
+  signInBtn: { backgroundColor: palette.ink900, paddingHorizontal: 28, paddingVertical: 14, borderRadius: radii.xl },
   signInBtnText: { fontSize: 15, fontWeight: '800', color: '#fff' },
 });

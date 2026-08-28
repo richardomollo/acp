@@ -5,7 +5,7 @@
 // Reachable any time via the "My Plan" CTA on the My Goals page, and via
 // "See my detailed plan" at the end of onboarding.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { View, ScrollView, TouchableOpacity, ActivityIndicator, Image, Modal, Alert, StyleSheet } from 'react-native';
+import { View, ScrollView, TouchableOpacity, ActivityIndicator, Modal, Alert, StyleSheet } from 'react-native';
 import { useRouter, useFocusEffect, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,6 +24,7 @@ import {
   type PlanActivityCompletion, type CompletionCandidate, type StravaActivityRow, type WorkoutHistoryRow, type AcpCheckedInRow, type HealthKitWorkoutRow,
 } from '@/lib/completion';
 import { matchProfessionalProviders, type ProviderMatch } from '@/lib/professional-support';
+import { ActivityFulfilmentCard } from '@/components/activity-fulfilment-card';
 import { isPlanReadyForReview, buildWeeklyBehaviourSummary, fetchWeeklyAdaptation, fetchPlanDateUpgrade } from '@/lib/weekly-review';
 import { findFoodsForNutritionFocus, type FoodCandidate, type FoodSuggestion } from '@/lib/nutrition-matching';
 import { formatOverallProgress, selectTopInsights, formatEvidenceLine, selectOutcomeInsights, formatOutcomeEvidenceLine, type CoachingMemoryRow } from '@/lib/coaching-memory';
@@ -77,6 +78,7 @@ export default function MyPlanScreen() {
       setHasWorkoutProgramme(!!data);
     })();
   }, []);
+
   // Kept only for professional-support matching (goal/preferredActivities) —
   // the plan/summary rendering itself never needs the full answers object.
   const [onboardingAnswers, setOnboardingAnswers] = useState<OnboardingAnswers>(EMPTY_ANSWERS);
@@ -797,53 +799,12 @@ export default function MyPlanScreen() {
                           </View>
                         )}
 
-                        {fulfilments[i]?.selfDirected && (
-                          <View style={styles.fulfilmentBlock}>
-                            <ThemedText style={styles.fulfilmentHeader}>
-                              {fulfilments[i].selfDirected!.source === 'exercise_db' ? 'DO IT YOURSELF' : 'TRACK YOUR ACTIVITY'}
-                            </ThemedText>
-                            <TouchableOpacity onPress={() => router.push(fulfilments[i].selfDirected!.navigationTarget as any)} activeOpacity={0.7}>
-                              <ThemedText style={styles.fulfilmentLink}>{fulfilments[i].selfDirected!.title} →</ThemedText>
-                            </TouchableOpacity>
-                          </View>
-                        )}
-
-                        {(fulfilments[i]?.marketplaceMatches.length ?? 0) > 0 && (
-                          <View style={styles.fulfilmentBlock}>
-                            <View style={styles.fulfilmentHeaderRow}>
-                              <ThemedText style={[styles.fulfilmentHeader, { marginBottom: 0 }]}>DO IT WITH ACP</ThemedText>
-                              <TouchableOpacity onPress={() => setShowIntelligenceInfo(true)} hitSlop={8} activeOpacity={0.7}>
-                                <Ionicons name="information-circle-outline" size={12} color={palette.gray300} />
-                              </TouchableOpacity>
-                            </View>
-                            {fulfilments[i].marketplaceMatches.map(m => (
-                              <TouchableOpacity
-                                key={m.id}
-                                style={styles.marketplaceMatchRow}
-                                onPress={() => router.push(m.navigationTarget as any)}
-                                activeOpacity={0.7}
-                              >
-                                {m.imageUrl ? (
-                                  <Image source={{ uri: m.imageUrl }} style={styles.marketplaceMatchImage} />
-                                ) : (
-                                  <View style={[styles.marketplaceMatchImage, styles.marketplaceMatchImageFallback]}>
-                                    <Ionicons name={m.type === 'experience' ? 'sparkles-outline' : 'barbell-outline'} size={20} color={palette.gray300} />
-                                  </View>
-                                )}
-                                <View style={{ flex: 1 }}>
-                                  <ThemedText style={styles.dayTitle}>{m.title}</ThemedText>
-                                  <ThemedText style={styles.dayMeta}>
-                                    {m.isAlternateDay ? 'Available on ACP · ' : ''}
-                                    {new Date(m.date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long' })}
-                                    {m.startTime ? ` · ${m.startTime.slice(0, 5)}` : ''}
-                                    {m.priceKes != null ? ` · KES ${m.priceKes.toLocaleString()}` : ''}
-                                  </ThemedText>
-                                </View>
-                                <ThemedText style={styles.fulfilmentLink}>View activity →</ThemedText>
-                              </TouchableOpacity>
-                            ))}
-                          </View>
-                        )}
+                        <ActivityFulfilmentCard
+                          userId={userId}
+                          activity={a}
+                          fulfilment={fulfilments[i]}
+                          onInfoPress={() => setShowIntelligenceInfo(true)}
+                        />
                       </View>
                     </View>
                     );

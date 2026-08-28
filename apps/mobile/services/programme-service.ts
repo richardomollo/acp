@@ -88,7 +88,7 @@ async function persistExercise(selected: SelectedExercise): Promise<string | nul
 async function insertProgrammeWorkouts(
   userId: string, weekIdByNumber: Map<number, string>, slots: WorkoutSlot[],
   equipmentLocation: 'home' | 'gym', difficulty: 'beginner' | 'intermediate' | 'advanced',
-  durationMinutes: number, goal: string,
+  goal: string,
   exercisesByType: Map<string, SelectedExercise[]>,
 ) {
   for (const slot of slots) {
@@ -104,7 +104,11 @@ async function insertProgrammeWorkouts(
         location_type: equipmentLocation,
         difficulty,
         goal: toWorkoutGoal(goal),
-        duration_minutes: durationMinutes,
+        // Chunk 4.5C2: per-slot now (buildWorkoutSlots already computed the
+        // experience-aware Strength duration for full_body_a/b; activity
+        // blocks keep the pre-existing flat session default) — never one
+        // flat value forced onto every workout in the programme.
+        duration_minutes: slot.durationMinutes,
         is_active: true,
         user_id: userId,
         program_week_id: programWeekId,
@@ -219,7 +223,7 @@ async function runGeneration(userId: string, createdFromProgramId: string | null
     weekIdByNumber.set(week, weekRow.id);
   }
 
-  await insertProgrammeWorkouts(userId, weekIdByNumber, slots, context.equipmentLocation, context.experience, context.sessionDurationMinutes, context.goal, exercisesByType);
+  await insertProgrammeWorkouts(userId, weekIdByNumber, slots, context.equipmentLocation, context.experience, context.goal, exercisesByType);
 
   return { status: 'generated', programId: program.id };
 }

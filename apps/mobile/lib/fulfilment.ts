@@ -145,7 +145,9 @@ export function normalizeActivity(activityText: string, category: ActivityCatego
 /**
  * Deterministic table of which existing ACP self-directed capability, if
  * any, can help fulfil a given activity. Reuses existing screens only —
- * `/create-workout` (ExerciseDB-backed generator + player already built),
+ * `/browse-exercises` (read-only exercise/workout catalogue; manual workout
+ * building was removed — ACP Intelligence™ now auto-generates strength
+ * workouts instead, see services/activity-recommendation-service.ts),
  * `/strava-settings` (connect) and `/outdoor-activities` (view synced
  * activity), both already shipped. Returns undefined when neither
  * integration genuinely supports the activity (yoga/football/swimming/
@@ -154,7 +156,7 @@ export function normalizeActivity(activityText: string, category: ActivityCatego
 export function getSelfDirectedSource(key: NormalizedActivityKey, stravaConnected: boolean): SelfDirectedFulfilment | undefined {
   switch (key) {
     case 'gym':
-      return { source: 'exercise_db', title: 'Explore strength exercises', navigationTarget: '/create-workout' };
+      return { source: 'exercise_db', title: 'Explore strength exercises', navigationTarget: '/browse-exercises' };
     case 'running':
     case 'walking':
     case 'cycling':

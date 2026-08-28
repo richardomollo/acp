@@ -85,7 +85,8 @@
           "project": "react-native",
           "organization": "acp-vz"
         }
-      ]
+      ],
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true,

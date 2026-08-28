@@ -87,12 +87,63 @@ describe('selectExerciseForRequirement', () => {
 });
 
 describe('buildFallbackExercise', () => {
-  test('every movement pattern has a safe bodyweight fallback', () => {
+  test('every strength movement pattern has a safe bodyweight fallback, category strength', () => {
     for (const pattern of ['squat', 'hinge', 'horizontal_push', 'horizontal_pull', 'vertical_push', 'core'] as const) {
       const ex = buildFallbackExercise({ pattern, bodyPart: 'x', role: 'compound' });
       assert.equal(ex.equipment, 'bodyweight');
       assert.equal(ex.difficulty, 'beginner');
+      assert.equal(ex.category, 'strength');
       assert.ok(ex.name.length > 0);
     }
+  });
+
+  // Chunk 4.5C bug fix: the three mobility patterns were previously MISSING
+  // from FALLBACK_BY_PATTERN entirely, so they silently fell through to the
+  // 'core' (strength) fallback — 'Plank', mislabeled category:'strength' —
+  // whenever MuscleWiki genuinely had nothing acceptable. This is exactly
+  // the scenario where a bad fallback is guaranteed to be shown, not just
+  // possible, since it's the last tier of the relaxation ladder.
+  test('every mobility movement pattern has its OWN real mobility fallback — never the strength "core" fallback', () => {
+    const strengthFallbackNames = new Set(['Bodyweight Squat', 'Glute Bridge', 'Push Up', 'Superman Row', 'Pike Push Up', 'Plank']);
+    for (const pattern of ['hip_mobility', 'shoulder_mobility', 'thoracic_mobility'] as const) {
+      const ex = buildFallbackExercise({ pattern, bodyPart: 'x', role: 'mobility' });
+      assert.equal(ex.equipment, 'bodyweight');
+      assert.equal(ex.difficulty, 'beginner');
+      assert.equal(ex.category, 'mobility');
+      assert.equal(strengthFallbackNames.has(ex.name), false, `${pattern} fallback "${ex.name}" must not be a strength exercise`);
+    }
+  });
+});
+
+// Chunk 4.5C live-audit bug fix: MuscleWiki uses "Dumbbells"/"Kettlebells"
+// (plural) but ACP's HOME_EQUIPMENT only listed the singular forms, so
+// every dumbbell/kettlebell candidate was silently excluded from every
+// 'home' generation — pushing selection toward worse candidates further
+// down the relaxation ladder. Also covers the new home-friendly equipment
+// categories ('stretches'/'recovery'/'pilates'/'yoga') found live to be
+// real MuscleWiki mobility-content equipment tags.
+describe('home-equipment vocabulary (Chunk 4.5C regression)', () => {
+  test('plural "Dumbbells"/"Kettlebells" now match home, same as the singular forms', async () => {
+    globalThis.fetch = mockSearchResponse([
+      { id: 10, name: 'Dumbbell Shoulder External Rotation', primary_muscles: ['Shoulders'], category: 'Dumbbells', difficulty: 'Beginner' },
+    ]);
+    const result = await selectExerciseForRequirement(
+      { pattern: 'vertical_push', bodyPart: 'shoulders-t8', muscleHint: 'shoulder', role: 'compound' },
+      'home', 'beginner', new Set(),
+    );
+    assert.equal(result.exercise.id, '10');
+    assert.equal(result.fallbackUsed, false);
+  });
+
+  test('"Stretches" and "Recovery" equipment categories are treated as home-friendly (real no-equipment mobility content)', async () => {
+    globalThis.fetch = mockSearchResponse([
+      { id: 11, name: 'Shoulders Stretch Variation Four', primary_muscles: ['Shoulders'], category: 'Stretches', difficulty: 'Beginner' },
+    ]);
+    const result = await selectExerciseForRequirement(
+      { pattern: 'shoulder_mobility', bodyPart: 'shoulders-t9', muscleHint: 'shoulder-t9', role: 'mobility' },
+      'home', 'beginner', new Set(),
+    );
+    assert.equal(result.exercise.id, '11');
+    assert.equal(result.fallbackUsed, false);
   });
 });

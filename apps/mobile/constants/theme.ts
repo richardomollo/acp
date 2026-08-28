@@ -85,6 +85,22 @@ export const Colors = {
   },
 } as const;
 
+// ─── Dark theme (workout-player / fitness-journey "active session" screens) ──
+// Near-black surfaces + one bright lime accent, used only where a screen
+// explicitly opts into this look (most of the app stays on the light
+// `palette` above) — shared here so multiple screens stay in sync instead
+// of each keeping its own copy.
+export const darkTheme = {
+  bg:        '#0d0d0f',
+  card:      '#1a1a1d',
+  cardAlt:   '#232326',
+  border:    '#2a2a2e',
+  text:      '#f5f5f5',
+  textMuted: '#9a9aa0',
+  textFaint: '#6c6c72',
+  accent:    '#d7ff3f',
+} as const;
+
 // ─── Radii ────────────────────────────────────────────────────────────────────
 
 export const radii = {

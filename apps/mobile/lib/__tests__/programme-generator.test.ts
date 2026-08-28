@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   isGoalSupported, deriveSessionsPerWeek, deriveEquipmentLocation, deriveDurationWeeks,
   buildGenerationContext, buildTrainingStrategy, buildWorkoutSlots, workoutTypeSpec,
+  buildStrengthRequirements, strengthDurationMinutes, FULL_BODY_A_REQUIREMENTS,
   type ProfileLike,
 } from '../programme-generator.ts';
 
@@ -174,5 +175,79 @@ describe('workoutTypeSpec', () => {
   test('unknown workout type falls back to a safe default rather than throwing', () => {
     const spec = workoutTypeSpec('nonexistent');
     assert.equal(spec.isActivityBlock, true);
+  });
+});
+
+// Chunk 4.5C2 — experience level must materially affect Strength duration
+// and exercise volume, not just candidate-difficulty filtering/copy.
+describe('strengthDurationMinutes', () => {
+  test('beginner/intermediate/advanced defaults sit inside their guidance bands', () => {
+    assert.equal(strengthDurationMinutes('beginner'), 40);
+    assert.equal(strengthDurationMinutes('intermediate'), 55);
+    assert.equal(strengthDurationMinutes('advanced'), 70);
+  });
+
+  test('advanced + an explicit 45-minute constraint is capped, not treated as intermediate', () => {
+    const capped = strengthDurationMinutes('advanced', 45);
+    assert.equal(capped, 45);
+    assert.notEqual(capped, strengthDurationMinutes('intermediate')); // stays its own value, not silently equal to the intermediate default
+  });
+
+  test('an explicit constraint looser than the default never inflates duration beyond the tier default', () => {
+    assert.equal(strengthDurationMinutes('advanced', 120), 70);
+  });
+
+  test('no explicit constraint (null/undefined) uses the tier default', () => {
+    assert.equal(strengthDurationMinutes('beginner', null), 40);
+    assert.equal(strengthDurationMinutes('beginner', undefined), 40);
+  });
+});
+
+describe('buildStrengthRequirements', () => {
+  test('beginner gets the base full-body list unchanged', () => {
+    const reqs = buildStrengthRequirements(FULL_BODY_A_REQUIREMENTS, 'beginner');
+    assert.equal(reqs.length, FULL_BODY_A_REQUIREMENTS.length);
+    assert.deepEqual(reqs, FULL_BODY_A_REQUIREMENTS);
+  });
+
+  test('intermediate adds exactly one accessory movement beyond the base', () => {
+    const reqs = buildStrengthRequirements(FULL_BODY_A_REQUIREMENTS, 'intermediate');
+    assert.equal(reqs.length, FULL_BODY_A_REQUIREMENTS.length + 1);
+    assert.deepEqual(reqs.slice(0, FULL_BODY_A_REQUIREMENTS.length), FULL_BODY_A_REQUIREMENTS); // base preserved verbatim, in order
+  });
+
+  test('advanced adds exactly two accessory movements beyond the base — not identical to beginner/intermediate volume', () => {
+    const reqs = buildStrengthRequirements(FULL_BODY_A_REQUIREMENTS, 'advanced');
+    assert.equal(reqs.length, FULL_BODY_A_REQUIREMENTS.length + 2);
+    assert.notEqual(reqs.length, buildStrengthRequirements(FULL_BODY_A_REQUIREMENTS, 'beginner').length);
+    assert.notEqual(reqs.length, buildStrengthRequirements(FULL_BODY_A_REQUIREMENTS, 'intermediate').length);
+  });
+
+  test('base list is never mutated by the extension', () => {
+    const before = FULL_BODY_A_REQUIREMENTS.length;
+    buildStrengthRequirements(FULL_BODY_A_REQUIREMENTS, 'advanced');
+    assert.equal(FULL_BODY_A_REQUIREMENTS.length, before);
+  });
+});
+
+describe('buildWorkoutSlots — experience-aware Strength prescription (Chunk 4.5C2)', () => {
+  const start = new Date('2026-01-01T00:00:00Z');
+
+  test('an advanced profile gets a longer, higher-volume Strength slot than a beginner profile', () => {
+    const beginnerCtx = buildGenerationContext(profile({ experience_level: 'beginner', activity_level: 'active_2_3' }), start);
+    const advancedCtx = buildGenerationContext(profile({ experience_level: 'advanced', activity_level: 'active_2_3' }), start);
+
+    const beginnerSlot = buildWorkoutSlots(buildTrainingStrategy(beginnerCtx), beginnerCtx).find(s => s.workoutType === 'full_body_a')!;
+    const advancedSlot = buildWorkoutSlots(buildTrainingStrategy(advancedCtx), advancedCtx).find(s => s.workoutType === 'full_body_a')!;
+
+    assert.equal(beginnerSlot.durationMinutes, 40);
+    assert.equal(advancedSlot.durationMinutes, 70);
+    assert.ok(advancedSlot.requirements!.length > beginnerSlot.requirements!.length);
+  });
+
+  test('an activity-block slot (e.g. an easy run) keeps the flat session default regardless of experience — mobility/running/walking are out of scope for this chunk', () => {
+    const ctx = buildGenerationContext(profile({ goal: 'improve_running', experience_level: 'advanced', activity_level: 'active_2_3' }), start);
+    const runSlot = buildWorkoutSlots(buildTrainingStrategy(ctx), ctx).find(s => s.workoutType === 'run_easy')!;
+    assert.equal(runSlot.durationMinutes, ctx.sessionDurationMinutes);
   });
 });

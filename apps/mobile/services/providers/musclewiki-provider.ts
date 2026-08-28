@@ -57,8 +57,8 @@ function normalizeDifficulty(raw?: string): ExerciseDifficulty {
 
 // Real primary_muscles values observed live (Biceps, Triceps, Quads, Chest)
 // mapped onto ACP's existing bodyPart vocabulary (the same one
-// create-workout.tsx's BODY_PARTS chips already use) — extended with the
-// standard muscle-anatomy names most exercise catalogues use, so an
+// exercises-by-body-part.tsx's BODY_PARTS chips already use) — extended with
+// the standard muscle-anatomy names most exercise catalogues use, so an
 // unfamiliar-but-plausible value degrades to '' rather than mis-mapping.
 const MUSCLE_TO_BODY_PART: Record<string, string> = {
   chest: 'chest', pectorals: 'chest',

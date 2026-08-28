@@ -3,6 +3,7 @@ import {
   ActivityIndicator
 } from 'react-native';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { ThemedText } from '@/components/themed-text';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useState, useEffect } from 'react';
@@ -110,6 +111,21 @@ export default function TrainerProfileScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Cover photo — fixed background layer, fades out through the middle of the screen; scrollable content rides on top of it. */}
+      <View style={styles.coverBg} pointerEvents="none">
+        {pt.cover_url ? (
+          <Image source={{ uri: pt.cover_url }} style={styles.coverImg} contentFit="cover" />
+        ) : (
+          <View style={styles.coverFallback} />
+        )}
+        <View style={styles.coverOverlay} />
+        <LinearGradient
+          colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.9)', palette.white]}
+          locations={[0, 0.55, 1]}
+          style={styles.coverFade}
+        />
+      </View>
+
       {/* Back button — fixed over cover */}
       <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
         <Ionicons name="arrow-back" size={22} color={palette.white} />
@@ -120,15 +136,8 @@ export default function TrainerProfileScreen() {
         contentContainerStyle={{ paddingBottom: 40 }}
         stickyHeaderIndices={[2]}
       >
-        {/* 0: Cover photo */}
-        <View style={styles.cover}>
-          {pt.cover_url ? (
-            <Image source={{ uri: pt.cover_url }} style={styles.coverImg} contentFit="cover" />
-          ) : (
-            <View style={styles.coverFallback} />
-          )}
-          <View style={styles.coverOverlay} />
-        </View>
+        {/* 0: Spacer — reveals the fixed cover background above the hero card */}
+        <View style={styles.coverSpacer} />
 
         {/* 1: Hero — overlaps cover with rounded top corners */}
         <View style={styles.hero}>
@@ -387,13 +396,23 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.35)',
     alignItems: 'center', justifyContent: 'center',
   },
-  cover: { height: 220, position: 'relative' },
+  // Fixed background layer (not part of the ScrollView) — the cover photo
+  // sits behind everything and fades out well before its own bottom edge,
+  // so it dissolves into the page around the middle of the section rather
+  // than at a hard bottom edge.
+  coverBg: { position: 'absolute', top: 0, left: 0, right: 0, height: 420 },
   coverImg: { width: '100%', height: '100%' },
   coverFallback: { flex: 1, backgroundColor: '#1a1a2e' },
   coverOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.18)' },
+  coverFade: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 },
+  // Empty space at the top of the scroll content that lets the fixed cover
+  // image show through before the hero card's content begins — sized so the
+  // hero (which overlaps upward by 24px) lands just past where the fade
+  // above has already resolved to solid white.
+  coverSpacer: { height: 280 },
   hero: {
     alignItems: 'center', paddingBottom: 20, paddingHorizontal: 20, paddingTop: 0,
-    marginTop: -24, backgroundColor: palette.white,
+    marginTop: -24,
     borderTopLeftRadius: radii['2xl'], borderTopRightRadius: radii['2xl'],
   },
   heroAvatarWrap: {
@@ -424,9 +443,9 @@ const styles = StyleSheet.create({
   badge: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: palette.surfaceMuted, paddingHorizontal: 10, paddingVertical: 5,
-    borderRadius: radii.lg, borderWidth: 1, borderColor: palette.border,
+    borderRadius: radii.lg,
   },
-  badgeVerified: { backgroundColor: palette.blue50, borderColor: palette.blue100 },
+  badgeVerified: { backgroundColor: palette.blue50 },
   badgeText: { fontSize: fontSize.xs, color: palette.gray450, fontWeight: '500' },
   section: { paddingHorizontal: 20, paddingVertical: 16, borderTopWidth: 1, borderTopColor: palette.hairline },
   sectionTitle: { fontSize: fontSize.lg, fontWeight: '700', color: palette.ink900, marginBottom: 12 },
@@ -434,9 +453,9 @@ const styles = StyleSheet.create({
   specTag: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 12, paddingVertical: 6, borderRadius: radii.xl,
-    backgroundColor: palette.surfaceMuted, borderWidth: 1, borderColor: palette.border,
+    backgroundColor: palette.surfaceMuted,
   },
-  specTagVerified: { backgroundColor: palette.blue50, borderColor: palette.blue100 },
+  specTagVerified: { backgroundColor: palette.blue50 },
   specTagText: { fontSize: fontSize.sm, color: palette.ink600, fontWeight: '500' },
   bioText: { fontSize: fontSize.base, color: palette.ink600, lineHeight: 24 },
   sessionsList: { paddingHorizontal: 20, paddingTop: 8, borderTopWidth: 1, borderTopColor: palette.hairline },

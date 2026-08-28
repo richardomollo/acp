@@ -25,6 +25,7 @@ import {
   type FoodCandidate, type DailyMealCandidates,
 } from '@/lib/nutrition-matching';
 import { getFulfilmentForActivity, nextDateForWeekday, type PlanActivityFulfilment, type MarketplaceInventoryItem } from '@/lib/fulfilment';
+import { ActivityFulfilmentCard } from '@/components/activity-fulfilment-card';
 import {
   getCompletionProgress, findStravaCandidates, findExerciseDbCandidates, findAcpBookingCandidates, findHealthKitCandidates,
   type PlanActivityCompletion, type CompletionCandidate, type StravaActivityRow, type WorkoutHistoryRow, type AcpCheckedInRow, type HealthKitWorkoutRow,
@@ -1260,6 +1261,7 @@ export default function HomeScreen() {
           .from('workout_history')
           .select('workout_id, completed_at, duration_minutes')
           .eq('user_id', authSession.user.id)
+          .eq('status', 'completed')
           .order('completed_at', { ascending: false })
           .limit(100);
 
@@ -1629,68 +1631,17 @@ export default function HomeScreen() {
                     </View>
                   </View>
                 ) : !homeTodayCompleted ? (
-                  <>
-                    {/* Both options, same as My Plan — never forced to pick
-                        just one: do it yourself (ExerciseDB/Strava) and/or
-                        do it with ACP (marketplace sessions/experiences). */}
-                    {todayFulfilment?.selfDirected && (
-                      <View style={styles.fulfilmentBlock}>
-                        <ThemedText style={styles.fulfilmentHeader}>
-                          {todayFulfilment.selfDirected.source === 'exercise_db' ? 'DO IT YOURSELF' : 'TRACK YOUR ACTIVITY'}
-                        </ThemedText>
-                        <TouchableOpacity
-                          onPress={() => router.push(todayFulfilment.selfDirected!.navigationTarget as any)}
-                          activeOpacity={0.7}
-                        >
-                          <ThemedText style={styles.fulfilmentLink}>{todayFulfilment.selfDirected.title} →</ThemedText>
-                        </TouchableOpacity>
-                      </View>
-                    )}
-                    {(todayFulfilment?.marketplaceMatches.length ?? 0) > 0 && (
-                      <View style={styles.fulfilmentBlock}>
-                        <View style={styles.fulfilmentHeaderRow}>
-                          <ThemedText style={[styles.fulfilmentHeader, { marginBottom: 0 }]}>DO IT WITH ACP</ThemedText>
-                          <TouchableOpacity onPress={() => setShowIntelligenceInfo(true)} hitSlop={8} activeOpacity={0.7}>
-                            <Ionicons name="information-circle-outline" size={12} color={palette.gray300} />
-                          </TouchableOpacity>
-                        </View>
-                        {todayFulfilment!.marketplaceMatches.map((m, idx) => (
-                          <TouchableOpacity
-                            key={m.id}
-                            style={[
-                              styles.marketplaceMatchRow,
-                              idx < todayFulfilment!.marketplaceMatches.length - 1 && styles.marketplaceMatchRowBorder,
-                            ]}
-                            onPress={() => router.push(m.navigationTarget as any)}
-                            activeOpacity={0.7}
-                          >
-                            {m.imageUrl ? (
-                              <Image source={{ uri: m.imageUrl }} style={styles.marketplaceMatchImage} />
-                            ) : (
-                              <View style={[styles.marketplaceMatchImage, styles.mealImageFallback]}>
-                                <Ionicons name={m.type === 'experience' ? 'sparkles-outline' : 'barbell-outline'} size={20} color={palette.gray300} />
-                              </View>
-                            )}
-                            <View style={{ flex: 1 }}>
-                              <ThemedText style={styles.mealRowTitle}>{m.title}</ThemedText>
-                              <ThemedText style={styles.mealRowMeta}>
-                                {m.isAlternateDay ? 'Available on ACP · ' : ''}
-                                {new Date(m.date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long' })}
-                                {m.startTime ? ` · ${m.startTime.slice(0, 5)}` : ''}
-                                {m.priceKes != null ? ` · KES ${m.priceKes.toLocaleString()}` : ''}
-                              </ThemedText>
-                            </View>
-                            <ThemedText style={styles.fulfilmentLink}>View activity →</ThemedText>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    )}
-                    {!todayFulfilment?.selfDirected && (todayFulfilment?.marketplaceMatches.length ?? 0) === 0 && (
+                  <ActivityFulfilmentCard
+                    userId={userId}
+                    activity={homeTodayActivity}
+                    fulfilment={todayFulfilment ?? undefined}
+                    onInfoPress={() => setShowIntelligenceInfo(true)}
+                    emptyFallback={
                       <TouchableOpacity onPress={() => router.push('/weekly-plan' as any)} activeOpacity={0.7} style={{ marginTop: 10 }}>
                         <ThemedText style={styles.todayPlanCta}>View this week&apos;s plan →</ThemedText>
                       </TouchableOpacity>
-                    )}
-                  </>
+                    }
+                  />
                 ) : null}
               </View>
             </View>
@@ -2177,6 +2128,8 @@ const styles = StyleSheet.create({
   },
   fulfilmentHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6 },
   fulfilmentLink: { fontSize: fontSize.xs, fontWeight: '700', color: palette.ink700 },
+  aiBody: { fontSize: fontSize.sm, color: palette.ink600, marginTop: 6, lineHeight: 20 },
+  providerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderTopWidth: 1, borderTopColor: palette.hairline },
   marketplaceMatchRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingBottom: 10, marginBottom: 8 },
   marketplaceMatchRowBorder: { borderBottomWidth: 1, borderBottomColor: palette.hairline },
   marketplaceMatchImage: { width: 56, height: 56, borderRadius: radii.lg, alignItems: 'center', justifyContent: 'center' },

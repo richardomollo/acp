@@ -175,9 +175,6 @@ export default function YourWorkoutsScreen() {
           <ThemedText style={s.headerTitle}>Your Workouts</ThemedText>
           <ThemedText style={s.headerSub}>{workouts.length} created</ThemedText>
         </View>
-        <TouchableOpacity style={s.addBtn} onPress={() => router.push('/create-workout' as any)} hitSlop={12}>
-          <Ionicons name="add" size={22} color={palette.blue500} />
-        </TouchableOpacity>
       </SafeAreaView>
 
       {loading ? (
@@ -188,7 +185,7 @@ export default function YourWorkoutsScreen() {
             <Ionicons name="barbell-outline" size={32} color={palette.gray300} />
           </View>
           <ThemedText style={s.emptyText}>No workouts yet</ThemedText>
-          <ThemedText style={s.emptySub}>Build your first workout from the Fitness Hub.</ThemedText>
+          <ThemedText style={s.emptySub}>ACP builds your workouts for you — check My Plan for your personalized recommendation.</ThemedText>
         </View>
       ) : (
         <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
@@ -216,11 +213,6 @@ const s = StyleSheet.create({
   backBtn: {
     width: 38, height: 38, borderRadius: 19,
     backgroundColor: palette.surfaceMuted,
-    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-  },
-  addBtn: {
-    width: 38, height: 38, borderRadius: 19,
-    backgroundColor: palette.blue25,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
   headerTitle: { fontSize: 20, fontWeight: '800', letterSpacing: -0.3, color: palette.ink900 },

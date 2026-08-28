@@ -6,6 +6,7 @@
 import { exerciseService } from './exercise-service.ts';
 import type { ACPExercise, ExerciseDifficulty } from '../lib/exercise-types.ts';
 import { REPS_BY_ROLE, type ExerciseRequirement } from '../lib/programme-types.ts';
+import { rankExerciseCandidates, isMobilityRequirement } from '../lib/exercise-fit-validator.ts';
 
 export interface SelectedExercise {
   exercise: ACPExercise;
@@ -17,12 +18,33 @@ export interface SelectedExercise {
   fallbackReason?: string;
 }
 
+/** Best-fit, not-yet-used candidate from a pool, or undefined if none of the pool passes semantic-fit validation (section 12) — never just "the first result". */
+function bestFit(requirement: ExerciseRequirement, pool: ACPExercise[], alreadySelected: Set<string>, difficulty?: ExerciseDifficulty): ACPExercise | undefined {
+  const eligible = pool.filter(ex => !alreadySelected.has(ex.id));
+  return rankExerciseCandidates(requirement, eligible, difficulty)[0]?.exercise;
+}
+
 // Real MuscleWiki equipment values are single words with no internal spaces
 // ("Bodyweight", "Dumbbell", "Band", "Kettlebell") — matched here without
 // whitespace so both that vocabulary and ACP's own fallback exercises'
 // "body weight" (two words, historical ExerciseDB-era convention) match
 // identically, instead of silently failing to recognise real provider data.
-const HOME_EQUIPMENT = new Set(['bodyweight', 'dumbbell', 'band', 'kettlebell']);
+// Chunk 4.5C live audit finding: MuscleWiki is NOT internally consistent on
+// singular/plural ("band"/"bodyweight" singular, but "dumbbells"/
+// "kettlebells" plural, observed live) — every dumbbell/kettlebell candidate
+// was silently excluded from every 'home' generation (strength AND
+// mobility) because the plural form never matched this Set; listing both
+// forms explicitly (rather than guessing at generic pluralization rules,
+// which breaks on "stretches"/"pilates") closes this without new edge
+// cases. Also added 'stretches', 'recovery', 'pilates', and 'yoga' — real
+// MuscleWiki equipment categories that require no actual equipment (mat/
+// towel at most) and were previously treated as gym-only, which pushed
+// 'home' mobility selection toward worse candidates purely because the
+// best-fit stretch content got filtered out.
+const HOME_EQUIPMENT = new Set([
+  'bodyweight', 'dumbbell', 'dumbbells', 'band', 'kettlebell', 'kettlebells',
+  'stretches', 'recovery', 'pilates', 'yoga',
+]);
 
 function normalizeEquipment(equipment: string): string {
   return (equipment ?? '').toLowerCase().replace(/\s+/g, '');
@@ -35,7 +57,12 @@ function matchesLocation(equipmentLocation: 'home' | 'gym', equipment: string): 
 // Safe, always-executable bodyweight fallback per movement pattern — used
 // only when the provider has no suitable candidate at any relaxation tier,
 // so generation can never crash or produce an empty/missing exercise
-// (Day 2 section 11).
+// (Day 2 section 11). Chunk 4.5C section 12/13 fix: the three mobility
+// patterns were previously MISSING here entirely, so they silently fell
+// through to FALLBACK_BY_PATTERN.core ('Plank', category 'strength') —
+// exactly the "unrelated exercise accepted just to fill the slot" section 12
+// warns against, for the one case (provider totally fails) where a bad
+// fallback is guaranteed to be shown, not just possible.
 const FALLBACK_BY_PATTERN: Record<string, { name: string; bodyPart: string; target: string }> = {
   squat: { name: 'Bodyweight Squat', bodyPart: 'upper legs', target: 'quads' },
   hinge: { name: 'Glute Bridge', bodyPart: 'upper legs', target: 'glutes' },
@@ -43,10 +70,14 @@ const FALLBACK_BY_PATTERN: Record<string, { name: string; bodyPart: string; targ
   horizontal_pull: { name: 'Superman Row', bodyPart: 'back', target: 'upper back' },
   vertical_push: { name: 'Pike Push Up', bodyPart: 'shoulders', target: 'delts' },
   core: { name: 'Plank', bodyPart: 'waist', target: 'abs' },
+  hip_mobility: { name: 'Hip Circles', bodyPart: 'upper legs', target: 'hips' },
+  shoulder_mobility: { name: 'Arm Circles', bodyPart: 'shoulders', target: 'shoulders' },
+  thoracic_mobility: { name: 'Cat-Cow Stretch', bodyPart: 'back', target: 'spine' },
 };
 
 export function buildFallbackExercise(requirement: ExerciseRequirement): ACPExercise {
-  const f = FALLBACK_BY_PATTERN[requirement.pattern] ?? FALLBACK_BY_PATTERN.core;
+  const mobility = isMobilityRequirement(requirement);
+  const f = FALLBACK_BY_PATTERN[requirement.pattern] ?? (mobility ? FALLBACK_BY_PATTERN.thoracic_mobility : FALLBACK_BY_PATTERN.core);
   return {
     id: `fallback-${requirement.pattern}`,
     provider: 'acp',
@@ -56,7 +87,7 @@ export function buildFallbackExercise(requirement: ExerciseRequirement): ACPExer
     secondaryMuscles: [],
     equipment: 'bodyweight',
     difficulty: 'beginner',
-    category: 'strength',
+    category: mobility ? 'mobility' : 'strength',
     description: null,
     instructions: [],
     media: [],
@@ -79,9 +110,13 @@ async function fetchCandidates(query: string, difficulty?: ExerciseDifficulty, e
 }
 
 /**
- * Relaxation ladder: muscle hint -> difficulty -> equipment -> duplicate
- * avoidance -> hardcoded safe fallback. Never throws, never returns nothing
- * (Day 2 section 11).
+ * Relaxation ladder: location -> difficulty -> equipment -> duplicate
+ * avoidance -> hardcoded safe fallback. At every tier, candidates are
+ * ranked by deterministic semantic fit (lib/exercise-fit-validator.ts) —
+ * never just "the first provider result" — and a tier only counts as a hit
+ * if a candidate actually clears the fit-reject threshold. Never throws,
+ * never returns nothing (Day 2 section 11); never forces an obviously bad
+ * match just to avoid the fallback (section 16).
  */
 export async function selectExerciseForRequirement(
   requirement: ExerciseRequirement,
@@ -92,39 +127,37 @@ export async function selectExerciseForRequirement(
   const rx = REPS_BY_ROLE[requirement.role];
   const primaryQuery = requirement.muscleHint ?? requirement.bodyPart;
   const pool = await fetchCandidates(primaryQuery, difficulty);
-
   const byLocation = pool.filter(ex => matchesLocation(equipmentLocation, ex.equipment));
-  const byMuscle = requirement.muscleHint
-    ? byLocation.filter(ex => ex.target.toLowerCase().includes(requirement.muscleHint!))
-    : byLocation;
 
-  // Tier 1: muscle hint + location + difficulty + not already used
-  let candidate = byMuscle.find(ex => !alreadySelected.has(ex.id));
-  // Tier 2: drop muscle hint
-  if (!candidate) candidate = byLocation.find(ex => !alreadySelected.has(ex.id));
-  // Tier 3: drop difficulty filter entirely (re-fetch without it) — still the bodyPart/muscle query, just unfiltered by difficulty
+  // Tier 1: location + difficulty, ranked by fit
+  let candidate = bestFit(requirement, byLocation, alreadySelected, difficulty);
+
+  // Tier 2: drop the difficulty filter (re-fetch without it), still ranked by fit
   if (!candidate) {
     const anyDifficulty = (await fetchCandidates(primaryQuery)).filter(ex => matchesLocation(equipmentLocation, ex.equipment));
-    candidate = anyDifficulty.find(ex => !alreadySelected.has(ex.id));
+    candidate = bestFit(requirement, anyDifficulty, alreadySelected);
   }
-  // Tier 4: drop equipment/location filter too
+  // Tier 3: drop equipment/location filter too, still ranked by fit
   if (!candidate) {
     const anyEquipment = await fetchCandidates(primaryQuery);
-    candidate = anyEquipment.find(ex => !alreadySelected.has(ex.id));
+    candidate = bestFit(requirement, anyEquipment, alreadySelected);
   }
-  // Tier 5: allow reusing an already-selected exercise rather than an empty slot
-  if (!candidate) candidate = pool[0] ?? byLocation[0];
+  // Tier 4: allow reusing an already-selected exercise rather than an empty slot — still fit-ranked, never a raw first-result fallback
+  if (!candidate) candidate = rankExerciseCandidates(requirement, pool)[0]?.exercise ?? rankExerciseCandidates(requirement, byLocation)[0]?.exercise;
 
   if (candidate) {
     return { exercise: candidate, ...rx, fallbackUsed: false };
   }
 
-  // Tier 6: provider had nothing at all (e.g. unconfigured/unreachable) — a
-  // safe bodyweight exercise for this movement pattern, always available.
+  // Tier 5: nothing in the provider's pool passed semantic-fit validation
+  // (or the provider had no results at all, e.g. unconfigured/unreachable)
+  // — a safe bodyweight exercise for this movement pattern, always available.
   return {
     exercise: buildFallbackExercise(requirement),
     ...rx,
     fallbackUsed: true,
-    fallbackReason: `No exercise provider result for ${requirement.bodyPart} (${requirement.pattern}) — used built-in fallback.`,
+    fallbackReason: pool.length > 0
+      ? `No candidate for ${requirement.bodyPart} (${requirement.pattern}) passed semantic-fit validation — used built-in fallback.`
+      : `No exercise provider result for ${requirement.bodyPart} (${requirement.pattern}) — used built-in fallback.`,
   };
 }

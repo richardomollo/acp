@@ -20,6 +20,7 @@ const TAB_DEFS = [
   { name: 'discover', label: 'Nutrition', icon: 'nutrition-outline', iconActive: 'nutrition' },
   { name: 'fitness',  label: 'Fitness',   icon: 'barbell-outline',   iconActive: 'barbell'   },
   { name: 'check-in', label: 'Check In',  icon: 'scan-outline',      iconActive: 'scan'      },
+  { name: 'profile',  label: 'Profile',   icon: 'person-outline',    iconActive: 'person'    },
 ];
 
 function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
@@ -111,11 +112,6 @@ export default function TabLayout() {
     router.push('/today-nutrition' as any);
   };
 
-  const handleFitnessPress = (e: any) => {
-    e.preventDefault();
-    router.push('/(tabs)/discover' as any);
-  };
-
   return (
     <Tabs
       tabBar={(props) => <FloatingTabBar {...props} />}
@@ -127,19 +123,14 @@ export default function TabLayout() {
         options={{ title: 'Nutrition' }}
         listeners={{ tabPress: handleNutritionPress }}
       />
-      <Tabs.Screen
-        name="fitness"
-        options={{ title: 'Fitness' }}
-        listeners={{ tabPress: handleFitnessPress }}
-      />
+      <Tabs.Screen name="fitness" options={{ title: 'Fitness' }} />
       <Tabs.Screen
         name="check-in"
         options={{ title: 'Check In' }}
         listeners={{ tabPress: handleCheckInPress }}
       />
-      {/* Hidden routes — profile is reached from the avatar badge on Today
-          instead of a tab; the screen itself already guards guest access. */}
-      <Tabs.Screen name="profile"     options={{ title: 'Profile', headerShown: false, href: null }} />
+      <Tabs.Screen name="profile" options={{ title: 'Profile', headerShown: false }} />
+      {/* Hidden routes — reached via in-app navigation, not tabs. */}
       <Tabs.Screen name="venues"      options={{ href: null }} />
       <Tabs.Screen name="classes"     options={{ href: null }} />
       <Tabs.Screen name="trainers"    options={{ href: null }} />

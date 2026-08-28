@@ -1,15 +1,17 @@
 import {
   StyleSheet, View, ScrollView, TouchableOpacity,
-  ActivityIndicator, Image, Dimensions, Alert,
+  ActivityIndicator, Dimensions, Alert,
 } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { palette, radii, fontSize, shadows } from '@/constants/theme';
+import { palette, radii, fontSize } from '@/constants/theme';
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { authService } from '@/services/auth';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ExerciseMedia } from '@/components/exercise-media';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const GIF_SIZE = Dimensions.get('window').width - 88; // card has 14px padding each side + 20px outer each side
 
@@ -47,15 +49,16 @@ interface Workout {
   equipment: string | null;
   user_id: string | null;
   assigned_by: string | null;
+  is_activity_block: boolean;
   personal_trainers: { professional_name: string | null; full_name: string } | null;
 }
 
 // ── Visual config ──────────────────────────────────────────────────────────────
 
 const DIFFICULTY_COLORS: Record<string, { bg: string; text: string }> = {
-  beginner:     { bg: palette.success50,  text: palette.success700 },
-  intermediate: { bg: palette.warning50,  text: palette.warning800 },
-  advanced:     { bg: palette.danger50,   text: palette.danger600  },
+  beginner:     { bg: palette.surfaceMuted, text: palette.gray450 },
+  intermediate: { bg: palette.surfaceMuted, text: palette.ink700  },
+  advanced:     { bg: palette.ink900,       text: '#fff'          },
 };
 
 const BODY_PART_META: Record<string, { label: string; icon: string }> = {
@@ -74,6 +77,18 @@ const BODY_PART_ORDER = Object.keys(BODY_PART_META);
 
 function bodyPartMeta(bodyPart: string | null) {
   return BODY_PART_META[bodyPart ?? ''] ?? { label: bodyPart ?? 'Other', icon: 'body-outline' };
+}
+
+// Activity blocks (running/walking — no exercises) get a concrete CTA
+// matching their content rather than the generic "Start Workout" (section
+// 16/14) — keyed off the title ACP itself sets (WORKOUT_TYPE_SPECS), which
+// only ever says "Run" or "Walk" for this category today.
+function startCtaLabel(workout: Workout): string {
+  if (!workout.is_activity_block) return 'Start Workout';
+  const title = workout.title.toLowerCase();
+  if (title.includes('run')) return 'Start Run';
+  if (title.includes('walk')) return 'Start Walk';
+  return 'Start Activity';
 }
 
 function prescriptionLabel(ex: WorkoutExercise): string {
@@ -97,7 +112,6 @@ export default function WorkoutDetailScreen() {
   const [expanded, setExpanded]     = useState<Record<string, boolean>>({});
   const [userId, setUserId]         = useState<string | null>(null);
   const [deleting, setDeleting]     = useState(false);
-  const [favoriteExerciseIds, setFavoriteExerciseIds] = useState<Set<string>>(new Set());
   const [exerciseRatings, setExerciseRatings]         = useState<Record<string, number>>({});
   const [workoutFavorited, setWorkoutFavorited]       = useState(false);
 
@@ -108,7 +122,7 @@ export default function WorkoutDetailScreen() {
       const uid = session?.user.id ?? null;
       setUserId(uid);
 
-      const [workoutRes, exRes, favRes, ratingRes, workoutFavRes] = await Promise.all([
+      const [workoutRes, exRes, ratingRes, workoutFavRes] = await Promise.all([
         supabase.from('workouts').select('*, personal_trainers(professional_name, full_name)').eq('id', workoutId).single(),
         supabase
           .from('workout_exercises')
@@ -118,13 +132,11 @@ export default function WorkoutDetailScreen() {
           `)
           .eq('workout_id', workoutId)
           .order('sort_order'),
-        uid ? supabase.from('exercise_favorites').select('exercise_id').eq('user_id', uid).eq('source', 'db') : Promise.resolve({ data: [] }),
         uid ? supabase.from('exercise_ratings').select('exercise_id, rating').eq('user_id', uid).eq('source', 'db') : Promise.resolve({ data: [] }),
         uid ? supabase.from('workout_favorites').select('id').eq('user_id', uid).eq('workout_id', workoutId).maybeSingle() : Promise.resolve({ data: null }),
       ]);
       setWorkout(workoutRes.data as Workout ?? null);
       setExercises((exRes.data as unknown as WorkoutExercise[]) ?? []);
-      setFavoriteExerciseIds(new Set(((favRes.data as any[]) ?? []).map(r => r.exercise_id)));
       setExerciseRatings(Object.fromEntries(((ratingRes.data as any[]) ?? []).map(r => [r.exercise_id, r.rating])));
       setWorkoutFavorited(!!workoutFavRes.data);
       setLoading(false);
@@ -133,22 +145,6 @@ export default function WorkoutDetailScreen() {
 
   const toggleExpand = (id: string) =>
     setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
-
-  const toggleExerciseFavorite = async (exerciseId: string) => {
-    if (!userId) return;
-    const isFav = favoriteExerciseIds.has(exerciseId);
-    setFavoriteExerciseIds(prev => {
-      const next = new Set(prev);
-      isFav ? next.delete(exerciseId) : next.add(exerciseId);
-      return next;
-    });
-    if (isFav) {
-      await supabase.from('exercise_favorites').delete()
-        .eq('user_id', userId).eq('source', 'db').eq('exercise_id', exerciseId);
-    } else {
-      await supabase.from('exercise_favorites').insert({ user_id: userId, source: 'db', exercise_id: exerciseId });
-    }
-  };
 
   const rateExercise = async (exerciseId: string, rating: number) => {
     if (!userId) return;
@@ -229,6 +225,11 @@ export default function WorkoutDetailScreen() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={s.root}>
+        <LinearGradient
+          colors={[palette.blue100, 'rgba(208,224,255,0)']}
+          style={s.topFadeBg}
+          pointerEvents="none"
+        />
         {/* ── Hero ── */}
         <View style={s.hero}>
           <SafeAreaView edges={['top']} style={s.heroSafe}>
@@ -257,27 +258,18 @@ export default function WorkoutDetailScreen() {
                   <Ionicons name="calendar-outline" size={18} color={palette.ink900} />
                 </TouchableOpacity>
                 {workout.user_id && workout.user_id === userId ? (
-                  <>
-                    <TouchableOpacity
-                      style={s.editBtn}
-                      onPress={() => router.push({ pathname: '/create-workout', params: { workoutId: workout.id } } as any)}
-                      hitSlop={12}
-                    >
-                      <Ionicons name="pencil-outline" size={18} color={palette.ink900} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={s.deleteBtn}
-                      onPress={handleDelete}
-                      disabled={deleting}
-                      hitSlop={12}
-                    >
-                      {deleting ? (
-                        <ActivityIndicator size="small" color={palette.danger600} />
-                      ) : (
-                        <Ionicons name="trash-outline" size={19} color={palette.danger600} />
-                      )}
-                    </TouchableOpacity>
-                  </>
+                  <TouchableOpacity
+                    style={s.deleteBtn}
+                    onPress={handleDelete}
+                    disabled={deleting}
+                    hitSlop={12}
+                  >
+                    {deleting ? (
+                      <ActivityIndicator size="small" color={palette.danger600} />
+                    ) : (
+                      <Ionicons name="trash-outline" size={19} color={palette.danger600} />
+                    )}
+                  </TouchableOpacity>
                 ) : null}
               </View>
             </View>
@@ -291,7 +283,7 @@ export default function WorkoutDetailScreen() {
                 </View>
                 {workout.assigned_by && (
                   <View style={s.assignedBadge}>
-                    <Ionicons name="person-outline" size={11} color={palette.blue500} />
+                    <Ionicons name="person-outline" size={11} color={palette.blue600} />
                     <ThemedText style={s.assignedBadgeText}>
                       Assigned by {workout.personal_trainers?.professional_name || workout.personal_trainers?.full_name || 'your trainer'}
                     </ThemedText>
@@ -309,11 +301,15 @@ export default function WorkoutDetailScreen() {
                   <Ionicons name="time-outline" size={16} color={palette.gray450} />
                   <ThemedText style={s.statText}>{workout.duration_minutes} min</ThemedText>
                 </View>
-                <View style={s.statDivider} />
-                <View style={s.statItem}>
-                  <Ionicons name="list-outline" size={16} color={palette.gray450} />
-                  <ThemedText style={s.statText}>{exercises.length} exercises</ThemedText>
-                </View>
+                {!workout.is_activity_block && (
+                  <>
+                    <View style={s.statDivider} />
+                    <View style={s.statItem}>
+                      <Ionicons name="list-outline" size={16} color={palette.gray450} />
+                      <ThemedText style={s.statText}>{exercises.length} exercises</ThemedText>
+                    </View>
+                  </>
+                )}
                 <View style={s.statDivider} />
                 <View style={s.statItem}>
                   <Ionicons name={workout.location_type === 'home' ? 'home-outline' : 'barbell-outline'} size={16} color={palette.gray450} />
@@ -328,11 +324,9 @@ export default function WorkoutDetailScreen() {
 
         {/* ── Exercise list ── */}
         <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
-          <ThemedText style={s.sectionTitle}>Exercises</ThemedText>
+          {!workout.is_activity_block && <ThemedText style={s.sectionTitle}>Exercises</ThemedText>}
 
-          {(() => {
-            let idx = -1;
-            return groups.map(([bodyPart, items]) => {
+          {!workout.is_activity_block && groups.map(([bodyPart, items]) => {
               const meta = bodyPartMeta(bodyPart);
               return (
                 <View key={bodyPart}>
@@ -342,7 +336,6 @@ export default function WorkoutDetailScreen() {
                   </View>
 
                   {items.map(we => {
-                    idx += 1;
                     const ex = we.exercises;
                     const isOpen = !!expanded[we.id];
 
@@ -353,15 +346,10 @@ export default function WorkoutDetailScreen() {
                         onPress={() => toggleExpand(we.id)}
                         activeOpacity={0.85}
                       >
-                        {/* Index badge */}
-                        <View style={s.exIndexBadge}>
-                          <ThemedText style={s.exIndexText}>{idx + 1}</ThemedText>
-                        </View>
-
                         <View style={s.exMain}>
                           <View style={s.exHeader}>
                             <View style={s.exIconWrap}>
-                              <Ionicons name={meta.icon as any} size={18} color={palette.blue500} />
+                              <Ionicons name={meta.icon as any} size={18} color={palette.blue600} />
                             </View>
                             <View style={{ flex: 1 }}>
                               <ThemedText style={s.exName}>{ex.name}</ThemedText>
@@ -369,17 +357,6 @@ export default function WorkoutDetailScreen() {
                                 <ThemedText style={s.exMuscle}>{ex.target_muscle}</ThemedText>
                               ) : null}
                             </View>
-                            <TouchableOpacity
-                              hitSlop={10}
-                              onPress={() => toggleExerciseFavorite(ex.id)}
-                              disabled={!userId}
-                            >
-                              <Ionicons
-                                name={favoriteExerciseIds.has(ex.id) ? 'heart' : 'heart-outline'}
-                                size={19}
-                                color={favoriteExerciseIds.has(ex.id) ? palette.danger500 : palette.gray300}
-                              />
-                            </TouchableOpacity>
                             <Ionicons
                               name={isOpen ? 'chevron-up' : 'chevron-down'}
                               size={18} color={palette.gray300}
@@ -421,17 +398,13 @@ export default function WorkoutDetailScreen() {
                               </View>
                               {we.notes ? (
                                 <View style={s.noteWrap}>
-                                  <Ionicons name="create-outline" size={13} color={palette.blue500} />
+                                  <Ionicons name="create-outline" size={13} color={palette.blue600} />
                                   <ThemedText style={s.noteText}>{we.notes}</ThemedText>
                                 </View>
                               ) : null}
                               {ex.gif_url ? (
                                 <View style={s.gifWrap}>
-                                  <Image
-                                    source={{ uri: ex.gif_url }}
-                                    style={s.gif}
-                                    resizeMode="contain"
-                                  />
+                                  <ExerciseMedia url={ex.gif_url} style={s.gif} />
                                 </View>
                               ) : null}
                               {ex.instructions?.length > 0 ? (
@@ -452,9 +425,9 @@ export default function WorkoutDetailScreen() {
                                 onPress={() => router.push({ pathname: '/exercise-history', params: { exerciseId: ex.id, name: ex.name } } as any)}
                                 activeOpacity={0.8}
                               >
-                                <Ionicons name="stats-chart-outline" size={14} color={palette.blue500} />
+                                <Ionicons name="stats-chart-outline" size={14} color={palette.blue600} />
                                 <ThemedText style={s.historyBtnText}>View Weight History</ThemedText>
-                                <Ionicons name="chevron-forward" size={14} color={palette.blue500} />
+                                <Ionicons name="chevron-forward" size={14} color={palette.blue600} />
                               </TouchableOpacity>
                             </>
                           ) : null}
@@ -464,8 +437,7 @@ export default function WorkoutDetailScreen() {
                   })}
                 </View>
               );
-            });
-          })()}
+            })}
 
           <View style={{ height: 110 }} />
         </ScrollView>
@@ -478,7 +450,7 @@ export default function WorkoutDetailScreen() {
             activeOpacity={0.88}
           >
             <Ionicons name="play" size={20} color="#fff" />
-            <ThemedText style={s.startBtnText}>Start Workout</ThemedText>
+            <ThemedText style={s.startBtnText}>{startCtaLabel(workout)}</ThemedText>
           </TouchableOpacity>
         </SafeAreaView>
       </View>
@@ -491,10 +463,11 @@ export default function WorkoutDetailScreen() {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: palette.white },
   loadingRoot: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  topFadeBg: { position: 'absolute', top: 0, left: 0, right: 0, height: 320 },
 
-  // Hero
+  // Hero — transparent so the topFadeBg gradient (same blue100 wash Home uses) shows through
   hero: {
-    backgroundColor: palette.white, paddingBottom: 24,
+    paddingBottom: 24,
     borderBottomWidth: 1, borderBottomColor: palette.hairline,
   },
   heroSafe: { paddingHorizontal: 20, paddingTop: 8 },
@@ -527,16 +500,16 @@ const s = StyleSheet.create({
   diffText: { fontSize: 11, fontWeight: '700' },
   assignedBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start',
-    backgroundColor: palette.blue25,
+    backgroundColor: palette.surfaceMuted,
     paddingHorizontal: 10, paddingVertical: 4, borderRadius: radii.pill,
   },
-  assignedBadgeText: { fontSize: 11, fontWeight: '700', color: palette.blue500 },
+  assignedBadgeText: { fontSize: 11, fontWeight: '700', color: palette.blue600 },
   heroTitle: { fontSize: 26, fontWeight: '800', letterSpacing: -0.5, color: palette.ink900, marginBottom: 8 },
   heroDesc: { fontSize: fontSize.sm, color: palette.gray450, lineHeight: 20, marginBottom: 14 },
 
   statsRow: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: palette.surfaceMuted, borderRadius: radii.md,
+    backgroundColor: palette.surfaceMuted, borderRadius: radii.xl,
     paddingHorizontal: 16, paddingVertical: 10, gap: 12,
   },
   statItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -563,22 +536,15 @@ const s = StyleSheet.create({
   // Exercise card
   exCard: {
     flexDirection: 'row', gap: 12,
-    backgroundColor: palette.white, borderRadius: radii.lg,
-    borderWidth: 1, borderColor: palette.hairline,
-    padding: 14, marginBottom: 10, ...shadows.sm,
+    backgroundColor: palette.white, borderRadius: radii.xl,
+    borderWidth: 1, borderColor: palette.borderFaint,
+    padding: 14, marginBottom: 10,
   },
-  exIndexBadge: {
-    width: 28, height: 28, borderRadius: 14,
-    backgroundColor: palette.surfaceMuted,
-    alignItems: 'center', justifyContent: 'center',
-    marginTop: 2, flexShrink: 0,
-  },
-  exIndexText: { fontSize: 12, fontWeight: '800', color: palette.gray450 },
   exMain: { flex: 1 },
   exHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 6 },
   exIconWrap: {
     width: 32, height: 32, borderRadius: 9,
-    backgroundColor: palette.blue25,
+    backgroundColor: palette.surfaceMuted,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
   exName: { fontSize: 15, fontWeight: '700', color: palette.ink900, lineHeight: 20 },
@@ -600,13 +566,13 @@ const s = StyleSheet.create({
 
   noteWrap: {
     flexDirection: 'row', gap: 6, alignItems: 'flex-start',
-    backgroundColor: palette.blue25, borderRadius: radii.md,
+    backgroundColor: palette.surfaceMuted, borderRadius: radii.lg,
     padding: 10, marginTop: 10,
   },
   noteText: { flex: 1, fontSize: 12.5, color: palette.ink700, lineHeight: 17, fontStyle: 'italic' },
 
   gifWrap: {
-    marginTop: 10, borderRadius: radii.md, overflow: 'hidden',
+    marginTop: 10, borderRadius: radii.lg, overflow: 'hidden',
     backgroundColor: palette.surfaceMuted,
     alignItems: 'center',
   },
@@ -615,12 +581,12 @@ const s = StyleSheet.create({
   },
   instructions: {
     marginTop: 12, padding: 12,
-    backgroundColor: palette.surfaceMuted, borderRadius: radii.md, gap: 8,
+    backgroundColor: palette.surfaceMuted, borderRadius: radii.lg, gap: 8,
   },
   instructionRow: { flexDirection: 'row', gap: 10 },
   instructionNum: {
     width: 20, height: 20, borderRadius: 10,
-    backgroundColor: palette.blue500,
+    backgroundColor: palette.gray450,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1,
   },
   instructionNumText: { fontSize: 10, fontWeight: '800', color: '#fff' },
@@ -629,12 +595,12 @@ const s = StyleSheet.create({
   historyBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
     marginTop: 12, paddingVertical: 10,
-    backgroundColor: palette.blue25, borderRadius: radii.md,
+    backgroundColor: palette.surfaceMuted, borderRadius: radii.lg,
   },
-  historyBtnText: { fontSize: 13, fontWeight: '700', color: palette.blue500 },
+  historyBtnText: { fontSize: 13, fontWeight: '700', color: palette.blue600 },
 
   // CTA
-  ctaWrap: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 4, backgroundColor: palette.white, borderTopWidth: 1, borderTopColor: palette.hairline },
+  ctaWrap: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 16, backgroundColor: palette.white, borderTopWidth: 1, borderTopColor: palette.hairline },
   startBtn: { borderRadius: radii.xl, overflow: 'hidden' },
   startBtnGrad: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, height: 54, backgroundColor: palette.ink900 },
   startBtnText: { fontSize: 17, fontWeight: '800', color: '#fff', letterSpacing: -0.2 },

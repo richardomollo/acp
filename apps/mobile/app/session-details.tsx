@@ -10,6 +10,7 @@ import {
   Linking,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { ThemedText } from '@/components/themed-text';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
@@ -270,36 +271,43 @@ export default function SessionDetailsScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Cover photo — fixed background layer, fades out through the middle of the screen; scrollable content rides on top of it. */}
+      <View style={styles.coverBg} pointerEvents="none">
+        {session.image_url ? (
+          <Image source={{ uri: session.image_url }} style={styles.heroImage} contentFit="cover" />
+        ) : (
+          <View style={[styles.heroImage, styles.heroPlaceholder]}>
+            <Ionicons name="barbell-outline" size={64} color="rgba(255,255,255,0.4)" />
+          </View>
+        )}
+        <View style={styles.heroOverlay} />
+        <LinearGradient
+          colors={['rgba(255,255,255,0)', palette.white]}
+          style={styles.coverFade}
+        />
+      </View>
+
+      <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+        <Ionicons name="arrow-back" size={22} color={palette.white} />
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.shareBtn} onPress={handleShare}>
+        <Ionicons name="share-outline" size={22} color={palette.white} />
+      </TouchableOpacity>
+
       <ScrollView showsVerticalScrollIndicator={false} style={styles.scroll}>
 
-        {/* ── Hero ── */}
-        <View style={styles.hero}>
-          {session.image_url ? (
-            <Image source={{ uri: session.image_url }} style={styles.heroImage} contentFit="cover" />
-          ) : (
-            <View style={[styles.heroImage, styles.heroPlaceholder]}>
-              <Ionicons name="barbell-outline" size={64} color="rgba(255,255,255,0.4)" />
-            </View>
-          )}
-          <View style={styles.heroOverlay} />
+        {/* Spacer — reveals the fixed cover background above the content card */}
+        <View style={styles.coverSpacer} />
 
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={22} color={palette.white} />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.shareBtn} onPress={handleShare}>
-            <Ionicons name="share-outline" size={22} color={palette.white} />
-          </TouchableOpacity>
+        {/* ── Content card lifted over hero ── */}
+        <View style={styles.card}>
 
           {session.category ? (
             <View style={styles.categoryBadge}>
               <ThemedText style={styles.categoryBadgeText}>{session.category}</ThemedText>
             </View>
           ) : null}
-        </View>
-
-        {/* ── Content card lifted over hero ── */}
-        <View style={styles.card}>
 
           {/* Title + gym */}
           <ThemedText style={styles.title}>{session.name}</ThemedText>
@@ -314,11 +322,9 @@ export default function SessionDetailsScreen() {
           {/* Stat pills */}
           <View style={styles.statsRow}>
             <View style={styles.statPill}>
-              <Ionicons name="time-outline" size={16} color={palette.blue500} />
               <ThemedText style={styles.statText}>{session.duration_minutes} min</ThemedText>
             </View>
             <View style={styles.statPill}>
-              <Ionicons name="people-outline" size={16} color={isFull ? palette.danger600 : palette.blue500} />
               <ThemedText style={[styles.statText, isFull && { color: palette.danger600 }]}>
                 {isFull ? 'Full' : `${spotsLeft} spots`}
               </ThemedText>
@@ -554,14 +560,19 @@ const styles = StyleSheet.create({
   backLink: { marginTop: 8 },
   backLinkText: { color: palette.blue500, fontSize: fontSize.base, fontWeight: '600' },
 
-  // Hero
-  hero: { height: 300, position: 'relative' },
+  // Cover photo — fixed background layer (not part of the ScrollView); fades
+  // out through the middle of its own height rather than at a hard edge.
+  coverBg: { position: 'absolute', top: 0, left: 0, right: 0, height: 320 },
   heroImage: { width: '100%', height: '100%' },
   heroPlaceholder: { backgroundColor: palette.blue500, justifyContent: 'center', alignItems: 'center' },
   heroOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.25)',
   },
+  coverFade: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 },
+  // Empty space at the top of the scroll content that lets the fixed cover
+  // image show through before the content card begins.
+  coverSpacer: { height: 300 },
   backBtn: {
     position: 'absolute',
     top: Platform.OS === 'ios' ? 56 : 16,
@@ -585,13 +596,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   categoryBadge: {
-    position: 'absolute',
-    bottom: 36,
-    left: 20,
+    alignSelf: 'flex-start',
     backgroundColor: palette.blue500,
     borderRadius: radii.sm,
     paddingHorizontal: 12,
     paddingVertical: 4,
+    marginBottom: 10,
   },
   categoryBadgeText: { color: palette.white, fontSize: fontSize.xs, fontWeight: '700', textTransform: 'uppercase' },
 

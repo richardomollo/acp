@@ -1,12 +1,12 @@
 import {
   StyleSheet, View, TouchableOpacity, Alert,
-  ScrollView, Dimensions, Image, TextInput,
+  ScrollView, Dimensions, TextInput,
   KeyboardAvoidingView, Platform, AppState,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ThemedText } from '@/components/themed-text';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { palette, radii, fontSize, shadows } from '@/constants/theme';
+import { palette, radii, fontSize, shadows, darkTheme } from '@/constants/theme';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { authService } from '@/services/auth';
@@ -16,7 +16,7 @@ import {
   ensureNotificationPermission, scheduleRestEndNotification, cancelNotification,
 } from '@/services/notifications';
 import { workoutExecutionService, type PerceivedDifficulty } from '@/services/workout-execution-service';
-import { useMuscleWikiMedia } from '@/hooks/use-musclewiki-media';
+import { ExerciseMedia } from '@/components/exercise-media';
 
 const SCREEN_W = Dimensions.get('window').width;
 const GIF_SIZE = SCREEN_W - 120;
@@ -72,6 +72,13 @@ const CARD_GRADIENTS: Record<string, readonly [string, string]> = {
   strength:  ['#000000', '#111827'],
 };
 const DEFAULT_GRAD: readonly [string, string] = [palette.ink900, '#333'];
+
+// Dark theme for the active-workout screen (matches the reference dashboard:
+// near-black background, dark card surfaces, off-white text, one bright
+// lime-green accent for progress/highlights, small semantic colors kept for
+// rating stars / heart / warnings) — shared with fitness-journey.tsx via
+// constants/theme.ts so both screens stay visually in sync.
+const DARK = darkTheme;
 
 // ── Timer hook ────────────────────────────────────────────────────────────────
 
@@ -154,7 +161,7 @@ function LogStepper({
         onPress={() => onChange(Math.max(min, +(value - step).toFixed(2)))}
         disabled={value <= min} hitSlop={10}
       >
-        <Ionicons name="remove" size={16} color={value <= min ? palette.gray300 : palette.ink900} />
+        <Ionicons name="remove" size={14} color={value <= min ? DARK.textFaint : DARK.text} />
       </TouchableOpacity>
       <ThemedText style={l.stepVal}>{value}{suffix}</ThemedText>
       <TouchableOpacity
@@ -162,20 +169,20 @@ function LogStepper({
         onPress={() => onChange(Math.min(max, +(value + step).toFixed(2)))}
         disabled={value >= max} hitSlop={10}
       >
-        <Ionicons name="add" size={16} color={value >= max ? palette.gray300 : palette.ink900} />
+        <Ionicons name="add" size={14} color={value >= max ? DARK.textFaint : DARK.text} />
       </TouchableOpacity>
     </View>
   );
 }
 
 const l = StyleSheet.create({
-  stepper: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  stepper: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   stepBtn: {
-    width: 32, height: 32, borderRadius: 16, backgroundColor: palette.white,
-    alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: palette.border,
+    width: 26, height: 26, borderRadius: 13, backgroundColor: DARK.cardAlt,
+    alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: DARK.border,
   },
   stepBtnDisabled: { opacity: 0.4 },
-  stepVal: { fontSize: 16, fontWeight: '800', color: palette.ink900, minWidth: 56, textAlign: 'center' },
+  stepVal: { fontSize: 14, fontWeight: '800', color: DARK.text, minWidth: 40, textAlign: 'center' },
 });
 
 const MOTIVATION_QUOTES = [
@@ -223,10 +230,10 @@ function RestTimer({
 }
 
 const r = StyleSheet.create({
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', zIndex: 99 },
-  box: { backgroundColor: palette.ink900, borderRadius: radii.xl, padding: 36, alignItems: 'center', width: 260 },
-  label: { fontSize: 14, fontWeight: '700', color: 'rgba(255,255,255,0.6)', marginBottom: 8 },
-  count: { fontSize: 64, fontWeight: '900', color: '#fff', letterSpacing: -2, paddingTop: 40 },
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.75)', alignItems: 'center', justifyContent: 'center', zIndex: 99 },
+  box: { backgroundColor: DARK.card, borderRadius: radii.xl, padding: 36, alignItems: 'center', width: 260, borderWidth: 1, borderColor: DARK.border },
+  label: { fontSize: 14, fontWeight: '700', color: DARK.textMuted, marginBottom: 8 },
+  count: { fontSize: 64, fontWeight: '900', color: DARK.accent, letterSpacing: -2, paddingTop: 40 },
   quote: { fontSize: 13.5, fontWeight: '600', color: 'rgba(255,255,255,0.75)', textAlign: 'center', marginTop: 14, lineHeight: 18 },
   skipBtn: { marginTop: 16, paddingHorizontal: 24, paddingVertical: 10, borderRadius: radii.pill, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.3)' },
   skipText: { fontSize: 14, fontWeight: '700', color: '#fff' },
@@ -395,7 +402,6 @@ export default function WorkoutPlayerScreen() {
   };
 
   const currentExercise = queue[0];
-  const resolvedDemoUrl = useMuscleWikiMedia(currentExercise?.exercises.gif_url ?? null);
   const nextExercise    = queue[1];
   const totalExercises  = exercises.length;
   const doneCount       = totalExercises - queue.length;
@@ -513,7 +519,7 @@ export default function WorkoutPlayerScreen() {
   };
 
   if (loading || !workout || (!workout.is_activity_block && exercises.length === 0)) {
-    return <View style={s.center}><ThemedText style={{ color: palette.gray450 }}>Loading…</ThemedText></View>;
+    return <View style={s.center}><ThemedText style={{ color: DARK.textMuted }}>Loading…</ThemedText></View>;
   }
 
   // ── Activity block (Day 3) ── Run/Walk/Mobility/Recovery blocks have no
@@ -534,7 +540,7 @@ export default function WorkoutPlayerScreen() {
                 ])}
                 hitSlop={10}
               >
-                <Ionicons name="close" size={20} color={palette.ink900} />
+                <Ionicons name="close" size={20} color={DARK.text} />
               </TouchableOpacity>
               <View style={s.headerCenter}>
                 <ThemedText style={s.headerTitle}>{workout.title}</ThemedText>
@@ -547,7 +553,7 @@ export default function WorkoutPlayerScreen() {
             <View style={s.exTitleWrap}>
               <ThemedText style={s.exName}>{workout.title}</ThemedText>
             </View>
-            {workout.description ? <ThemedText style={{ fontSize: 15, color: palette.gray450, lineHeight: 21, marginBottom: 20 }}>{workout.description}</ThemedText> : null}
+            {workout.description ? <ThemedText style={{ fontSize: 15, color: DARK.textMuted, lineHeight: 21, marginBottom: 20 }}>{workout.description}</ThemedText> : null}
             <View style={s.logCard}>
               <ThemedText style={s.logLabel}>Actual duration</ThemedText>
               <View style={s.logRow}>
@@ -559,7 +565,7 @@ export default function WorkoutPlayerScreen() {
           </ScrollView>
           <SafeAreaView edges={['bottom']} style={s.actions}>
             <TouchableOpacity style={[s.actionBtn, s.actionBtnGrad]} onPress={finishWorkout} activeOpacity={0.85}>
-              <Ionicons name="checkmark-circle" size={22} color="#fff" />
+              <Ionicons name="checkmark-circle" size={22} color={DARK.bg} />
               <ThemedText style={s.actionBtnText}>Mark as Done</ThemedText>
             </TouchableOpacity>
           </SafeAreaView>
@@ -620,11 +626,12 @@ export default function WorkoutPlayerScreen() {
                         key={opt}
                         onPress={() => chooseDifficulty(opt)}
                         style={{
-                          flex: 1, paddingVertical: 10, borderRadius: radii.pill, alignItems: 'center',
+                          flex: 1, minHeight: 44, paddingHorizontal: 6, borderRadius: radii.lg,
+                          alignItems: 'center', justifyContent: 'center',
                           backgroundColor: perceivedDifficulty === opt ? '#fff' : 'rgba(255,255,255,0.12)',
                         }}
                       >
-                        <ThemedText style={{ fontSize: 12.5, fontWeight: '700', color: perceivedDifficulty === opt ? palette.ink900 : '#fff' }}>
+                        <ThemedText style={{ fontSize: 12.5, fontWeight: '700', textAlign: 'center', color: perceivedDifficulty === opt ? palette.ink900 : '#fff' }}>
                           {opt === 'easy' ? 'Easy' : opt === 'about_right' ? 'About right' : 'Difficult'}
                         </ThemedText>
                       </TouchableOpacity>
@@ -716,7 +723,7 @@ export default function WorkoutPlayerScreen() {
                 ])}
                 hitSlop={10}
               >
-                <Ionicons name="close" size={20} color={palette.ink900} />
+                <Ionicons name="close" size={20} color={DARK.text} />
               </TouchableOpacity>
 
               <View style={s.headerCenter}>
@@ -729,13 +736,13 @@ export default function WorkoutPlayerScreen() {
                 onPress={() => router.push('/fitness-journey')}
                 hitSlop={10}
               >
-                <Ionicons name="stats-chart-outline" size={20} color={palette.ink900} />
+                <Ionicons name="stats-chart-outline" size={20} color={DARK.text} />
               </TouchableOpacity>
             </View>
 
             {/* Progress bar */}
             <View style={s.progressTrack}>
-              <View style={[s.progressFill, { width: `${progress * 100}%`, backgroundColor: grad[0] }]} />
+              <View style={[s.progressFill, { width: `${progress * 100}%`, backgroundColor: DARK.accent }]} />
             </View>
             <ThemedText style={s.progressLabel}>
               {doneCount + 1} of {totalExercises}
@@ -749,7 +756,7 @@ export default function WorkoutPlayerScreen() {
           <View style={s.exTitleWrap}>
             {wasSkipped ? (
               <View style={s.skippedBadge}>
-                <Ionicons name="return-down-back-outline" size={12} color={palette.warning800} />
+                <Ionicons name="return-down-back-outline" size={12} color={palette.warning500} />
                 <ThemedText style={s.skippedBadgeText}>Back to this one</ThemedText>
               </View>
             ) : null}
@@ -768,7 +775,7 @@ export default function WorkoutPlayerScreen() {
                 <Ionicons
                   name={favoriteExerciseIds.has(currentExercise.exercises.id) ? 'heart' : 'heart-outline'}
                   size={24}
-                  color={favoriteExerciseIds.has(currentExercise.exercises.id) ? palette.danger500 : palette.gray300}
+                  color={favoriteExerciseIds.has(currentExercise.exercises.id) ? palette.danger500 : DARK.textFaint}
                 />
               </TouchableOpacity>
             </View>
@@ -788,14 +795,10 @@ export default function WorkoutPlayerScreen() {
             </View>
           </View>
 
-          {/* GIF/video demonstration — MuscleWiki stream URLs need a fresh short-lived token (see useMuscleWikiMedia) */}
-          {resolvedDemoUrl ? (
+          {/* GIF/video demonstration — real MuscleWiki media is video (ExerciseMedia resolves the short-lived token and picks the video/image renderer accordingly); the jsDelivr GIF fallback for historical/ExerciseDB-era exercises still renders as a static image. */}
+          {currentExercise?.exercises.gif_url ? (
             <View style={s.gifWrap}>
-              <Image
-                source={{ uri: resolvedDemoUrl }}
-                style={s.gif}
-                resizeMode="contain"
-              />
+              <ExerciseMedia url={currentExercise.exercises.gif_url} style={s.gif} />
             </View>
           ) : null}
 
@@ -837,7 +840,7 @@ export default function WorkoutPlayerScreen() {
           {/* Equipment */}
           {currentExercise.exercises.equipment && currentExercise.exercises.equipment !== 'body weight' ? (
             <View style={s.equipRow}>
-              <Ionicons name="barbell-outline" size={14} color={palette.gray450} />
+              <Ionicons name="barbell-outline" size={14} color={DARK.textMuted} />
               <ThemedText style={s.equipText}>{currentExercise.exercises.equipment}</ThemedText>
             </View>
           ) : null}
@@ -845,7 +848,7 @@ export default function WorkoutPlayerScreen() {
           {/* Trainer's note on this exercise */}
           {currentExercise.notes ? (
             <View style={s.noteWrap}>
-              <Ionicons name="create-outline" size={14} color={palette.blue500} />
+              <Ionicons name="create-outline" size={14} color={DARK.accent} />
               <ThemedText style={s.noteText}>{currentExercise.notes}</ThemedText>
             </View>
           ) : null}
@@ -857,7 +860,7 @@ export default function WorkoutPlayerScreen() {
               <TextInput
                 style={s.myNoteInput}
                 placeholder="e.g. felt a pull in my shoulder, try lighter next time..."
-                placeholderTextColor={palette.gray300}
+                placeholderTextColor={DARK.textFaint}
                 value={exerciseNotes[currentExercise.exercises.id] ?? ''}
                 onChangeText={text => setExerciseNotes(prev => ({ ...prev, [currentExercise.exercises.id]: text }))}
                 maxLength={200}
@@ -866,7 +869,7 @@ export default function WorkoutPlayerScreen() {
             </View>
           ) : (
             <TouchableOpacity style={s.addNoteBtn} onPress={() => setShowNoteInput(true)} activeOpacity={0.7}>
-              <Ionicons name="add-circle-outline" size={15} color={palette.blue500} />
+              <Ionicons name="add-circle-outline" size={15} color={DARK.accent} />
               <ThemedText style={s.addNoteBtnText}>Add a note for this exercise</ThemedText>
             </TouchableOpacity>
           )}
@@ -883,7 +886,7 @@ export default function WorkoutPlayerScreen() {
                 <Ionicons
                   name={showInstructions ? 'chevron-up' : 'chevron-down'}
                   size={16}
-                  color={palette.gray300}
+                  color={DARK.textFaint}
                 />
               </TouchableOpacity>
               {showInstructions ? instructions.map((step, i) => (
@@ -915,7 +918,7 @@ export default function WorkoutPlayerScreen() {
         {/* ── Action button ── */}
         <SafeAreaView edges={['bottom']} style={s.actions}>
           <TouchableOpacity style={[s.actionBtn, s.actionBtnGrad]} onPress={markSetDone} activeOpacity={0.85}>
-            <Ionicons name="checkmark-circle" size={22} color="#fff" />
+            <Ionicons name="checkmark-circle" size={22} color={DARK.bg} />
             <ThemedText style={s.actionBtnText}>
               {doneSets + 1 < totalSets
                 ? `Done — Set ${doneSets + 1} of ${totalSets}`
@@ -931,7 +934,7 @@ export default function WorkoutPlayerScreen() {
               style={s.skipExBtn}
               onPress={skipForNow}
             >
-              <Ionicons name="return-down-forward-outline" size={14} color={palette.gray450} />
+              <Ionicons name="return-down-forward-outline" size={14} color={DARK.textMuted} />
               <ThemedText style={s.skipExText}>Equipment in use — skip for now</ThemedText>
             </TouchableOpacity>
           ) : null}
@@ -944,24 +947,24 @@ export default function WorkoutPlayerScreen() {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: palette.white },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  root: { flex: 1, backgroundColor: DARK.bg },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: DARK.bg },
 
   // Header
   header: {
-    backgroundColor: palette.white,
-    borderBottomWidth: 1, borderBottomColor: palette.hairline,
+    backgroundColor: DARK.bg,
+    borderBottomWidth: 1, borderBottomColor: DARK.border,
   },
   headerSafe: { paddingHorizontal: 20, paddingBottom: 16 },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 8, marginBottom: 14 },
-  quitBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: palette.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
-  journeyBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: palette.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
+  quitBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: DARK.cardAlt, alignItems: 'center', justifyContent: 'center' },
+  journeyBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: DARK.cardAlt, alignItems: 'center', justifyContent: 'center' },
   headerCenter: { alignItems: 'center' },
-  headerTitle: { fontSize: 15, fontWeight: '700', color: palette.ink900 },
-  headerTimer: { fontSize: 22, fontWeight: '900', color: palette.ink900, letterSpacing: -0.5, marginTop: 2 },
-  progressTrack: { height: 5, backgroundColor: palette.hairline, borderRadius: 3, marginBottom: 8 },
+  headerTitle: { fontSize: 15, fontWeight: '700', color: DARK.text },
+  headerTimer: { fontSize: 22, fontWeight: '900', color: DARK.text, letterSpacing: -0.5, marginTop: 2 },
+  progressTrack: { height: 5, backgroundColor: DARK.cardAlt, borderRadius: 3, marginBottom: 8 },
   progressFill: { height: 5, borderRadius: 3 },
-  progressLabel: { fontSize: 12, fontWeight: '600', color: palette.gray450, textAlign: 'center' },
+  progressLabel: { fontSize: 12, fontWeight: '600', color: DARK.textMuted, textAlign: 'center' },
 
   // Content
   scroll: { flex: 1 },
@@ -969,18 +972,18 @@ const s = StyleSheet.create({
   exTitleWrap: { marginBottom: 20 },
   skippedBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start',
-    backgroundColor: palette.warning50, borderRadius: radii.pill,
+    backgroundColor: DARK.cardAlt, borderRadius: radii.pill,
     paddingHorizontal: 10, paddingVertical: 5, marginBottom: 10,
   },
-  skippedBadgeText: { fontSize: 11.5, fontWeight: '700', color: palette.warning800 },
+  skippedBadgeText: { fontSize: 11.5, fontWeight: '700', color: palette.warning500 },
   exNameRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  exName: { fontSize: 26, fontWeight: '800', letterSpacing: -0.5, color: palette.ink900 },
-  exMuscle: { fontSize: 14, color: palette.gray450, marginTop: 4 },
+  exName: { fontSize: 26, fontWeight: '800', letterSpacing: -0.5, color: DARK.text },
+  exMuscle: { fontSize: 14, color: DARK.textMuted, marginTop: 4 },
   exRatingRow: { flexDirection: 'row', gap: 4, marginTop: 8 },
 
   gifWrap: {
     marginBottom: 16, borderRadius: radii.xl, overflow: 'hidden',
-    backgroundColor: palette.white, alignItems: 'center',
+    backgroundColor: DARK.card, alignItems: 'center',
   },
   gif: {
     width: GIF_SIZE, height: GIF_SIZE,
@@ -988,78 +991,78 @@ const s = StyleSheet.create({
 
   // Sets card
   setsCard: {
-    backgroundColor: palette.surfaceMuted, borderRadius: radii.lg,
-    borderWidth: 1, borderColor: palette.hairline,
+    backgroundColor: DARK.card, borderRadius: radii.lg,
+    borderWidth: 1, borderColor: DARK.border,
     padding: 16, marginBottom: 16,
   },
-  setsLabel: { fontSize: 11, fontWeight: '700', color: palette.gray300, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 },
+  setsLabel: { fontSize: 11, fontWeight: '700', color: DARK.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 },
   setsDots: { flexDirection: 'row', gap: 8, marginBottom: 10 },
-  setDot: { width: 18, height: 18, borderRadius: 9, backgroundColor: palette.border, borderWidth: 1.5, borderColor: palette.gray300 },
-  setDotDone: { backgroundColor: palette.success700, borderColor: palette.success700 },
-  setsText: { fontSize: 14, fontWeight: '600', color: palette.gray450 },
+  setDot: { width: 18, height: 18, borderRadius: 9, backgroundColor: DARK.cardAlt, borderWidth: 1.5, borderColor: DARK.border },
+  setDotDone: { backgroundColor: DARK.accent, borderColor: DARK.accent },
+  setsText: { fontSize: 14, fontWeight: '600', color: DARK.textMuted },
 
   logCard: {
-    backgroundColor: palette.white, borderRadius: radii.lg,
-    borderWidth: 1, borderColor: palette.hairline,
-    padding: 16, marginBottom: 16,
+    backgroundColor: DARK.card, borderRadius: radii.lg,
+    borderWidth: 1, borderColor: DARK.border,
+    padding: 12, marginBottom: 16,
   },
-  logLabel: { fontSize: 11, fontWeight: '700', color: palette.gray300, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 },
+  logLabel: { fontSize: 11, fontWeight: '700', color: DARK.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
   logRow: { flexDirection: 'row', alignItems: 'center' },
-  logItem: { flex: 1, alignItems: 'center', gap: 8 },
-  logItemLabel: { fontSize: 12, fontWeight: '700', color: palette.gray450 },
-  logDivider: { width: 1, height: 40, backgroundColor: palette.hairline },
+  logItem: { flex: 1, alignItems: 'center', gap: 4 },
+  logItemLabel: { fontSize: 12, fontWeight: '700', color: DARK.textMuted },
+  logDivider: { width: 1, height: 28, backgroundColor: DARK.border },
 
   equipRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 16 },
-  equipText: { fontSize: 13, fontWeight: '500', color: palette.gray450 },
+  equipText: { fontSize: 13, fontWeight: '500', color: DARK.textMuted },
 
   noteWrap: {
     flexDirection: 'row', gap: 8, alignItems: 'flex-start',
-    backgroundColor: palette.blue25, borderRadius: radii.md,
+    backgroundColor: DARK.card, borderRadius: radii.md,
     padding: 12, marginBottom: 16,
   },
-  noteText: { flex: 1, fontSize: 13.5, color: palette.ink700, lineHeight: 18, fontStyle: 'italic' },
+  noteText: { flex: 1, fontSize: 13.5, color: DARK.text, lineHeight: 18, fontStyle: 'italic' },
 
   myNoteWrap: {
-    backgroundColor: palette.surfaceMuted, borderRadius: radii.md,
-    borderWidth: 1, borderColor: palette.hairline,
+    backgroundColor: DARK.card, borderRadius: radii.md,
+    borderWidth: 1, borderColor: DARK.border,
     padding: 12, marginBottom: 16,
   },
   myNoteLabel: {
-    fontSize: 11, fontWeight: '700', color: palette.gray300,
+    fontSize: 11, fontWeight: '700', color: DARK.textMuted,
     textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6,
   },
-  myNoteInput: { fontSize: 13.5, color: palette.ink900, lineHeight: 18, minHeight: 36, padding: 0 },
+  myNoteInput: { fontSize: 13.5, color: DARK.text, lineHeight: 18, minHeight: 36, padding: 0 },
   addNoteBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     paddingVertical: 8, marginBottom: 16,
   },
-  addNoteBtnText: { fontSize: 13, fontWeight: '600', color: palette.blue500 },
+  addNoteBtnText: { fontSize: 13, fontWeight: '600', color: DARK.accent },
 
   // Instructions
-  instructionsWrap: { backgroundColor: palette.surfaceMuted, borderRadius: radii.lg, padding: 16, marginBottom: 16, gap: 10 },
+  instructionsWrap: { backgroundColor: DARK.card, borderRadius: radii.lg, padding: 16, marginBottom: 16, gap: 10 },
   instructionsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  instructionsSectionTitle: { fontSize: 12, fontWeight: '700', color: palette.gray300, textTransform: 'uppercase', letterSpacing: 0.5 },
+  instructionsSectionTitle: { fontSize: 12, fontWeight: '700', color: DARK.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
   instructionRow: { flexDirection: 'row', gap: 10 },
-  instructionNum: { width: 22, height: 22, borderRadius: 11, backgroundColor: palette.blue500, alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 },
-  instructionNumText: { fontSize: 10, fontWeight: '800', color: '#fff' },
-  instructionText: { flex: 1, fontSize: 14, color: palette.ink700, lineHeight: 20 },
+  instructionNum: { width: 22, height: 22, borderRadius: 11, backgroundColor: DARK.accent, alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 },
+  instructionNumText: { fontSize: 10, fontWeight: '800', color: DARK.bg },
+  instructionText: { flex: 1, fontSize: 14, color: DARK.text, lineHeight: 20 },
 
   // Up next
-  upNext: { backgroundColor: palette.blue25, borderRadius: radii.md, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: '#d4dcff' },
-  upNextLabel: { fontSize: 11, fontWeight: '700', color: palette.blue500, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
-  upNextName: { fontSize: 15, fontWeight: '700', color: palette.ink900 },
+  upNext: { backgroundColor: DARK.card, borderRadius: radii.md, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: DARK.border },
+  upNextLabel: { fontSize: 11, fontWeight: '700', color: DARK.accent, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
+  upNextName: { fontSize: 15, fontWeight: '700', color: DARK.text },
 
   // Actions
   actions: {
     paddingHorizontal: 20, paddingTop: 12, paddingBottom: 4,
-    backgroundColor: palette.white, borderTopWidth: 1, borderTopColor: palette.hairline,
+    backgroundColor: DARK.bg, borderTopWidth: 1, borderTopColor: DARK.border,
     gap: 8,
   },
   actionBtn: { borderRadius: radii.xl, overflow: 'hidden' },
-  actionBtnGrad: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, height: 54, backgroundColor: palette.ink900 },
-  actionBtnText: { fontSize: 17, fontWeight: '800', color: '#fff' },
+  actionBtnGrad: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, height: 54, backgroundColor: DARK.accent },
+  actionBtnText: { fontSize: 17, fontWeight: '800', color: DARK.bg },
   skipExBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 8 },
-  skipExText: { fontSize: 13.5, fontWeight: '600', color: palette.gray450 },
+  skipExText: { fontSize: 13.5, fontWeight: '600', color: DARK.textMuted },
 
   // Done screen
   doneRoot: { flex: 1 },

@@ -51,7 +51,7 @@ describe('getSelfDirectedSource (routing table)', () => {
   test('gym/strength routes to exercise_db', () => {
     const result = getSelfDirectedSource('gym', false);
     assert.equal(result?.source, 'exercise_db');
-    assert.equal(result?.navigationTarget, '/create-workout');
+    assert.equal(result?.navigationTarget, '/browse-exercises');
   });
 
   test('running/walking/cycling route to strava, never exercise_db', () => {

@@ -1,6 +1,6 @@
 import {
   StyleSheet, View, ScrollView, TouchableOpacity, Image,
-  ActivityIndicator, Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle } from 'react-native-svg';
@@ -36,9 +36,7 @@ const SLOT_LABEL: Record<string, string> = {
 const RING_SIZE = 168;
 const RING_STROKE = 12;
 
-const CONTENT_PADDING = 20;
 const GRID_GAP = 14;
-const CARD_WIDTH = (Dimensions.get('window').width - CONTENT_PADDING * 2 - GRID_GAP) / 2;
 
 function CalorieRing({ progress }: { progress: number }) {
   const radius = (RING_SIZE - RING_STROKE) / 2;
@@ -321,39 +319,32 @@ export default function TodayNutritionScreen() {
                 <ThemedText style={s.sourceNote}>
                   {isSuggested ? 'Suggested meals — tap to mark as eaten' : 'From your meal plan'}
                 </ThemedText>
-                <View style={s.mealsGrid}>
+                <View style={s.mealsList}>
                   {orderedItems.map(item => {
                     const done = loggedIds.has(item.id);
                     return (
-                      <View key={item.id} style={s.mealCard}>
+                      <TouchableOpacity
+                        key={item.id}
+                        style={s.mealRow}
+                        onPress={() => router.push({ pathname: '/meal-detail', params: { mealId: item.mealId } } as any)}
+                        activeOpacity={0.85}
+                      >
+                        <View style={s.mealRowBody}>
+                          <ThemedText style={s.mealTypeTag}>{SLOT_LABEL[item.slot]}</ThemedText>
+                          <ThemedText style={[s.mealName, done && s.mealNameDone]} numberOfLines={2}>{item.name}</ThemedText>
+                          <ThemedText style={s.mealMeta}>
+                            {item.calories} kcal{item.prep_time_minutes ? ` · ${item.prep_time_minutes} min` : ''}
+                          </ThemedText>
+                        </View>
                         <TouchableOpacity
-                          onPress={() => router.push({ pathname: '/meal-detail', params: { mealId: item.mealId } } as any)}
-                          activeOpacity={0.85}
+                          style={[s.checkBtn, done && s.checkBtnDone]}
+                          onPress={() => toggleMeal(item)}
+                          disabled={togglingId === item.id}
+                          hitSlop={8}
                         >
-                          {item.image_url ? (
-                            <Image source={{ uri: item.image_url }} style={s.mealImage} />
-                          ) : (
-                            <View style={[s.mealImage, s.mealImageFallback]}>
-                              <Ionicons name="restaurant-outline" size={32} color={palette.gray300} />
-                            </View>
-                          )}
-                          <TouchableOpacity
-                            style={[s.checkBtn, done && s.checkBtnDone]}
-                            onPress={() => toggleMeal(item)}
-                            disabled={togglingId === item.id}
-                            hitSlop={8}
-                          >
-                            <Ionicons name="checkmark" size={16} color={done ? '#fff' : palette.gray300} />
-                          </TouchableOpacity>
-                          <View style={s.mealCardBody}>
-                            <ThemedText style={s.mealTypeTag}>{SLOT_LABEL[item.slot]}</ThemedText>
-                            <ThemedText style={[s.mealName, done && s.mealNameDone]} numberOfLines={2}>{item.name}</ThemedText>
-                            <ThemedText style={s.mealMeta}>
-                              {item.calories} kcal{item.prep_time_minutes ? ` · ${item.prep_time_minutes} min` : ''}
-                            </ThemedText>
-                          </View>
+                          <Ionicons name="checkmark" size={16} color={done ? '#fff' : palette.gray300} />
                         </TouchableOpacity>
-                      </View>
+                      </TouchableOpacity>
                     );
                   })}
                 </View>
@@ -452,16 +443,15 @@ const s = StyleSheet.create({
   emptyText: { fontSize: 13, color: palette.gray300, textAlign: 'center', marginTop: 40 },
   sourceNote: { fontSize: 12, color: palette.gray300, marginBottom: 16 },
 
-  mealsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP },
+  mealsList: { gap: GRID_GAP, marginBottom: 20 },
 
-  mealCard: {
-    width: CARD_WIDTH,
+  mealRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
     backgroundColor: palette.white, borderRadius: radii['2xl'],
-    borderWidth: 1, borderColor: palette.hairline, overflow: 'hidden',
+    borderWidth: 1, borderColor: palette.hairline,
+    padding: 14,
   },
-  mealImage: { width: CARD_WIDTH - 2, height: CARD_WIDTH - 2 },
-  mealImageFallback: { backgroundColor: palette.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
-  mealCardBody: { padding: 12 },
+  mealRowBody: { flex: 1 },
   mealTypeTag: {
     fontSize: 10, fontWeight: '800', color: palette.blue600,
     textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2,
@@ -470,9 +460,8 @@ const s = StyleSheet.create({
   mealNameDone: { color: palette.gray300, textDecorationLine: 'line-through' },
   mealMeta: { fontSize: 12, color: palette.gray450, marginTop: 2 },
   checkBtn: {
-    position: 'absolute', top: 8, right: 8,
     width: 30, height: 30, borderRadius: 15,
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    backgroundColor: palette.surfaceMuted,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
   checkBtnDone: { backgroundColor: palette.success700 },
@@ -524,7 +513,7 @@ const s = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: palette.hairline,
   },
-  providerAvatar: { width: 40, height: 40, borderRadius: 20, flexShrink: 0 },
+  providerAvatar: { width: 75, height: 74, borderRadius: radii.lg, flexShrink: 0 },
   providerAvatarFallback: { backgroundColor: palette.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
   dayTitle: {
     fontSize: fontSize.sm,

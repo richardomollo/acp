@@ -141,7 +141,9 @@ const DAYS_BY_FREQUENCY: Record<number, DayOfWeek[]> = {
   3: ['monday', 'wednesday', 'saturday'],
 };
 
-const FULL_BODY_A_REQUIREMENTS: ExerciseRequirement[] = [
+// Exported so a single ad-hoc "suggested workout" (activity-recommendation-service.ts)
+// can reuse the exact same requirement set instead of duplicating it.
+export const FULL_BODY_A_REQUIREMENTS: ExerciseRequirement[] = [
   { pattern: 'squat', bodyPart: 'upper legs', muscleHint: 'quad', role: 'compound' },
   { pattern: 'horizontal_push', bodyPart: 'chest', role: 'compound' },
   { pattern: 'horizontal_pull', bodyPart: 'back', role: 'compound' },
@@ -155,11 +157,88 @@ const FULL_BODY_B_REQUIREMENTS: ExerciseRequirement[] = [
   { pattern: 'core', bodyPart: 'waist', role: 'core' },
 ];
 
+// Exported for the same reason as FULL_BODY_A_REQUIREMENTS — reused by the
+// generalized activity-recommendation-service.ts for a standalone mobility
+// session, rather than a second copy of this requirement set.
+export const MOBILITY_REQUIREMENTS: ExerciseRequirement[] = [
+  { pattern: 'hip_mobility', bodyPart: 'upper legs', muscleHint: 'hip', role: 'mobility' },
+  { pattern: 'shoulder_mobility', bodyPart: 'shoulders', muscleHint: 'shoulder', role: 'mobility' },
+  { pattern: 'thoracic_mobility', bodyPart: 'back', muscleHint: 'spine', role: 'mobility' },
+];
+
 interface WorkoutTypeSpec {
   title: string;
   isActivityBlock: boolean;
   activityDescription?: string;
   requirements?: ExerciseRequirement[];
+}
+
+// ─── Strength prescription policy (Chunk 4.5C2) ─────────────────────────────
+// The single deterministic source for Strength session duration/volume,
+// shared by full multi-week programme generation (buildWorkoutSlots below)
+// and standalone acp_suggested_strength generation
+// (activity-recommendation-service.ts) — section 18's "one shared policy,
+// never two". Previously, experience_level was persisted (workouts.difficulty)
+// and used to filter/rank MuscleWiki candidates, but never affected duration
+// or exercise count at all — every Strength session got the same fixed
+// 40-minute, 4-exercise prescription regardless of experience.
+
+// Sensible defaults inside each guidance band (Day 2/Chunk 4.5C2 product
+// direction: beginner ~30-45, intermediate ~45-60, advanced ~60-90) — not the
+// band's maximum, since Advanced should get a meaningfully longer session
+// without automatically maxing out (chunk section 3).
+const STRENGTH_DURATION_DEFAULT: Record<ExerciseDifficulty, number> = {
+  beginner: 40,
+  intermediate: 55,
+  advanced: 70,
+};
+
+/**
+ * `explicitAvailableMinutes` is a hard per-session time ceiling, used only
+ * when ACP genuinely knows one. No caller passes this today — there is no
+ * structured "available session minutes" field anywhere in fitness_profile
+ * (only a free-text weekly `starting_point.available_time` string inside the
+ * AI-assessment blob, which isn't a reliable per-session minute value) — so
+ * this parameter exists so the policy correctly handles that input if it
+ * ever becomes available, without inventing a fake source for it now
+ * (section 4's "do not invent unavailable time data"). When supplied, it
+ * caps the experience-tier default rather than downgrading the member's
+ * tier — an Advanced member constrained to 45 minutes stays Advanced
+ * (section 13), the duration is simply capped.
+ */
+export function strengthDurationMinutes(experience: ExerciseDifficulty, explicitAvailableMinutes?: number | null): number {
+  const base = STRENGTH_DURATION_DEFAULT[experience];
+  if (explicitAvailableMinutes != null && explicitAvailableMinutes > 0) return Math.min(base, explicitAvailableMinutes);
+  return base;
+}
+
+// Appended, in order, beyond a base full-body requirement list to grow
+// session volume for higher experience tiers — reuses two patterns already
+// defined in StrengthMovementPattern (core, horizontal_pull), never a new
+// movement category or a second exercise engine (section 7/18). Deliberately
+// NOT the compound lift patterns (squat/hinge/horizontal_push/vertical_push)
+// — extra volume goes into accessory/core work, which is both realistic
+// full-body-session programming and lower-risk for MuscleWiki match quality
+// (section 15) than forcing a second compound movement of the same pattern.
+const STRENGTH_ACCESSORY_REQUIREMENTS: ExerciseRequirement[] = [
+  { pattern: 'core', bodyPart: 'waist', muscleHint: 'oblique', role: 'accessory' },
+  { pattern: 'horizontal_pull', bodyPart: 'back', muscleHint: 'lat', role: 'accessory' },
+];
+
+// Conservative (low) end of each band from section 7's suggested ranges
+// (beginner 4-5, intermediate 5-6, advanced 6-7) — fewer forced additions
+// means fewer chances of accepting a lower-quality MuscleWiki match just to
+// hit a count (section 15/16's "quality > count").
+const STRENGTH_EXTRA_EXERCISE_COUNT: Record<ExerciseDifficulty, number> = {
+  beginner: 0,
+  intermediate: 1,
+  advanced: 2,
+};
+
+/** Applies the experience-aware volume policy to any base full-body requirement list (FULL_BODY_A/B_REQUIREMENTS today). */
+export function buildStrengthRequirements(base: ExerciseRequirement[], experience: ExerciseDifficulty): ExerciseRequirement[] {
+  const extra = STRENGTH_ACCESSORY_REQUIREMENTS.slice(0, STRENGTH_EXTRA_EXERCISE_COUNT[experience]);
+  return [...base, ...extra];
 }
 
 const WORKOUT_TYPE_SPECS: Record<string, WorkoutTypeSpec> = {
@@ -177,6 +256,10 @@ const WORKOUT_TYPE_SPECS: Record<string, WorkoutTypeSpec> = {
     title: 'Interval Run', isActivityBlock: true,
     activityDescription: 'Interval session: 5–6 rounds of 2 minutes at a moderate-hard pace, with 2 minutes of walking recovery between rounds.',
   },
+  walk_easy: {
+    title: 'Brisk Walk', isActivityBlock: true,
+    activityDescription: 'A brisk, purposeful walk for 30 minutes — comfortable but not a stroll.',
+  },
 };
 
 export function workoutTypeSpec(workoutType: string): WorkoutTypeSpec {
@@ -191,6 +274,10 @@ export function buildWorkoutSlots(strategy: TrainingStrategy, context: Generatio
   for (let week = 1; week <= context.durationWeeks; week++) {
     strategy.weeklyWorkoutTypes.forEach((workoutType, i) => {
       const spec = workoutTypeSpec(workoutType);
+      // Strength prescription policy applies only to actual Strength slots
+      // (full_body_a/b) — activity-block slots (mobility/running/walking)
+      // keep the existing flat session default untouched (chunk exclusions).
+      const isStrength = !spec.isActivityBlock && !!spec.requirements;
       slots.push({
         weekNumber: week,
         dayOfWeek: days[i] ?? days[days.length - 1],
@@ -198,7 +285,8 @@ export function buildWorkoutSlots(strategy: TrainingStrategy, context: Generatio
         title: spec.title,
         isActivityBlock: spec.isActivityBlock,
         activityDescription: spec.activityDescription,
-        requirements: spec.requirements,
+        requirements: isStrength ? buildStrengthRequirements(spec.requirements!, context.experience) : spec.requirements,
+        durationMinutes: isStrength ? strengthDurationMinutes(context.experience) : context.sessionDurationMinutes,
         sequence: i,
       });
     });
