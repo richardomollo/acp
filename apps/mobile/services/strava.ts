@@ -59,3 +59,26 @@ export async function disconnectStrava(): Promise<boolean> {
   }
   return !!data?.disconnected;
 }
+
+// Strava's API has no step-count field at all (it's a distance/GPS tracker,
+// not a pedometer) — this is a rough estimate from today's walk/run distance
+// using an average adult stride length, for use only when a real step count
+// (e.g. from HealthKit) isn't available.
+const AVG_STRIDE_METERS = 0.762;
+
+export async function estimateTodayStepsFromStrava(userId: string, dateStr: string): Promise<number | null> {
+  const dayStart = `${dateStr}T00:00:00.000Z`;
+  const dayEnd = `${dateStr}T23:59:59.999Z`;
+  const { data, error } = await supabase
+    .from('activities')
+    .select('distance_meters')
+    .eq('user_id', userId)
+    .eq('source', 'strava')
+    .in('activity_type', ['walk', 'run'])
+    .gte('start_time', dayStart)
+    .lte('start_time', dayEnd);
+  if (error || !data || data.length === 0) return null;
+  const totalMeters = data.reduce((sum, a) => sum + (a.distance_meters ?? 0), 0);
+  if (totalMeters <= 0) return null;
+  return Math.round(totalMeters / AVG_STRIDE_METERS);
+}

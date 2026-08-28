@@ -10,7 +10,8 @@ import { palette, fontSize } from '@/constants/theme';
 
 export default function OnboardingBarriersScreen() {
   const router = useRouter();
-  const { answers, toggleBarrier, saveProgress } = useOnboarding();
+  const { answers, toggleBarrier, saveProgress, userName } = useOnboarding();
+  const firstName = userName.split(' ')[0];
 
   const atMax = answers.barriers.length >= MAX_BARRIERS;
 
@@ -25,8 +26,11 @@ export default function OnboardingBarriersScreen() {
       <OnboardingHeader step={4} onBack={() => router.back()} onExit={handleExit} />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <ThemedText style={styles.headline}>What’s getting in your way?</ThemedText>
-        <ThemedText style={styles.sub}>Choose up to {MAX_BARRIERS}.</ThemedText>
+        <ThemedText style={styles.headline}>{firstName ? `What tends to get in your way, ${firstName}?` : 'What tends to get in your way?'}</ThemedText>
+        <ThemedText style={styles.sub}>
+          Knowing what makes consistency difficult helps ACP Intelligence™ build around it — and
+          adapt when something isn&apos;t working. Choose up to {MAX_BARRIERS}.
+        </ThemedText>
 
         <View style={styles.chips}>
           {BARRIER_OPTIONS.map(o => {

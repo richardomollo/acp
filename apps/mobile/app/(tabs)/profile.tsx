@@ -1,8 +1,8 @@
-import { StyleSheet, View, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Image } from 'react-native';
+import { StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Image } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { palette, radii, fontSize } from '@/constants/theme';
-import { useState, useEffect, useCallback, Component, type ReactNode } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { authService } from '@/services/auth';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,20 +23,11 @@ interface UserProfile {
   avatar_url: string | null;
 }
 
-interface ClubMembership {
-  community_id: string;
-  role: string;
-  communities: {
-    id: string; slug: string | null; name: string; category: string;
-    logo_url: string | null; member_count: number;
-  } | null;
+interface WeightGoal {
+  initialWeightKg: number;
+  currentWeightKg: number;
+  targetWeightKg: number;
 }
-
-const CATEGORY_LABEL: Record<string, string> = {
-  running: 'Running', walking: 'Walking', cycling: 'Cycling', strength: 'Strength',
-  boxing: 'Boxing', yoga: 'Yoga', pilates: 'Pilates', hiking: 'Hiking', dance: 'Dance',
-  outdoor_fitness: 'Outdoor Fitness', football: 'Football', other: 'Other',
-};
 
 // ─── Avatar upload ────────────────────────────────────────────────────────────
 
@@ -71,35 +62,13 @@ const getInitials = (name: string | null | undefined) => {
   return name.trim().split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
 };
 
-// ─── Error boundary ───────────────────────────────────────────────────────────
-// The app has no global error boundary, so any render exception anywhere
-// crashes the whole app with no fallback. This scopes that risk for the
-// newer, less-proven "My Clubs" section specifically.
-
-class SectionErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
-  constructor(props: { children: ReactNode }) {
-    super(props);
-    this.state = { hasError: false };
-  }
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-  componentDidCatch(error: unknown) {
-    console.error('Profile section render error:', error);
-  }
-  render() {
-    if (this.state.hasError) return null;
-    return this.props.children;
-  }
-}
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 const PROFILE_TOUR: TourStep[] = [
   {
     icon: 'person-circle-outline',
     title: 'Your Profile',
-    description: 'See your account details all in one place. Tap Edit to update your name or email.',
+    description: 'See your account at a glance. Tap Personal details to update your name, email or phone.',
   },
   {
     icon: 'settings-outline',
@@ -113,14 +82,10 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { showAuthModal } = useAuthModal();
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [clubs, setClubs] = useState<ClubMembership[]>([]);
+  const [weightGoal, setWeightGoal] = useState<WeightGoal | null>(null);
   const [loading, setLoading] = useState(true);
   const [isGuest, setIsGuest] = useState(false);
 
-  const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [editName, setEditName] = useState('');
-  const [editPhone, setEditPhone] = useState('');
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const pickAvatar = async () => {
@@ -157,7 +122,10 @@ export default function ProfileScreen() {
       if (!session?.user) { setIsGuest(true); return; }
       setIsGuest(false);
 
-      const { data } = await supabase.from('users').select('id, email, name, phone, created_at, avatar_url').eq('id', session.user.id).maybeSingle();
+      const [{ data }, { data: fp }] = await Promise.all([
+        supabase.from('users').select('id, email, name, phone, created_at, avatar_url').eq('id', session.user.id).maybeSingle(),
+        supabase.from('fitness_profile').select('initial_weight_kg, starting_weight_kg, goal_weight_kg').eq('user_id', session.user.id).maybeSingle(),
+      ]);
 
       const profile = data ?? {
         id: session.user.id,
@@ -169,49 +137,23 @@ export default function ProfileScreen() {
       };
 
       setUser(profile);
-      setEditName(profile.name || '');
-      setEditPhone(profile.phone || '');
 
-      const { data: clubRows } = await supabase
-        .from('community_members')
-        .select('community_id, role, communities(id, slug, name, category, logo_url, member_count)')
-        .eq('user_id', session.user.id)
-        .eq('status', 'active')
-        .order('created_at', { ascending: false });
-      // Supabase/PostgREST can return a to-one embed as either an object or a
-      // single-item array depending on relationship resolution — normalize so
-      // downstream rendering can safely assume a plain object or null.
-      const normalizedClubs = ((clubRows as any[]) ?? []).map((c) => ({
-        ...c,
-        communities: Array.isArray(c.communities) ? (c.communities[0] ?? null) : c.communities,
-      }));
-      setClubs(normalizedClubs);
+      // Only worth showing once there's an actual starting point and target
+      // to measure progress between.
+      if (fp?.initial_weight_kg != null && fp?.starting_weight_kg != null && fp?.goal_weight_kg != null) {
+        setWeightGoal({
+          initialWeightKg: fp.initial_weight_kg,
+          currentWeightKg: fp.starting_weight_kg,
+          targetWeightKg: fp.goal_weight_kg,
+        });
+      } else {
+        setWeightGoal(null);
+      }
     } catch (err) {
       console.error('Profile load error:', err);
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleSave = async () => {
-    if (!user) return;
-    try {
-      setSaving(true);
-      const { error } = await supabase.from('users').update({ name: editName, phone: editPhone }).eq('id', user.id);
-      if (error) throw error;
-      setUser(prev => prev ? { ...prev, name: editName, phone: editPhone } : prev);
-      setEditing(false);
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to save changes');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleCancelEdit = () => {
-    setEditName(user?.name || '');
-    setEditPhone(user?.phone || '');
-    setEditing(false);
   };
 
   const handleSignOut = () => {
@@ -282,6 +224,18 @@ export default function ProfileScreen() {
     );
   }
 
+  // ── Weight progress ────────────────────────────────────────────────────────
+
+  const weightProgressPct = (() => {
+    if (!weightGoal) return 0;
+    const { initialWeightKg, currentWeightKg, targetWeightKg } = weightGoal;
+    const totalDelta = targetWeightKg - initialWeightKg;
+    if (totalDelta === 0) return currentWeightKg === targetWeightKg ? 100 : 0;
+    const progressDelta = currentWeightKg - initialWeightKg;
+    const pct = (progressDelta / totalDelta) * 100;
+    return Math.max(0, Math.min(100, Math.round(pct)));
+  })();
+
   // ── Authenticated ──────────────────────────────────────────────────────────
 
   return (
@@ -306,117 +260,78 @@ export default function ProfileScreen() {
           <ThemedText style={styles.heroEmail}>{user?.email}</ThemedText>
         </View>
 
-        {/* ── Account details ── */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <ThemedText style={styles.cardTitle}>Account Details</ThemedText>
-            {editing ? (
-              <View style={styles.editActions}>
-                <TouchableOpacity onPress={handleCancelEdit} style={styles.cancelBtn}>
-                  <ThemedText style={styles.cancelBtnText}>Cancel</ThemedText>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={handleSave} style={styles.saveBtn} disabled={saving}>
-                  {saving
-                    ? <ActivityIndicator size="small" color={palette.white} />
-                    : <ThemedText style={styles.saveBtnText}>Save</ThemedText>}
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <TouchableOpacity onPress={() => setEditing(true)} style={styles.editBtn}>
-                <Ionicons name="pencil-outline" size={15} color={palette.blue500} />
-                <ThemedText style={styles.editBtnText}>Edit</ThemedText>
+        {/* ── Your Weight ── */}
+        {weightGoal && (
+          <View style={styles.weightCard}>
+            <View style={styles.weightCardHeader}>
+              <ThemedText style={styles.weightCardTitle}>Your Weight</ThemedText>
+              <TouchableOpacity style={styles.weightUpdateBtn} onPress={() => router.push('/progress-hub' as any)}>
+                <ThemedText style={styles.weightUpdateBtnText}>Update Progress</ThemedText>
               </TouchableOpacity>
-            )}
+            </View>
+            <View style={styles.weightProgressTrack}>
+              <View style={[styles.weightProgressFill, { width: `${weightProgressPct}%` }]} />
+            </View>
+            <ThemedText style={styles.weightProgressPct}>{weightProgressPct}%</ThemedText>
+            <ThemedText style={styles.weightSummary}>
+              Current weight {weightGoal.currentWeightKg} kg / target weight {weightGoal.targetWeightKg} kg
+            </ThemedText>
           </View>
+        )}
 
-          <View style={styles.fieldGroup}>
-            <ThemedText style={styles.fieldLabel}>Full Name</ThemedText>
-            <TextInput
-              style={[styles.fieldInput, !editing && styles.fieldInputDisabled]}
-              value={editName}
-              onChangeText={setEditName}
-              editable={editing}
-              placeholder="Enter your name"
-              placeholderTextColor={palette.gray200}
-            />
-          </View>
-
-          <View style={styles.fieldGroup}>
-            <ThemedText style={styles.fieldLabel}>Email</ThemedText>
-            <TextInput
-              style={[styles.fieldInput, styles.fieldInputDisabled]}
-              value={user?.email ?? ''}
-              editable={false}
-              placeholderTextColor={palette.gray200}
-            />
-            <ThemedText style={styles.fieldHelper}>Email cannot be changed</ThemedText>
-          </View>
-
-          <View style={[styles.fieldGroup, { marginBottom: 0 }]}>
-            <ThemedText style={styles.fieldLabel}>Phone Number</ThemedText>
-            <TextInput
-              style={[styles.fieldInput, !editing && styles.fieldInputDisabled]}
-              value={editPhone}
-              onChangeText={setEditPhone}
-              editable={editing}
-              placeholder="Enter your phone number"
-              placeholderTextColor={palette.gray200}
-              keyboardType="phone-pad"
-            />
-          </View>
-        </View>
-
-        {/* ── My Clubs ── */}
-        <SectionErrorBoundary>
+        {/* ── Lifestyle ── */}
         <View style={styles.menuSection}>
-          <View style={styles.clubsSectionHeader}>
-            <ThemedText style={[styles.menuSectionTitle, { marginBottom: 0, marginLeft: 0 }]}>MY CLUBS</ThemedText>
-            <TouchableOpacity onPress={() => router.push('/(tabs)/communities' as any)} hitSlop={8}>
-              <ThemedText style={styles.clubsDiscoverLink}>Discover</ThemedText>
+          <ThemedText style={styles.menuSectionTitle}>LIFESTYLE</ThemedText>
+          <View style={styles.menuCard}>
+            <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/personal-details' as any)}>
+              <View style={styles.menuItemLeft}>
+                <Ionicons name="person-outline" size={20} color={palette.ink600} />
+                <ThemedText style={styles.menuText}>Personal Details</ThemedText>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={palette.gray200} />
+            </TouchableOpacity>
+            <View style={styles.menuDivider} />
+            <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/fitness-journey' as any)}>
+              <View style={styles.menuItemLeft}>
+                <Ionicons name="stats-chart-outline" size={20} color={palette.ink600} />
+                <ThemedText style={styles.menuText}>My Statistics / My Journey</ThemedText>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={palette.gray200} />
+            </TouchableOpacity>
+            <View style={styles.menuDivider} />
+            <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/(tabs)/communities' as any)}>
+              <View style={styles.menuItemLeft}>
+                <Ionicons name="people-outline" size={20} color={palette.ink600} />
+                <ThemedText style={styles.menuText}>My Clubs</ThemedText>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={palette.gray200} />
+            </TouchableOpacity>
+            <View style={styles.menuDivider} />
+            <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/my-trainers' as any)}>
+              <View style={styles.menuItemLeft}>
+                <Ionicons name="person-circle-outline" size={20} color={palette.ink600} />
+                <ThemedText style={styles.menuText}>My Trainers</ThemedText>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={palette.gray200} />
+            </TouchableOpacity>
+            <View style={styles.menuDivider} />
+            <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/nutrition-hub' as any)}>
+              <View style={styles.menuItemLeft}>
+                <Ionicons name="nutrition-outline" size={20} color={palette.ink600} />
+                <ThemedText style={styles.menuText}>My Nutrition Plan</ThemedText>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={palette.gray200} />
+            </TouchableOpacity>
+            <View style={styles.menuDivider} />
+            <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/workout-hub' as any)}>
+              <View style={styles.menuItemLeft}>
+                <Ionicons name="barbell-outline" size={20} color={palette.ink600} />
+                <ThemedText style={styles.menuText}>My Training Plan</ThemedText>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={palette.gray200} />
             </TouchableOpacity>
           </View>
-          {clubs.length === 0 ? (
-            <View style={styles.menuCard}>
-              <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/(tabs)/communities' as any)}>
-                <View style={styles.menuItemLeft}>
-                  <Ionicons name="people-outline" size={20} color={palette.ink600} />
-                  <ThemedText style={styles.menuText}>Join a community</ThemedText>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color={palette.gray200} />
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={styles.menuCard}>
-              {clubs.map((c, i) => c.communities && (
-                <View key={c.community_id}>
-                  {i > 0 && <View style={styles.menuDivider} />}
-                  <TouchableOpacity
-                    style={styles.menuItem}
-                    onPress={() => router.push({ pathname: '/community/[id]', params: { id: c.communities!.slug ?? c.communities!.id } } as any)}
-                  >
-                    <View style={styles.menuItemLeft}>
-                      {c.communities.logo_url ? (
-                        <Image source={{ uri: c.communities.logo_url }} style={styles.clubAvatar} />
-                      ) : (
-                        <View style={styles.clubAvatarFallback}>
-                          <ThemedText style={styles.clubAvatarFallbackText}>{(c.communities.name || '?')[0]}</ThemedText>
-                        </View>
-                      )}
-                      <View style={{ flex: 1 }}>
-                        <ThemedText style={styles.menuText} numberOfLines={1}>{c.communities.name}</ThemedText>
-                        <ThemedText style={styles.clubMeta}>
-                          {CATEGORY_LABEL[c.communities.category] ?? c.communities.category} · {c.communities.member_count} members
-                        </ThemedText>
-                      </View>
-                    </View>
-                    <Ionicons name="chevron-forward" size={18} color={palette.gray200} />
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </View>
-          )}
         </View>
-        </SectionErrorBoundary>
 
         {/* ── Preferences ── */}
         <View style={styles.menuSection}>
@@ -557,32 +472,27 @@ const styles = StyleSheet.create({
   heroName: { fontSize: 22, fontWeight: 'bold', color: palette.ink900 },
   heroEmail: { fontSize: fontSize.base, color: palette.gray450 },
 
-  // Account card
-  card: {
+  // Weight progress card
+  weightCard: {
     marginHorizontal: 16, marginBottom: 8,
-    borderRadius: radii.lg, padding: 16, backgroundColor: palette.white,
+    borderRadius: radii.lg, padding: 18, backgroundColor: palette.white,
   },
-  cardHeader: {
+  weightCardHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     marginBottom: 18,
   },
-  cardTitle: { fontSize: fontSize.base, fontWeight: '700', color: palette.ink900 },
-  editBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  editBtnText: { fontSize: fontSize.base, fontWeight: '600', color: palette.blue500 },
-  editActions: { flexDirection: 'row', gap: 8 },
-  cancelBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: radii.xl, borderWidth: 1, borderColor: palette.borderFaint },
-  cancelBtnText: { fontSize: fontSize.sm, fontWeight: '600', color: palette.gray450 },
-  saveBtn: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: radii.xl, backgroundColor: palette.blue500 },
-  saveBtnText: { fontSize: fontSize.sm, fontWeight: '700', color: palette.white },
-
-  fieldGroup: { marginBottom: 16 },
-  fieldLabel: { fontSize: fontSize.xs, fontWeight: '600', color: palette.gray300, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
-  fieldInput: {
-    backgroundColor: palette.surfaceMuted, borderRadius: radii.md, padding: 13,
-    fontSize: fontSize.base, borderWidth: 1, borderColor: palette.hairline, color: palette.ink900,
+  weightCardTitle: { fontSize: fontSize.lg, fontWeight: '800', color: palette.ink900 },
+  weightUpdateBtn: {
+    backgroundColor: palette.blue500, borderRadius: radii.pill,
+    paddingVertical: 10, paddingHorizontal: 16,
   },
-  fieldInputDisabled: { backgroundColor: palette.surfaceMuted, color: palette.gray450 },
-  fieldHelper: { fontSize: fontSize.xs, color: palette.gray200, marginTop: 5 },
+  weightUpdateBtnText: { fontSize: fontSize.sm, fontWeight: '700', color: palette.white },
+  weightProgressTrack: {
+    height: 6, borderRadius: 3, backgroundColor: palette.surfaceMuted, overflow: 'hidden',
+  },
+  weightProgressFill: { height: '100%', borderRadius: 3, backgroundColor: palette.blue500 },
+  weightProgressPct: { fontSize: fontSize.sm, color: palette.gray450, marginTop: 8 },
+  weightSummary: { fontSize: fontSize.base, color: palette.gray450, marginTop: 20 },
 
   // Menu sections
   menuSection: { marginHorizontal: 16, marginBottom: 8 },
@@ -598,16 +508,6 @@ const styles = StyleSheet.create({
   menuItemLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 },
   menuText: { fontSize: fontSize.base, color: palette.ink900 },
   menuDivider: { height: 1, backgroundColor: palette.hairline, marginHorizontal: 16 },
-
-  clubsSectionHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginBottom: 8, marginLeft: 4, marginRight: 2,
-  },
-  clubsDiscoverLink: { fontSize: fontSize.sm, fontWeight: '600', color: palette.blue500 },
-  clubAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: palette.surfaceMuted },
-  clubAvatarFallback: { width: 36, height: 36, borderRadius: 18, backgroundColor: palette.blue25, alignItems: 'center', justifyContent: 'center' },
-  clubAvatarFallbackText: { fontSize: 14, fontWeight: '800', color: palette.blue500 },
-  clubMeta: { fontSize: fontSize.xs, color: palette.gray300, marginTop: 2, textTransform: 'capitalize' },
 
   // Sign out
   signOutSection: { paddingHorizontal: 16, paddingTop: 16 },

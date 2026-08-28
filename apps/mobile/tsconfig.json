@@ -3,6 +3,13 @@
   "compilerOptions": {
     "strict": true,
     "jsx": "react-native",
+    // Lets lib/completion.ts import lib/fulfilment.ts as './fulfilment.ts'
+    // — needed because that's a real (non-type-only) cross-file import, and
+    // Node's own ESM resolver (used when running lib tests directly via
+    // `node --test`) requires the explicit extension to find it. Safe here
+    // because noEmit is already true (via expo/tsconfig.base) — Metro's
+    // bundler resolves the same specifier fine regardless of this flag.
+    "allowImportingTsExtensions": true,
     "paths": {
       "@/*": [
         "./*"

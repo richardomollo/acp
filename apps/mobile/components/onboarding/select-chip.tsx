@@ -33,7 +33,7 @@ export function SelectChip({
       <ThemedText style={[styles.label, selected && styles.labelSelected]}>{label}</ThemedText>
       {selected && (
         <View style={styles.check}>
-          <Ionicons name="checkmark" size={11} color={palette.blue500} />
+          <Ionicons name="checkmark" size={11} color={palette.ink900} />
         </View>
       )}
     </TouchableOpacity>
@@ -53,8 +53,8 @@ const styles = StyleSheet.create({
     backgroundColor: palette.white,
   },
   chipSelected: {
-    borderColor: palette.blue500,
-    backgroundColor: palette.blue500,
+    borderColor: palette.ink900,
+    backgroundColor: palette.ink900,
   },
   chipDisabled: {
     opacity: 0.4,

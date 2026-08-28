@@ -63,8 +63,8 @@ const styles = StyleSheet.create({
     backgroundColor: palette.white,
   },
   cardSelected: {
-    borderColor: palette.blue500,
-    backgroundColor: palette.blue25,
+    borderColor: palette.ink900,
+    backgroundColor: palette.surfaceMuted,
   },
   iconWrap: {
     width: 44,
@@ -75,7 +75,7 @@ const styles = StyleSheet.create({
     backgroundColor: palette.surfaceMuted,
   },
   iconWrapSelected: {
-    backgroundColor: palette.blue500,
+    backgroundColor: palette.ink900,
   },
   textWrap: { flex: 1, gap: 2 },
   label: {
@@ -84,7 +84,7 @@ const styles = StyleSheet.create({
     color: palette.ink700,
   },
   labelSelected: {
-    color: palette.blue600,
+    color: palette.ink900,
   },
   desc: {
     fontSize: fontSize.sm,
@@ -100,12 +100,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   radioSelected: {
-    borderColor: palette.blue500,
+    borderColor: palette.ink900,
   },
   radioDot: {
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: palette.blue500,
+    backgroundColor: palette.ink900,
   },
 });

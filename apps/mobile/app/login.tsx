@@ -6,9 +6,10 @@ import {
   Image,
   Text,
   Dimensions,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Constants from 'expo-constants';
 import { useAuthModal } from '@/contexts/auth-modal-context';
 import { getPostAuthDestination } from '@/lib/onboarding-auth';
 import { palette, radii, fontSize } from '@/constants/theme';
@@ -16,11 +17,15 @@ import { palette, radii, fontSize } from '@/constants/theme';
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const HERO_HEIGHT = SCREEN_HEIGHT * 0.5;
 const HERO_IMAGE = require('@/assets/images/pt.jpeg');
+// A plain synchronous constant rather than useSafeAreaInsets() — the latter
+// depends on SafeAreaProvider's context being populated, which on some
+// first-render timings resolves to 0 and silently stops the hero from
+// actually reaching the top of the screen.
+const STATUS_BAR_HEIGHT = Constants.statusBarHeight || (Platform.OS === 'ios' ? 47 : 24);
 
 export default function LoginScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const insets = useSafeAreaInsets();
   const { showAuthModal } = useAuthModal();
 
   const redirectTo = (params.redirect as string) || '/(tabs)';
@@ -36,17 +41,17 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.choiceContainer}>
-      <View style={[styles.heroImageWrap, { top: -insets.top, height: HERO_HEIGHT + insets.top }]}>
+      <View style={[styles.heroImageWrap, { top: -STATUS_BAR_HEIGHT, height: HERO_HEIGHT + STATUS_BAR_HEIGHT }]}>
         <Image
           source={HERO_IMAGE}
           style={styles.heroImage}
-          resizeMode="contain"
+          resizeMode="cover"
         />
       </View>
       <LinearGradient
         colors={['transparent', 'rgba(255,255,255,0.75)', palette.white]}
         locations={[0, 0.55, 1]}
-        style={[styles.heroFade, { top: -insets.top, height: HERO_HEIGHT + insets.top }]}
+        style={[styles.heroFade, { top: -STATUS_BAR_HEIGHT, height: HERO_HEIGHT + STATUS_BAR_HEIGHT }]}
       />
 
       <View style={styles.choiceCenter}>
@@ -56,12 +61,11 @@ export default function LoginScreen() {
           resizeMode="contain"
         />
         <Text style={styles.brandName}>Active CityPass</Text>
-        <Text style={styles.title}>Your goals. Your plan. Your active and healthy life.</Text>
+        <Text style={styles.title}>Your goals. Your plan. Your active healthy life.</Text>
         <Text style={styles.subtitle}>Science-backed wellness, fitness, nutrition and experiences</Text>
       </View>
 
       <View style={styles.choiceBottom}>
-        <Text style={styles.changeStarts}>Change starts here</Text>
 
         <TouchableOpacity
           style={styles.ctaBtn}
@@ -125,27 +129,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   bigLogo: {
-    width: 80,
-    height: 80,
+    width: 100,
+    height: 100,
     borderRadius: radii.lg,
     marginBottom: 12,
   },
   brandName: {
-    fontSize: fontSize.lg,
+    fontSize: fontSize.xl,
     fontWeight: '800',
-    color: palette.blue500,
     letterSpacing: 0.4,
     marginBottom: 22,
   },
   title: {
-    fontSize: fontSize['2xl'],
-    fontWeight: '800',
+    fontSize: fontSize['4xl'],
+    fontWeight: '700',
     color: palette.ink700,
     textAlign: 'center',
-    lineHeight: 32,
+    lineHeight: 39,
     letterSpacing: -0.5,
     marginBottom: 12,
-    maxWidth: 300,
+    maxWidth: 360,
   },
   subtitle: {
     fontSize: fontSize.base,
@@ -171,7 +174,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   ctaBtn: {
-    backgroundColor: palette.blue500,
+    backgroundColor: palette.ink900,
     paddingVertical: 16,
     borderRadius: radii.pill,
     alignItems: 'center',
@@ -195,13 +198,13 @@ const styles = StyleSheet.create({
   },
   loginBtn: {
     borderWidth: 2,
-    borderColor: palette.blue500,
+    borderColor: palette.ink900,
     paddingVertical: 15,
     borderRadius: radii.pill,
     alignItems: 'center',
   },
   loginBtnText: {
-    color: palette.blue500,
+    color: palette.ink900,
     fontSize: fontSize.base,
     fontWeight: '700',
   },

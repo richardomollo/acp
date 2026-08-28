@@ -1,4 +1,4 @@
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import { View, TouchableOpacity, StyleSheet, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect } from 'react';
@@ -12,11 +12,14 @@ import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 const INACTIVE_COLOR = palette.gray300;
 
 const TAB_DEFS = [
-  { name: 'index',    label: 'Home',     icon: 'home-outline',    iconActive: 'home'    },
-  { name: 'discover', label: 'Discover', icon: 'search-outline', iconActive: 'search' },
-  { name: 'fitness',  label: 'Fitness',  icon: 'barbell-outline', iconActive: 'barbell' },
-  { name: 'check-in', label: 'Check In', icon: 'scan-outline',    iconActive: 'scan'    },
-  { name: 'profile',  label: 'Profile',  icon: 'person-outline',  iconActive: 'person'  },
+  { name: 'index',    label: 'Today',     icon: 'home-outline',      iconActive: 'home'      },
+  // Still the 'discover' route under the hood (venues/classes/trainers/
+  // experiences/communities all navigate back to it) — only this tab
+  // slot's icon/label/press-behaviour changed, so those existing back
+  // links keep working unchanged.
+  { name: 'discover', label: 'Nutrition', icon: 'nutrition-outline', iconActive: 'nutrition' },
+  { name: 'fitness',  label: 'Fitness',   icon: 'barbell-outline',   iconActive: 'barbell'   },
+  { name: 'check-in', label: 'Check In',  icon: 'scan-outline',      iconActive: 'scan'      },
 ];
 
 function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
@@ -81,6 +84,7 @@ function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 }
 
 export default function TabLayout() {
+  const router = useRouter();
   const { showAuthModal } = useAuthModal();
   const [userId, setUserId] = useState<string | null>(null);
 
@@ -95,13 +99,6 @@ export default function TabLayout() {
     if (userId) registerForPushNotifications();
   }, [userId]);
 
-  const handleProfilePress = (e: any) => {
-    if (!userId) {
-      e.preventDefault();
-      showAuthModal((uid) => setUserId(uid), { redirectTo: '/(tabs)/fitness' });
-    }
-  };
-
   const handleCheckInPress = (e: any) => {
     if (!userId) {
       e.preventDefault();
@@ -109,26 +106,40 @@ export default function TabLayout() {
     }
   };
 
+  const handleNutritionPress = (e: any) => {
+    e.preventDefault();
+    router.push('/today-nutrition' as any);
+  };
+
+  const handleFitnessPress = (e: any) => {
+    e.preventDefault();
+    router.push('/(tabs)/discover' as any);
+  };
+
   return (
     <Tabs
       tabBar={(props) => <FloatingTabBar {...props} />}
       screenOptions={{ headerShown: false }}
     >
-      <Tabs.Screen name="index"    options={{ title: 'Home' }} />
-      <Tabs.Screen name="discover" options={{ title: 'Discover' }} />
-      <Tabs.Screen name="fitness"  options={{ title: 'Fitness' }} />
+      <Tabs.Screen name="index" options={{ title: 'Today' }} />
+      <Tabs.Screen
+        name="discover"
+        options={{ title: 'Nutrition' }}
+        listeners={{ tabPress: handleNutritionPress }}
+      />
+      <Tabs.Screen
+        name="fitness"
+        options={{ title: 'Fitness' }}
+        listeners={{ tabPress: handleFitnessPress }}
+      />
       <Tabs.Screen
         name="check-in"
         options={{ title: 'Check In' }}
         listeners={{ tabPress: handleCheckInPress }}
       />
-      <Tabs.Screen
-        name="profile"
-        options={{ title: 'Profile', headerShown: false }}
-        listeners={{ tabPress: handleProfilePress }}
-      />
-
-      {/* Hidden routes */}
+      {/* Hidden routes — profile is reached from the avatar badge on Today
+          instead of a tab; the screen itself already guards guest access. */}
+      <Tabs.Screen name="profile"     options={{ title: 'Profile', headerShown: false, href: null }} />
       <Tabs.Screen name="venues"      options={{ href: null }} />
       <Tabs.Screen name="classes"     options={{ href: null }} />
       <Tabs.Screen name="trainers"    options={{ href: null }} />

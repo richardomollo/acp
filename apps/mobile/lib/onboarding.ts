@@ -7,11 +7,10 @@
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export type PrimaryGoal =
-  | 'lose_weight'
-  | 'build_muscle'      // displayed as "Build strength"
-  | 'improve_running'
-  | 'improve_health'
-  | 'healthy_lifestyle';
+  | 'build_muscle'         // displayed as "Build strength, build muscle mass"
+  | 'lose_weight'          // displayed as "Weight loss, burn fat & get lean"
+  | 'maintain_weight'      // displayed as "Maintaining a healthy weight"
+  | 'reduce_stress';       // displayed as "Reduce stress, improve my wellbeing"
 
 export type ActivityLevel = 'inactive' | 'occasional' | 'active_2_3' | 'active_4_plus' | 'serious';
 
@@ -26,16 +25,11 @@ export type PreferredActivity =
   | 'swimming' | 'cycling' | 'boxing' | 'personal_training';
 
 export interface GoalDetails {
-  // running
-  current_5k_seconds?: number | null;
-  no_current_5k?: boolean;
-  target_5k_seconds?: number;
-  // strength
-  strength_target?: string;
-  // health
-  health_focus?: string;
-  // healthy_lifestyle
-  lifestyle_focus?: string;
+  // health / maintain_weight focus areas — multi-select
+  health_focus?: string[];
+  // build_muscle — optional; many users won't know these yet
+  current_muscle_mass_pct?: number;
+  current_fat_mass_pct?: number;
   // derived, non-user-facing — lets a future recommendation engine bias
   // toward beginner-oriented vs goal-oriented support without ever labeling
   // the user P1/P2 anywhere in the UI or schema.
@@ -69,11 +63,12 @@ export const EMPTY_ANSWERS: OnboardingAnswers = {
 // ─── Copy / option lists ────────────────────────────────────────────────────
 
 export const GOAL_OPTIONS: { key: PrimaryGoal; label: string; desc: string; icon: string }[] = [
-  { key: 'lose_weight',      label: 'Lose weight',                 desc: 'Burn fat & feel lighter',        icon: 'flame-outline' },
-  { key: 'build_muscle',     label: 'Build strength',              desc: 'Get stronger, build muscle',     icon: 'barbell-outline' },
-  { key: 'improve_running',  label: 'Improve my running',          desc: 'Go further, get faster',         icon: 'walk-outline' },
-  { key: 'improve_health',   label: 'Improve my health',           desc: 'Energy, fitness & wellbeing',    icon: 'heart-outline' },
-  { key: 'healthy_lifestyle', label: 'Build a healthier lifestyle', desc: 'Small changes, built to last',   icon: 'leaf-outline' },
+  { key: 'build_muscle',        label: 'Build strength',           desc: 'Get stronger and build muscle',              icon: 'barbell-outline' },
+  { key: 'lose_weight',         label: 'Lose weight',               desc: 'Build sustainable habits for fat loss',      icon: 'flame-outline' },
+  { key: 'maintain_weight',     label: 'Maintain a healthy weight', desc: 'Stay active, strong and healthy',            icon: 'heart-outline' },
+  // 'reduce_stress' temporarily removed from the picker — the type/enum and
+  // downstream handling (goalLine, approach, etc.) stay intact so anyone
+  // who already picked it is still served correctly.
 ];
 
 export const ACTIVITY_LEVEL_OPTIONS: { key: ActivityLevel; label: string; desc: string }[] = [
@@ -83,6 +78,41 @@ export const ACTIVITY_LEVEL_OPTIONS: { key: ActivityLevel; label: string; desc: 
   { key: 'active_4_plus', label: 'Active 4+× a week',    desc: 'Very consistent' },
   { key: 'serious',       label: 'I train seriously',    desc: 'Structured, high frequency' },
 ];
+
+/**
+ * Derived, non-user-facing — the starting-point screen replaced the manual
+ * activity-level picker with a sleep/work/sport/leisure hours breakdown, so
+ * fitness_profile.activity_level (still read elsewhere, e.g. buildPlanSummary)
+ * is now inferred from weekly training hours instead of chosen directly.
+ */
+export function deriveActivityLevel(sportHoursPerWeek: number): ActivityLevel {
+  if (sportHoursPerWeek >= 8) return 'serious';
+  if (sportHoursPerWeek >= 5) return 'active_4_plus';
+  if (sportHoursPerWeek >= 3) return 'active_2_3';
+  if (sportHoursPerWeek >= 1) return 'occasional';
+  return 'inactive';
+}
+
+// ─── Slider descriptive-label copy (starting-point screen) ────────────────
+
+export function describeWorkHours(hoursPerWeek: number): string {
+  if (hoursPerWeek <= 0) return 'Not currently working';
+  if (hoursPerWeek <= 20) return 'Part-time desk work';
+  if (hoursPerWeek <= 40) return 'Full-time desk work';
+  return 'Long hours / physically demanding work';
+}
+
+export function describeSportHours(hoursPerWeek: number): string {
+  const level = deriveActivityLevel(hoursPerWeek);
+  return ACTIVITY_LEVEL_OPTIONS.find(o => o.key === level)?.label ?? 'Mostly inactive';
+}
+
+export function describeLeisureHours(hoursPerWeek: number): string {
+  if (hoursPerWeek <= 10) return 'Packed schedule, very little downtime';
+  if (hoursPerWeek <= 30) return 'A modest amount of downtime';
+  if (hoursPerWeek <= 60) return 'A healthy amount of downtime';
+  return 'Plenty of free time to recover and recharge';
+}
 
 export const STRENGTH_EXPERIENCE_OPTIONS: { key: StrengthExperience; label: string; desc: string }[] = [
   { key: 'beginner',     label: 'New to strength training', desc: "Let's build the foundations" },
@@ -98,20 +128,15 @@ export const HEALTH_FOCUS_OPTIONS: { key: string; label: string; icon: string }[
   { key: 'general_health', label: 'General health', icon: 'heart-outline' },
 ];
 
-export const LIFESTYLE_FOCUS_OPTIONS: { key: string; label: string; icon: string }[] = [
-  { key: 'move_more',    label: 'Move more',          icon: 'walk-outline' },
-  { key: 'eat_better',   label: 'Eat better',         icon: 'nutrition-outline' },
-  { key: 'consistency',  label: 'Build consistency',  icon: 'checkmark-circle-outline' },
-  { key: 'fitness',      label: 'Improve fitness',    icon: 'pulse-outline' },
-  { key: 'wellbeing',    label: 'Improve wellbeing',  icon: 'sunny-outline' },
-];
-
-export const STRENGTH_TARGET_OPTIONS: { key: string; label: string }[] = [
-  { key: 'overall_strength',   label: 'Get stronger overall' },
-  { key: 'visible_muscle',     label: 'Build visible muscle' },
-  { key: 'specific_lifts',     label: 'Increase specific lifts' },
-  { key: 'functional_strength', label: 'Improve functional strength' },
-];
+/** Joins the labels of one or more selected health-focus keys, e.g. "energy and fitness". */
+export function joinFocusLabels(keys: string[] | undefined): string | null {
+  const labels = (keys ?? [])
+    .map(k => HEALTH_FOCUS_OPTIONS.find(o => o.key === k)?.label.toLowerCase())
+    .filter((l): l is string => !!l);
+  if (labels.length === 0) return null;
+  if (labels.length === 1) return labels[0];
+  return `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`;
+}
 
 export const BARRIER_OPTIONS: { key: Barrier; label: string; icon: string }[] = [
   { key: 'time',                label: 'Time',               icon: 'time-outline' },
@@ -164,13 +189,6 @@ function monthYear(iso: string) {
   return `${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-function formatMinSec(totalSeconds?: number) {
-  if (!totalSeconds) return null;
-  const m = Math.floor(totalSeconds / 60);
-  const s = totalSeconds % 60;
-  return `${m}:${String(s).padStart(2, '0')}`;
-}
-
 export interface PlanSummary {
   goalLine: string;
   startingPointLine: string;
@@ -189,46 +207,116 @@ export function buildPlanSummary(answers: OnboardingAnswers): PlanSummary {
   const goalOpt = GOAL_OPTIONS.find(g => g.key === answers.goal);
 
   let goalLine = goalOpt?.label ?? 'Your fitness goal';
-  if (answers.goal === 'lose_weight' && answers.startingWeightKg && answers.goalWeightKg) {
-    const diff = Math.round((answers.startingWeightKg - answers.goalWeightKg) * 10) / 10;
-    goalLine = answers.goalTargetDate
-      ? `Lose ${diff} kg by ${monthYear(answers.goalTargetDate)}`
-      : `Lose ${diff} kg`;
-  } else if (answers.goal === 'improve_running') {
-    const target = formatMinSec(answers.goalDetails.target_5k_seconds);
-    goalLine = target
-      ? `Run a 5K in ${target}${answers.goalTargetDate ? ` by ${monthYear(answers.goalTargetDate)}` : ''}`
-      : 'Improve your 5K time';
-  } else if (answers.goal === 'build_muscle') {
-    const target = STRENGTH_TARGET_OPTIONS.find(o => o.key === answers.goalDetails.strength_target);
-    goalLine = target?.label ?? 'Build strength';
-  } else if (answers.goal === 'improve_health') {
-    const focus = HEALTH_FOCUS_OPTIONS.find(o => o.key === answers.goalDetails.health_focus);
-    goalLine = focus ? `Improve your ${focus.label.toLowerCase()}` : 'Improve your health';
-  } else if (answers.goal === 'healthy_lifestyle') {
-    const focus = LIFESTYLE_FOCUS_OPTIONS.find(o => o.key === answers.goalDetails.lifestyle_focus);
-    goalLine = focus?.label ?? 'Build a healthier lifestyle';
+  if ((answers.goal === 'lose_weight' || answers.goal === 'build_muscle' || answers.goal === 'maintain_weight') && answers.startingWeightKg && answers.goalWeightKg) {
+    const diff = Math.round((answers.goalWeightKg - answers.startingWeightKg) * 10) / 10;
+    if (diff > 0) {
+      goalLine = answers.goalTargetDate ? `Gain ${diff} kg by ${monthYear(answers.goalTargetDate)}` : `Gain ${diff} kg`;
+    } else if (diff < 0) {
+      goalLine = answers.goalTargetDate ? `Lose ${Math.abs(diff)} kg by ${monthYear(answers.goalTargetDate)}` : `Lose ${Math.abs(diff)} kg`;
+    } else {
+      goalLine = answers.goal === 'build_muscle' ? 'Build muscle while maintaining your current weight' : 'Maintain your current weight';
+    }
+  } else if (answers.goal === 'maintain_weight') {
+    const focus = joinFocusLabels(answers.goalDetails.health_focus);
+    goalLine = focus ? `Maintain a healthy weight — focus on ${focus}` : 'Maintain a healthy weight';
+  } else if (answers.goal === 'reduce_stress') {
+    const focus = joinFocusLabels(answers.goalDetails.health_focus);
+    goalLine = focus ? `Reduce stress — focus on ${focus}` : 'Reduce stress & improve wellbeing';
   }
 
   const activityOpt = ACTIVITY_LEVEL_OPTIONS.find(a => a.key === answers.activityLevel);
   const startingPointLine = activityOpt?.label ?? 'Just getting started';
 
-  const focusOpt =
-    HEALTH_FOCUS_OPTIONS.find(o => o.key === answers.goalDetails.health_focus) ??
-    LIFESTYLE_FOCUS_OPTIONS.find(o => o.key === answers.goalDetails.lifestyle_focus);
+  const focusLabel = joinFocusLabels(answers.goalDetails.health_focus);
   const supportStyle = deriveSupportStyle(answers.barriers);
-  const focusLine = focusOpt?.label
-    ?? (supportStyle === 'beginner_support' ? 'Build confidence & consistency'
+  const focusLine = focusLabel
+    ? focusLabel.replace(/^./, c => c.toUpperCase())
+    : (supportStyle === 'beginner_support' ? 'Build confidence & consistency'
       : supportStyle === 'goal_support' ? 'Structure & accountability'
       : 'Steady, sustainable progress');
 
   const approach: string[] = [];
-  if (answers.goal === 'lose_weight' || answers.goal === 'build_muscle') approach.push('Strength');
-  if (answers.goal === 'lose_weight' || answers.goal === 'improve_running') approach.push('Cardio');
-  if (answers.goal === 'improve_health' || answers.goal === 'healthy_lifestyle') approach.push('Movement');
-  if (answers.barriers.includes('nutrition') || answers.goal === 'lose_weight' || answers.goal === 'healthy_lifestyle') approach.push('Nutrition');
+  if (answers.goal === 'lose_weight' || answers.goal === 'build_muscle') approach.push('Strength', 'Cardio');
+  if (answers.goal === 'maintain_weight' || answers.goal === 'reduce_stress') approach.push('Movement');
+  if (answers.barriers.includes('nutrition') || answers.goal === 'lose_weight' || answers.goal === 'maintain_weight') approach.push('Nutrition');
   if (answers.barriers.includes('accountability') || answers.barriers.includes('motivation')) approach.push('Community');
   if (approach.length === 0) approach.push('Movement', 'Consistency');
 
   return { goalLine, startingPointLine, focusLine, approach: Array.from(new Set(approach)) };
+}
+
+export interface FallbackWeekItem {
+  day: string;
+  label: string;
+}
+
+// Fixed, deterministic day slots per approach area — no AI, no new
+// recommendation logic, just a simple static mapping over the approach
+// array buildPlanSummary already computes. This exists so the no-AI
+// fallback can still show "at least a basic first-week structure"
+// alongside goal/starting-point/recommendation/focus, without building a
+// second complex planning engine.
+const APPROACH_WEEK_DAYS: Record<string, string[]> = {
+  Strength: ['Monday', 'Thursday'],
+  Cardio: ['Tuesday', 'Saturday'],
+  Movement: ['Wednesday', 'Saturday'],
+};
+
+/**
+ * A minimal, deterministic first-week structure for the no-AI fallback —
+ * intentionally simple (fixed days per approach area), not a substitute for
+ * the AI-generated starting_plan.activities.
+ */
+export function buildFallbackWeekPlan(approach: string[]): FallbackWeekItem[] {
+  const items: FallbackWeekItem[] = [];
+  for (const area of approach) {
+    const days = APPROACH_WEEK_DAYS[area];
+    if (!days) continue;
+    for (const day of days) items.push({ day, label: `${area} session` });
+  }
+  return items;
+}
+
+// ─── Resume-in-progress-onboarding routing ─────────────────────────────────
+
+export type OnboardingStepRoute =
+  | '/onboarding/goal'
+  | '/onboarding/success'
+  | '/onboarding/starting-point'
+  | '/onboarding/barriers'
+  | '/onboarding/activities';
+
+/**
+ * Mirrors each step screen's own `canContinue` rule for step 2 ("What does
+ * success look like for you?") — kept in sync by hand since the local
+ * text-input state those screens use for weight fields isn't available here.
+ */
+export function isStep2Complete(answers: OnboardingAnswers): boolean {
+  switch (answers.goal) {
+    case 'lose_weight':
+    case 'build_muscle':
+    case 'maintain_weight':
+      return !!answers.startingWeightKg && !!answers.goalWeightKg
+        && !!answers.goalTargetDate && !!answers.strengthExperience;
+    case 'reduce_stress':
+      return (answers.goalDetails.health_focus ?? []).length > 0;
+    default:
+      return false;
+  }
+}
+
+/**
+ * Figures out which onboarding step an in-progress (not yet completed) user
+ * should land back on, so skipping out mid-flow and returning later resumes
+ * where they left off instead of restarting at step 1.
+ */
+export function resolveOnboardingResumeStep(
+  answers: OnboardingAnswers,
+  hasActivityHours: boolean,
+): OnboardingStepRoute {
+  if (!answers.goal) return '/onboarding/goal';
+  if (!isStep2Complete(answers)) return '/onboarding/success';
+  if (!hasActivityHours) return '/onboarding/starting-point';
+  if (answers.barriers.length === 0) return '/onboarding/barriers';
+  return '/onboarding/activities';
 }

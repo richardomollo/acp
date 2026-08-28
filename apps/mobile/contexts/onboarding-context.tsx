@@ -1,19 +1,31 @@
-import { createContext, useCallback, useContext, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
-  EMPTY_ANSWERS, deriveSupportStyle,
+  EMPTY_ANSWERS, deriveSupportStyle, resolveOnboardingResumeStep,
   type OnboardingAnswers, type PrimaryGoal, type ActivityLevel, type StrengthExperience,
-  type Barrier, type PreferredActivity, type GoalDetails,
+  type Barrier, type PreferredActivity, type GoalDetails, type OnboardingStepRoute,
 } from '@/lib/onboarding';
 
 interface OnboardingCtx {
   answers: OnboardingAnswers;
+  /** True once the initial DB fetch (for resuming in-progress onboarding)
+   *  has finished, whether or not it found anything to resume. */
+  hydrated: boolean;
+  /** Where an in-progress user should be sent back to, resolved once from
+   *  their last-saved fitness_profile/health_profile rows. Null if there's
+   *  nothing to resume (new user, or onboarding already completed). */
+  resumeRoute: OnboardingStepRoute | null;
   /** Where "Start my journey" should land — set once on entry (from the
    *  ?redirect param that got the user into onboarding in the first
    *  place) so it survives every step push without being threaded through
    *  each route's params by hand. */
   redirectTo: string;
   setRedirectTo: (path: string) => void;
+  /** First name resolved once on the goal screen (users.name -> auth
+   *  metadata -> email prefix, same chain Home's greeting uses) so the rest
+   *  of the flow can address the user by name without re-resolving it. */
+  userName: string;
+  setUserName: (name: string) => void;
   setGoal: (goal: PrimaryGoal) => void;
   setWeightGoal: (startingWeightKg: number, goalWeightKg: number, goalTargetDate: string) => void;
   setActivityLevel: (level: ActivityLevel) => void;
@@ -44,6 +56,51 @@ export function useOnboarding() {
 export function OnboardingProvider({ children }: { children: React.ReactNode }) {
   const [answers, setAnswers] = useState<OnboardingAnswers>(EMPTY_ANSWERS);
   const [redirectTo, setRedirectTo] = useState('/(tabs)');
+  const [userName, setUserName] = useState('');
+  const [hydrated, setHydrated] = useState(false);
+  const [resumeRoute, setResumeRoute] = useState<OnboardingStepRoute | null>(null);
+
+  // Resume in-progress onboarding: on first mount, pull back whatever was
+  // last saved (via saveProgress, called on every step's Continue/Exit) so
+  // skipping out mid-flow and coming back later resumes at the right step
+  // with the right fields already filled in, instead of starting over.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      if (!userId) { setHydrated(true); return; }
+
+      const [{ data: fp }, { data: hp }] = await Promise.all([
+        supabase.from('fitness_profile')
+          .select('goal, starting_weight_kg, goal_weight_kg, goal_target_date, activity_level, experience_level, goal_details, barriers, preferred_activities, onboarding_completed')
+          .eq('user_id', userId).maybeSingle(),
+        supabase.from('health_profile')
+          .select('sleep_hours_per_night, hours_working_per_week, hours_exercising_per_week')
+          .eq('user_id', userId).maybeSingle(),
+      ]);
+      if (cancelled) return;
+
+      if (fp && fp.goal && !fp.onboarding_completed) {
+        const restored: OnboardingAnswers = {
+          goal: fp.goal,
+          startingWeightKg: fp.starting_weight_kg,
+          goalWeightKg: fp.goal_weight_kg,
+          goalTargetDate: fp.goal_target_date,
+          activityLevel: fp.activity_level,
+          strengthExperience: fp.experience_level,
+          goalDetails: fp.goal_details ?? {},
+          barriers: fp.barriers ?? [],
+          preferredActivities: fp.preferred_activities ?? [],
+        };
+        const hasActivityHours = !!(hp?.sleep_hours_per_night && hp?.hours_working_per_week != null && hp?.hours_exercising_per_week != null);
+        setAnswers(restored);
+        setResumeRoute(resolveOnboardingResumeStep(restored, hasActivityHours));
+      }
+      setHydrated(true);
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const setGoal = useCallback((goal: PrimaryGoal) => {
     setAnswers(a => {
@@ -137,9 +194,21 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     const userId = session?.user?.id;
     if (!userId) throw new Error('Not signed in');
 
+    // Snapshot the starting-weight reference point exactly once — same rule
+    // Personal Details' save handler follows — so the Profile tab's weight
+    // progress card has something fixed to measure against from the very
+    // first completed onboarding, not just from a later manual edit.
+    const { data: existing } = await supabase
+      .from('fitness_profile')
+      .select('initial_weight_kg')
+      .eq('user_id', userId)
+      .maybeSingle();
+    const initialWeightKg = existing?.initial_weight_kg ?? answers.startingWeightKg;
+
     const supportStyle = deriveSupportStyle(answers.barriers);
     const row = {
       ...buildRow(userId, answers),
+      initial_weight_kg: initialWeightKg,
       goal_details: { ...answers.goalDetails, support_style: supportStyle },
       onboarding_completed: true,
       onboarding_completed_at: new Date().toISOString(),
@@ -153,7 +222,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
 
   return (
     <OnboardingContext.Provider value={{
-      answers, redirectTo, setRedirectTo, setGoal, setWeightGoal, setActivityLevel, setStrengthExperience,
+      answers, hydrated, resumeRoute, redirectTo, setRedirectTo, userName, setUserName, setGoal, setWeightGoal, setActivityLevel, setStrengthExperience,
       setGoalDetails, setGoalTargetDate, toggleBarrier, togglePreferredActivity,
       saveProgress, completeOnboarding, reset,
     }}>

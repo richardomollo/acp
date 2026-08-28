@@ -40,7 +40,7 @@ const styles = StyleSheet.create({
   fill: {
     height: '100%',
     borderRadius: radii.pill,
-    backgroundColor: palette.blue500,
+    backgroundColor: palette.ink900,
   },
   label: {
     fontSize: fontSize.xs,

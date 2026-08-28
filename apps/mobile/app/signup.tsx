@@ -14,6 +14,9 @@ import {
 } from 'react-native';
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { GoogleSignInButton, isGoogleSignInSupported } from '@/components/google-signin-button';
+import { AppleSignInButton } from '@/components/apple-signin-button';
+import { getPostAuthDestination } from '@/lib/onboarding-auth';
 import { palette, radii, fontSize } from '@/constants/theme';
 
 export default function SignUpScreen() {
@@ -22,12 +25,30 @@ export default function SignUpScreen() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
+  const redirectTo = (params.redirect as string) || '/(tabs)';
+
+  // Google/Apple sign-in can also match an existing account (already
+  // completed onboarding), so — unlike the email form above, where every
+  // submission is guaranteed brand-new — route through the same
+  // completed-vs-not check the login screen uses instead of forcing
+  // onboarding unconditionally.
+  const handleSocialAuthSuccess = async (userId: string) => {
+    const dest = await getPostAuthDestination(userId, redirectTo);
+    const href = dest === '/onboarding/goal' ? `${dest}?redirect=${encodeURIComponent(redirectTo)}` : dest;
+    router.replace(href as any);
+  };
+
+  const handleSocialAuthError = (message: string) => {
+    Alert.alert('Error', message);
+  };
+
   const handleSignUp = async () => {
-    if (!name || !email || !password) {
+    if (!name || !email || !password || !confirmPassword) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
@@ -37,6 +58,10 @@ export default function SignUpScreen() {
     }
     if (password.length < 6) {
       Alert.alert('Error', 'Password must be at least 6 characters');
+      return;
+    }
+    if (password !== confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match');
       return;
     }
 
@@ -77,18 +102,18 @@ export default function SignUpScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Logo */}
-        <View style={styles.logoRow}>
+        <View style={styles.logoCenter}>
           <Image
             source={require('@/assets/images/icon.png')}
-            style={styles.logoIcon}
+            style={styles.bigLogo}
             resizeMode="contain"
           />
-          <Text style={styles.logoText}>Active CityPass</Text>
+          <Text style={styles.brandName}>Active CityPass</Text>
         </View>
 
         {/* Hero */}
-        <Text style={styles.headline}>Create your account</Text>
-        <Text style={styles.subheadline}>Access gyms, studios & wellness across Nairobi</Text>
+        <Text style={styles.headline}>Your active life starts here.</Text>
+        <Text style={styles.subheadline}>Science-backed wellness, fitness, nutrition and experiences</Text>
 
         {/* Form */}
         <View style={styles.form}>
@@ -120,6 +145,17 @@ export default function SignUpScreen() {
             secureTextEntry
             autoCapitalize="none"
             editable={!loading}
+            returnKeyType="next"
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Repeat password"
+            placeholderTextColor={palette.gray300}
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            secureTextEntry
+            autoCapitalize="none"
+            editable={!loading}
             returnKeyType="go"
             onSubmitEditing={handleSignUp}
           />
@@ -141,6 +177,30 @@ export default function SignUpScreen() {
             By signing up you agree to our Terms of Service and Privacy Policy.
           </Text>
         </View>
+
+        {/* Social */}
+        {(isGoogleSignInSupported || Platform.OS === 'ios') && (
+          <>
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>or</Text>
+              <View style={styles.dividerLine} />
+            </View>
+            <View style={styles.socialGroup}>
+              <AppleSignInButton
+                onSuccess={handleSocialAuthSuccess}
+                onError={handleSocialAuthError}
+              />
+              {isGoogleSignInSupported && (
+                <GoogleSignInButton
+                  disabled={loading}
+                  onSuccess={handleSocialAuthSuccess}
+                  onError={handleSocialAuthError}
+                />
+              )}
+            </View>
+          </>
+        )}
 
         {/* Footer links */}
         <View style={styles.footer}>
@@ -168,22 +228,20 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
 
-  logoRow: {
-    flexDirection: 'row',
+  logoCenter: {
     alignItems: 'center',
-    gap: 8,
     marginBottom: 32,
   },
-  logoIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: radii.sm,
+  bigLogo: {
+    width: 100,
+    height: 100,
+    borderRadius: radii.lg,
+    marginBottom: 12,
   },
-  logoText: {
-    fontSize: fontSize.lg,
-    fontWeight: '700',
-    color: palette.ink700,
-    letterSpacing: -0.2,
+  brandName: {
+    fontSize: fontSize.xl,
+    fontWeight: '800',
+    letterSpacing: 0.4,
   },
 
   headline: {
@@ -193,11 +251,13 @@ const styles = StyleSheet.create({
     lineHeight: 38,
     letterSpacing: -0.5,
     marginBottom: 8,
+    textAlign: 'center',
   },
   subheadline: {
     fontSize: fontSize.base,
     color: palette.gray450,
     marginBottom: 28,
+    textAlign: 'center',
   },
 
   form: {
@@ -232,6 +292,27 @@ const styles = StyleSheet.create({
     color: palette.gray300,
     textAlign: 'center',
     lineHeight: 16,
+  },
+
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: palette.hairline,
+  },
+  dividerText: {
+    fontSize: fontSize.xs,
+    color: palette.gray300,
+    fontWeight: '500',
+  },
+  socialGroup: {
+    gap: 12,
+    marginBottom: 24,
   },
 
   footer: {

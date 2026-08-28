@@ -14,6 +14,7 @@ import {
   type Recurrence,
 } from '@/services/notifications';
 import { Ionicons } from '@expo/vector-icons';
+import { workoutExecutionService, type TodaysWorkoutResult } from '@/services/workout-execution-service';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -213,6 +214,7 @@ export default function WorkoutHubScreen() {
   const [tasks, setTasks]           = useState<TaskRow[]>([]);
   const [loading, setLoading]       = useState(true);
   const [userId, setUserId]         = useState<string | null>(null);
+  const [todaysWorkout, setTodaysWorkout] = useState<TodaysWorkoutResult | null>(null);
 
   // Local notifications only fire on the device that registered them, so a
   // schedule a trainer creates from the partner app can't ring on this
@@ -247,6 +249,11 @@ export default function WorkoutHubScreen() {
       setLoading(true);
       const session = await authService.getSession();
       if (active) setUserId(session?.user.id ?? null);
+      if (session?.user.id) {
+        workoutExecutionService.getTodaysWorkout(session.user.id).then(r => { if (active) setTodaysWorkout(r); });
+      } else if (active) {
+        setTodaysWorkout(null);
+      }
 
       if (!session?.user.id) {
         if (active) { setMyWorkouts([]); setSchedules([]); setTasks([]); setLoading(false); }
@@ -341,6 +348,78 @@ export default function WorkoutHubScreen() {
           contentContainerStyle={s.content}
           showsVerticalScrollIndicator={false}
         >
+          {/* ── Today's Workout (Day 3) ── */}
+          {todaysWorkout && !['no_active_programme', 'not_authorized', 'programme_complete'].includes(todaysWorkout.status) && (
+            <>
+              <View style={s.bodyPartHeader}>
+                <ThemedText style={s.bodyPartEyebrow}>TODAY</ThemedText>
+                <ThemedText style={s.bodyPartTitle}>Today&apos;s Workout</ThemedText>
+              </View>
+              {todaysWorkout.status === 'rest_day' ? (
+                <View style={[s.createCta, { opacity: 1 }]}>
+                  <View style={s.createCtaIcon}>
+                    <Ionicons name="moon-outline" size={20} color={palette.blue500} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <ThemedText style={s.createCtaTitle}>Recovery day</ThemedText>
+                    <ThemedText style={s.createCtaSub}>
+                      {todaysWorkout.nextWorkoutTitle ? `Your next workout is ${todaysWorkout.nextWorkoutTitle}.` : 'No workout scheduled today.'}
+                    </ThemedText>
+                  </View>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={s.createCta}
+                  onPress={() => {
+                    if ('workoutId' in todaysWorkout) {
+                      router.push({ pathname: '/workout-player', params: { workoutId: todaysWorkout.workoutId } } as any);
+                    }
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <View style={s.createCtaIcon}>
+                    <Ionicons
+                      name={todaysWorkout.status === 'completed' ? 'checkmark-circle' : todaysWorkout.status === 'missed' ? 'alert-circle-outline' : 'play-circle-outline'}
+                      size={22} color={palette.blue500}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <ThemedText style={s.createCtaTitle}>
+                      {'title' in todaysWorkout ? todaysWorkout.title : ''}
+                    </ThemedText>
+                    <ThemedText style={s.createCtaSub}>
+                      {todaysWorkout.status === 'completed' ? 'Workout complete · View summary'
+                        : todaysWorkout.status === 'in_progress' ? 'In progress · Resume'
+                        : todaysWorkout.status === 'missed' ? 'Missed — you can still do it'
+                        : 'Start Workout'}
+                    </ThemedText>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={palette.gray300} />
+                </TouchableOpacity>
+              )}
+            </>
+          )}
+
+          {/* ── Your Programme (ACP Intelligence™) ── */}
+          <View style={s.bodyPartHeader}>
+            <ThemedText style={s.bodyPartEyebrow}>ACP INTELLIGENCE™</ThemedText>
+            <ThemedText style={s.bodyPartTitle}>Your Programme</ThemedText>
+          </View>
+          <TouchableOpacity
+            style={s.createCta}
+            onPress={() => router.push('/my-programme' as any)}
+            activeOpacity={0.85}
+          >
+            <View style={s.createCtaIcon}>
+              <Ionicons name="sparkles-outline" size={22} color={palette.blue500} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <ThemedText style={s.createCtaTitle}>Your personalised programme</ThemedText>
+              <ThemedText style={s.createCtaSub}>A structured, multi-week plan built from your goal</ThemedText>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={palette.gray300} />
+          </TouchableOpacity>
+
           {/* ── Upcoming Workouts ── */}
           {upcoming.length > 0 && (
             <>

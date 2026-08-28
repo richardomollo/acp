@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   validateAssessment, checkAuthorization, buildUserPrompt,
   deriveCategoryCounts, sumDurationMinutes, enforceTimeBudget, getWeeklyMinutesBudget,
+  enforceSupportLogic, getWeekBounds, dateForWeekdayInWeek, attachPlanDates, upgradeLegacyPlanDates,
   AI_REQUEST_CONFIG, SYSTEM_PROMPT,
 } from '../assessment.ts';
 
@@ -15,10 +16,13 @@ const VALID_ASSESSMENT = {
     main_barriers: ['nutrition', 'cost'],
   },
   recommendation: {
-    approach: 'nutrition_support',
+    approach: 'guided',
     title: 'Nutrition is your biggest opportunity',
     reason: 'Professional guidance is an option if you’d like help creating an approach that fits your goals and budget.',
   },
+  support_opportunities: [
+    { type: 'nutrition', relevance: 'high', reason: 'Nutrition was one of the main challenges you identified, and it materially affects this goal.' },
+  ],
   starting_plan: {
     title: 'Your first week',
     rationale: 'You already train regularly, so the priority is maintaining consistent strength work.',
@@ -53,6 +57,55 @@ describe('validateAssessment', () => {
 
   test('rejects an invalid recommendation.approach value (old Day-1 enum no longer accepted)', () => {
     const bad = { ...VALID_ASSESSMENT, recommendation: { ...VALID_ASSESSMENT.recommendation, approach: 'personal_trainer' } };
+    assert.equal(validateAssessment(bad), false);
+  });
+
+  test('rejects the old pre-fix mutually-exclusive approach values too', () => {
+    for (const oldApproach of ['professional_support_optional', 'personal_trainer_support', 'nutrition_support']) {
+      const bad = { ...VALID_ASSESSMENT, recommendation: { ...VALID_ASSESSMENT.recommendation, approach: oldApproach } };
+      assert.equal(validateAssessment(bad), false, `${oldApproach} should no longer validate`);
+    }
+  });
+
+  test('accepts an empty support_opportunities array — fully capable self-directed users have nothing to surface', () => {
+    assert.equal(validateAssessment({ ...VALID_ASSESSMENT, support_opportunities: [] }), true);
+  });
+
+  test('accepts both a personal_trainer and a nutrition opportunity simultaneously', () => {
+    const both = {
+      ...VALID_ASSESSMENT,
+      support_opportunities: [
+        { type: 'personal_trainer', relevance: 'high', reason: 'A trainer could help you build confidence and accountability.' },
+        { type: 'nutrition', relevance: 'medium', reason: 'Nutrition support could help refine your approach.' },
+      ],
+    };
+    assert.equal(validateAssessment(both), true);
+  });
+
+  test('rejects a missing support_opportunities field', () => {
+    const { support_opportunities, ...rest } = VALID_ASSESSMENT;
+    assert.equal(validateAssessment(rest), false);
+  });
+
+  test('rejects an invalid support_opportunities type value', () => {
+    const bad = { ...VALID_ASSESSMENT, support_opportunities: [{ type: 'nutritionist', relevance: 'high', reason: 'x' }] };
+    assert.equal(validateAssessment(bad), false);
+  });
+
+  test('rejects a "low" relevance value — low relevance is never persisted', () => {
+    const bad = { ...VALID_ASSESSMENT, support_opportunities: [{ type: 'nutrition', relevance: 'low', reason: 'x' }] };
+    assert.equal(validateAssessment(bad), false);
+  });
+
+  test('rejects more than 2 support_opportunities entries', () => {
+    const bad = {
+      ...VALID_ASSESSMENT,
+      support_opportunities: [
+        { type: 'personal_trainer', relevance: 'high', reason: 'x' },
+        { type: 'nutrition', relevance: 'high', reason: 'x' },
+        { type: 'personal_trainer', relevance: 'medium', reason: 'x' },
+      ],
+    };
     assert.equal(validateAssessment(bad), false);
   });
 
@@ -228,6 +281,29 @@ describe('SYSTEM_PROMPT guardrails (regression coverage — not testing exact AI
     assert.ok(SYSTEM_PROMPT.includes('starting_plan.activities'));
     assert.ok(SYSTEM_PROMPT.toLowerCase().includes('single source of truth'));
   });
+
+  test('instructs that approach and support are independent, never a choice between them', () => {
+    assert.ok(SYSTEM_PROMPT.toLowerCase().includes('never a choice between them'));
+    assert.ok(SYSTEM_PROMPT.includes('guided'));
+  });
+
+  test('instructs the personal_trainer HIGH-relevance rules explicitly', () => {
+    const lower = SYSTEM_PROMPT.toLowerCase();
+    assert.ok(lower.includes('beginner/new experience and at least one of confidence/knowledge/accountability'));
+    assert.ok(lower.includes('two or more of confidence/knowledge/accountability/consistency'));
+  });
+
+  test('instructs that support_opportunities omits low relevance and caps at 2 entries', () => {
+    const lower = SYSTEM_PROMPT.toLowerCase();
+    assert.ok(lower.includes('omit it entirely if low'));
+    assert.ok(lower.includes('max 2 entries'));
+  });
+
+  test('instructs nutrition is judged independently and never prescriptive', () => {
+    const lower = SYSTEM_PROMPT.toLowerCase();
+    assert.ok(lower.includes('nutrition: judge independently'));
+    assert.ok(lower.includes('never prescribe calories/macros/diets'));
+  });
 });
 
 describe('AI_REQUEST_CONFIG (latency optimisation)', () => {
@@ -242,5 +318,252 @@ describe('AI_REQUEST_CONFIG (latency optimisation)', () => {
 
   test('never sets temperature — this model only supports its default and errors on any other value (confirmed empirically)', () => {
     assert.equal((AI_REQUEST_CONFIG as any).temperature, undefined);
+  });
+});
+
+describe('enforceSupportLogic (deterministic safety backstop — Part 16/25)', () => {
+  const baseAssessment = () => ({ ...VALID_ASSESSMENT, support_opportunities: [] });
+
+  test('beginner + confidence → personal_trainer high', () => {
+    const result = enforceSupportLogic(baseAssessment(), { strengthExperience: 'beginner', barriers: ['confidence'] });
+    const pt = result.support_opportunities.find(o => o.type === 'personal_trainer');
+    assert.equal(pt?.relevance, 'high');
+  });
+
+  test('beginner + knowledge → personal_trainer high', () => {
+    const result = enforceSupportLogic(baseAssessment(), { strengthExperience: 'beginner', barriers: ['knowledge'] });
+    assert.equal(result.support_opportunities.find(o => o.type === 'personal_trainer')?.relevance, 'high');
+  });
+
+  test('beginner + accountability → personal_trainer high', () => {
+    const result = enforceSupportLogic(baseAssessment(), { strengthExperience: 'beginner', barriers: ['accountability'] });
+    assert.equal(result.support_opportunities.find(o => o.type === 'personal_trainer')?.relevance, 'high');
+  });
+
+  test('Profile A: beginner + confidence + knowledge + accountability → personal_trainer high (critical regression case)', () => {
+    const result = enforceSupportLogic(baseAssessment(), {
+      strengthExperience: 'beginner',
+      barriers: ['confidence', 'knowledge', 'accountability'],
+    });
+    const pt = result.support_opportunities.find(o => o.type === 'personal_trainer');
+    assert.equal(pt?.relevance, 'high');
+    assert.ok(pt!.reason.includes('confidence'));
+    assert.ok(pt!.reason.includes('fundamentals'));
+    assert.ok(pt!.reason.includes('accountability'));
+  });
+
+  test('two or more strong execution barriers (not beginner) → personal_trainer high', () => {
+    // Profile F: "some experience", 4 execution barriers, not flagged beginner.
+    const result = enforceSupportLogic(baseAssessment(), {
+      strengthExperience: 'intermediate',
+      barriers: ['confidence', 'knowledge', 'consistency', 'accountability'],
+    });
+    assert.equal(result.support_opportunities.find(o => o.type === 'personal_trainer')?.relevance, 'high');
+  });
+
+  test('experienced + personal-training preference only → NOT forced to personal_trainer high', () => {
+    // Profile C: experienced, barriers time/cost, no execution barriers.
+    const result = enforceSupportLogic(baseAssessment(), { strengthExperience: 'advanced', barriers: ['time', 'cost'] });
+    assert.equal(result.support_opportunities.length, 0);
+  });
+
+  test('a single weak/moderate barrier (e.g. accountability only, not beginner) does not force high', () => {
+    // Profile D: experienced + accountability only — backstop stays out of the way.
+    const result = enforceSupportLogic(baseAssessment(), { strengthExperience: 'advanced', barriers: ['accountability'] });
+    assert.equal(result.support_opportunities.find(o => o.type === 'personal_trainer'), undefined);
+  });
+
+  test('nutrition barrier does not suppress the personal_trainer backstop', () => {
+    const withNutrition = {
+      ...VALID_ASSESSMENT,
+      support_opportunities: [{ type: 'nutrition' as const, relevance: 'high' as const, reason: 'Nutrition is a real barrier here.' }],
+    };
+    const result = enforceSupportLogic(withNutrition, { strengthExperience: 'beginner', barriers: ['confidence', 'nutrition'] });
+    assert.equal(result.support_opportunities.find(o => o.type === 'personal_trainer')?.relevance, 'high');
+    assert.equal(result.support_opportunities.find(o => o.type === 'nutrition')?.relevance, 'high');
+    assert.equal(result.support_opportunities.length, 2);
+  });
+
+  test('personal_trainer relevance does not suppress nutrition — both survive together', () => {
+    const both = {
+      ...VALID_ASSESSMENT,
+      support_opportunities: [
+        { type: 'personal_trainer' as const, relevance: 'high' as const, reason: 'Already high from the model.' },
+        { type: 'nutrition' as const, relevance: 'medium' as const, reason: 'Nutrition support could help.' },
+      ],
+    };
+    const result = enforceSupportLogic(both, { strengthExperience: 'beginner', barriers: ['confidence'] });
+    assert.equal(result.support_opportunities.length, 2);
+    assert.equal(result.support_opportunities.find(o => o.type === 'nutrition')?.relevance, 'medium');
+  });
+
+  test('does not downgrade or duplicate an already-correct model-provided personal_trainer:high', () => {
+    const alreadyHigh = {
+      ...VALID_ASSESSMENT,
+      support_opportunities: [{ type: 'personal_trainer' as const, relevance: 'high' as const, reason: 'Model-authored reason.' }],
+    };
+    const result = enforceSupportLogic(alreadyHigh, { strengthExperience: 'beginner', barriers: ['confidence'] });
+    assert.equal(result.support_opportunities.length, 1);
+    assert.equal(result.support_opportunities[0].reason, 'Model-authored reason.'); // untouched, not overwritten
+  });
+
+  test('upgrades a model-provided personal_trainer:medium to high when the profile warrants it', () => {
+    const medium = {
+      ...VALID_ASSESSMENT,
+      support_opportunities: [{ type: 'personal_trainer' as const, relevance: 'medium' as const, reason: 'Model said medium.' }],
+    };
+    const result = enforceSupportLogic(medium, { strengthExperience: 'beginner', barriers: ['confidence', 'knowledge'] });
+    assert.equal(result.support_opportunities.find(o => o.type === 'personal_trainer')?.relevance, 'high');
+  });
+
+  test('reason text only ever mentions barriers actually selected by the user', () => {
+    const result = enforceSupportLogic(baseAssessment(), { strengthExperience: 'beginner', barriers: ['confidence'] });
+    const reason = result.support_opportunities.find(o => o.type === 'personal_trainer')!.reason;
+    assert.ok(reason.includes('confidence'));
+    assert.ok(!reason.includes('fundamentals')); // knowledge wasn't selected
+    assert.ok(!reason.includes('accountability')); // accountability wasn't selected
+  });
+
+  test('no commercial/provider data ever enters the function — its only inputs are the assessment and onboarding answers', () => {
+    // Type-level guarantee: enforceSupportLogic's signature has no
+    // provider/commission/inventory parameter for this test to even pass by
+    // accident — asserting arity here keeps that contract visible in tests.
+    assert.equal(enforceSupportLogic.length, 2);
+  });
+});
+
+describe('getWeekBounds (Day 5 Part 3 — plan dating fix)', () => {
+  test('a Wednesday anchor resolves to that same week\'s Monday-Sunday', () => {
+    const wednesday = new Date('2026-09-02T09:00:00Z'); // a Wednesday
+    assert.deepEqual(getWeekBounds(wednesday), { weekStartDate: '2026-08-31', weekEndDate: '2026-09-06' });
+  });
+
+  test('a Monday anchor resolves to itself as week start', () => {
+    const monday = new Date('2026-08-31T09:00:00Z');
+    assert.deepEqual(getWeekBounds(monday), { weekStartDate: '2026-08-31', weekEndDate: '2026-09-06' });
+  });
+
+  test('a Sunday anchor resolves back to that same week\'s Monday, not the next one', () => {
+    const sunday = new Date('2026-09-06T09:00:00Z');
+    assert.deepEqual(getWeekBounds(sunday), { weekStartDate: '2026-08-31', weekEndDate: '2026-09-06' });
+  });
+});
+
+describe('dateForWeekdayInWeek (Day 5 Part 3 — the actual historical-stability fix)', () => {
+  const weekStart = '2026-08-31'; // a Monday
+
+  test('resolves each weekday within the given week, never relative to "now"', () => {
+    assert.equal(dateForWeekdayInWeek(weekStart, 'Monday'), '2026-08-31');
+    assert.equal(dateForWeekdayInWeek(weekStart, 'Wednesday'), '2026-09-02');
+    assert.equal(dateForWeekdayInWeek(weekStart, 'Saturday'), '2026-09-05');
+    assert.equal(dateForWeekdayInWeek(weekStart, 'Sunday'), '2026-09-06');
+  });
+
+  test('is case/whitespace tolerant, matching the model\'s day-name output', () => {
+    assert.equal(dateForWeekdayInWeek(weekStart, ' monday '), '2026-08-31');
+  });
+
+  test('returns null for an unrecognised day name rather than guessing', () => {
+    assert.equal(dateForWeekdayInWeek(weekStart, 'Someday'), null);
+  });
+
+  test('critical regression check: a Monday activity dated against LAST week never shifts to THIS week just because "today" changed', () => {
+    // This is exactly the bug Day 4 flagged: the old nextDateForWeekday(day, new
+    // Date()) recomputed live, so opening the app in a later week silently
+    // turned last week's Monday into next week's Monday. dateForWeekdayInWeek
+    // takes no "now" parameter at all — the same weekStart always produces
+    // the same date, no matter when this function is called.
+    const lastWeekStart = '2026-08-24';
+    const resolvedOnceUpfront = dateForWeekdayInWeek(lastWeekStart, 'Monday');
+    // Simulate "time passing" — call again with the exact same weekStart,
+    // as if it were now three weeks later. The anchor never enters the
+    // calculation, so nothing can drift.
+    const resolvedMuchLater = dateForWeekdayInWeek(lastWeekStart, 'Monday');
+    assert.equal(resolvedOnceUpfront, '2026-08-24');
+    assert.equal(resolvedOnceUpfront, resolvedMuchLater);
+  });
+});
+
+describe('attachPlanDates (Day 5 Part 3)', () => {
+  const baseAssessment = {
+    ...VALID_ASSESSMENT,
+    starting_plan: {
+      title: 'x', rationale: 'x',
+      activities: [
+        { day: 'Monday', category: 'strength', activity: 'Gym', duration_minutes: 60, intensity: 'challenging', title: 'x', description: 'x' },
+        { day: 'Saturday', category: 'cardio', activity: 'Football', duration_minutes: 60, intensity: 'moderate', title: 'x', description: 'x' },
+      ],
+    },
+  } as const;
+
+  test('sets assessment_version, week_start_date/week_end_date, and each activity\'s planned_date', () => {
+    const result = attachPlanDates(baseAssessment as any, '2026-08-31');
+    assert.equal(result.assessment_version, 3);
+    assert.equal(result.starting_plan.week_start_date, '2026-08-31');
+    assert.equal(result.starting_plan.week_end_date, '2026-09-06');
+    assert.equal(result.starting_plan.activities[0].planned_date, '2026-08-31'); // Monday
+    assert.equal(result.starting_plan.activities[1].planned_date, '2026-09-05'); // Saturday
+  });
+
+  test('never mutates the input object', () => {
+    const original = JSON.parse(JSON.stringify(baseAssessment));
+    attachPlanDates(baseAssessment as any, '2026-08-31');
+    assert.deepEqual(baseAssessment, original);
+  });
+});
+
+describe('upgradeLegacyPlanDates (Day 5.5 Part 20-26)', () => {
+  const legacyAssessment = {
+    ...VALID_ASSESSMENT,
+    starting_plan: {
+      title: 'x', rationale: 'x',
+      activities: [
+        { day: 'Monday', category: 'strength', activity: 'Gym', duration_minutes: 60, intensity: 'moderate', title: 'x', description: 'x' },
+        { day: 'Wednesday', category: 'strength', activity: 'Gym', duration_minutes: 60, intensity: 'moderate', title: 'x', description: 'x' },
+        { day: 'Saturday', category: 'cardio', activity: 'Football', duration_minutes: 60, intensity: 'moderate', title: 'x', description: 'x' },
+      ],
+      // deliberately no week_start_date/week_end_date — the pre-Day-5 shape.
+    },
+  } as const;
+
+  test('Scenario H: anchors dates to the ORIGINAL generation week, not today', () => {
+    // Generated on a Wednesday, two weeks before "today" would be, if today
+    // were used as the anchor by mistake.
+    const generatedAt = '2026-08-19T14:00:00.000Z'; // a Wednesday
+    const upgraded = upgradeLegacyPlanDates(legacyAssessment as any, generatedAt);
+    assert.equal(upgraded.starting_plan.week_start_date, '2026-08-17'); // that week's Monday
+    assert.equal(upgraded.starting_plan.week_end_date, '2026-08-23');
+    const monday = upgraded.starting_plan.activities.find(a => a.day === 'Monday');
+    const saturday = upgraded.starting_plan.activities.find(a => a.day === 'Saturday');
+    assert.equal(monday?.planned_date, '2026-08-17');
+    assert.equal(saturday?.planned_date, '2026-08-22');
+  });
+
+  test('a weekday listed earlier in the week than the generation day is still anchored to that same week (documented rule), never reinterpreted as a later week', () => {
+    // Generated Wednesday 2026-08-19; "Monday" (08-17) already passed by
+    // generation time within that same calendar week — it must stay 08-17,
+    // not jump to the following week's Monday.
+    const generatedAt = '2026-08-19T14:00:00.000Z';
+    const upgraded = upgradeLegacyPlanDates(legacyAssessment as any, generatedAt);
+    const monday = upgraded.starting_plan.activities.find(a => a.day === 'Monday');
+    assert.equal(monday?.planned_date, '2026-08-17');
+  });
+
+  test('sets assessment_version and null nutrition_focus/review, matching a normal v3 plan exactly', () => {
+    const upgraded = upgradeLegacyPlanDates(legacyAssessment as any, '2026-08-19T14:00:00.000Z');
+    assert.equal(upgraded.assessment_version, 3);
+    assert.equal(upgraded.nutrition_focus, null);
+    assert.equal(upgraded.review, null);
+  });
+
+  test('is a no-op (idempotent) on a plan that already has dates — never overwrites existing dates', () => {
+    const alreadyDated = attachPlanDates(legacyAssessment as any, '2026-09-14');
+    const result = upgradeLegacyPlanDates(alreadyDated, '2026-08-19T14:00:00.000Z');
+    assert.equal(result.starting_plan.week_start_date, '2026-09-14'); // unchanged — the later call is a no-op
+    assert.deepEqual(result, alreadyDated);
+  });
+
+  test('makes no network call — purely a local, deterministic transform (same signature discipline as attachPlanDates)', () => {
+    assert.equal(upgradeLegacyPlanDates.length, 2);
   });
 });

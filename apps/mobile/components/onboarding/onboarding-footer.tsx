@@ -40,7 +40,7 @@ const styles = StyleSheet.create({
     borderTopColor: palette.hairline,
   },
   btn: {
-    backgroundColor: palette.blue500,
+    backgroundColor: palette.ink900,
     paddingVertical: 16,
     borderRadius: radii.pill,
     alignItems: 'center',

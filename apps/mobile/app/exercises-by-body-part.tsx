@@ -9,13 +9,12 @@ import { palette, radii, fontSize } from '@/constants/theme';
 import { useState, useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  fetchExercisesByBodyPart,
-  type ExerciseDBExercise,
-} from '@/services/exercisedb';
+import { exerciseService } from '@/services/exercise-service';
+import { type ACPExercise, friendlyProviderErrorMessage } from '@/lib/exercise-types';
 import { supabase } from '@/lib/supabase';
 import { authService } from '@/services/auth';
 import { getStravaStatus } from '@/services/strava';
+import { useMuscleWikiMedia } from '@/hooks/use-musclewiki-media';
 
 const STRAVA_ORANGE = '#FC4C02';
 
@@ -64,14 +63,22 @@ function getGifUrl(name: string, target: string): string | null {
   return `${GIF_BASE}/${folder}/${slug}.gif`;
 }
 
+// Provider media (MuscleWiki video/image) wins when present; otherwise fall
+// back to the existing jsDelivr-hosted GIF set derived from name + muscle —
+// keeps a demonstration visible even for exercises MuscleWiki has no media for.
+function getDemoUrl(ex: ACPExercise): string | null {
+  return ex.media[0]?.url ?? getGifUrl(ex.name, ex.target);
+}
+
 // ── GifImage — silently hides if the CDN 404s ─────────────────────────────────
 
 function GifImage({ url }: { url: string }) {
   const [failed, setFailed] = useState(false);
-  if (failed) return null;
+  const resolvedUrl = useMuscleWikiMedia(url); // MuscleWiki stream URLs need a fresh short-lived token; other URLs pass through unchanged
+  if (failed || !resolvedUrl) return null;
   return (
     <Image
-      source={{ uri: url }}
+      source={{ uri: resolvedUrl }}
       style={{ width: GIF_SIZE, height: GIF_SIZE }}
       contentFit="contain"
       onError={() => setFailed(true)}
@@ -90,12 +97,16 @@ const DIFFICULTY_COLORS: Record<string, { bg: string; text: string }> = {
 
 const EQUIPMENT_ICON: Record<string, string> = {
   'body weight':      'body-outline',
+  'bodyweight':        'body-outline', // MuscleWiki's real vocabulary (verified live, Beta Readiness Step 1)
   'dumbbell':         'barbell-outline',
   'barbell':          'barbell-outline',
   'cable':            'git-branch-outline',
+  'cables':           'git-branch-outline',
   'leverage machine': 'cog-outline',
+  'machine':          'cog-outline',
   'band':             'link-outline',
   'kettlebell':       'barbell-outline',
+  'kettlebells':      'barbell-outline',
   'smith machine':    'barbell-outline',
 };
 
@@ -105,7 +116,7 @@ export default function ExercisesByBodyPartScreen() {
   const { bodyPart } = useLocalSearchParams<{ bodyPart: string }>();
   const router = useRouter();
 
-  const [exercises, setExercises]     = useState<ExerciseDBExercise[]>([]);
+  const [exercises, setExercises]     = useState<ACPExercise[]>([]);
   const [loading, setLoading]         = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [offset, setOffset]           = useState(0);
@@ -128,8 +139,8 @@ export default function ExercisesByBodyPartScreen() {
       setUserId(uid);
       if (!uid) return;
       const [favRes, ratingRes] = await Promise.all([
-        supabase.from('exercise_favorites').select('external_id').eq('user_id', uid).eq('source', 'exercisedb'),
-        supabase.from('exercise_ratings').select('external_id, rating').eq('user_id', uid).eq('source', 'exercisedb'),
+        supabase.from('exercise_favorites').select('external_id').eq('user_id', uid).in('source', ['musclewiki', 'exercisedb']),
+        supabase.from('exercise_ratings').select('external_id, rating').eq('user_id', uid).in('source', ['musclewiki', 'exercisedb']),
       ]);
       setFavoriteIds(new Set(((favRes.data as any[]) ?? []).map(r => r.external_id)));
       setRatings(Object.fromEntries(((ratingRes.data as any[]) ?? []).map(r => [r.external_id, r.rating])));
@@ -146,9 +157,9 @@ export default function ExercisesByBodyPartScreen() {
     });
     if (isFav) {
       await supabase.from('exercise_favorites').delete()
-        .eq('user_id', userId).eq('source', 'exercisedb').eq('external_id', exerciseId);
+        .eq('user_id', userId).eq('source', 'musclewiki').eq('external_id', exerciseId);
     } else {
-      await supabase.from('exercise_favorites').insert({ user_id: userId, source: 'exercisedb', external_id: exerciseId });
+      await supabase.from('exercise_favorites').insert({ user_id: userId, source: 'musclewiki', external_id: exerciseId });
     }
   };
 
@@ -156,7 +167,7 @@ export default function ExercisesByBodyPartScreen() {
     if (!userId) return;
     setRatings(prev => ({ ...prev, [exerciseId]: rating }));
     await supabase.from('exercise_ratings')
-      .upsert({ user_id: userId, source: 'exercisedb', external_id: exerciseId, rating, updated_at: new Date().toISOString() },
+      .upsert({ user_id: userId, source: 'musclewiki', external_id: exerciseId, rating, updated_at: new Date().toISOString() },
         { onConflict: 'user_id,source,external_id' });
   };
 
@@ -166,12 +177,12 @@ export default function ExercisesByBodyPartScreen() {
     setError(null);
 
     try {
-      const data = await fetchExercisesByBodyPart(bodyPart!, LIMIT, nextOffset);
+      const data = await exerciseService.list(bodyPart!, LIMIT, nextOffset);
       setExercises(prev => nextOffset === 0 ? data : [...prev, ...data]);
       setHasMore(data.length === LIMIT);
       setOffset(nextOffset + data.length);
-    } catch (e: any) {
-      setError(e.message ?? 'Failed to load exercises');
+    } catch (e) {
+      setError(friendlyProviderErrorMessage(e));
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -195,7 +206,7 @@ export default function ExercisesByBodyPartScreen() {
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
             <ThemedText style={s.headerTitle}>{label}</ThemedText>
-            <ThemedText style={s.headerSub}>Exercises · ExerciseDB</ThemedText>
+            <ThemedText style={s.headerSub}>Exercises · MuscleWiki</ThemedText>
           </View>
         </SafeAreaView>
 
@@ -242,7 +253,7 @@ export default function ExercisesByBodyPartScreen() {
               const isOpen = !!expanded[ex.id];
               const diff = DIFFICULTY_COLORS[ex.difficulty] ?? DIFFICULTY_COLORS.beginner;
               const equipIcon = (EQUIPMENT_ICON[ex.equipment] ?? 'barbell-outline') as any;
-              const gifUrl = getGifUrl(ex.name, ex.target);
+              const gifUrl = getDemoUrl(ex);
 
               return (
                 <TouchableOpacity

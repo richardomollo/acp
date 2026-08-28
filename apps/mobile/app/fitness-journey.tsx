@@ -12,6 +12,10 @@ import { type Recurrence } from '@/services/notifications';
 import { computeStreak, buildAchievements, type Stats, type Achievement } from '@/services/fitnessStats';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { getProgressSnapshot } from '@/services/progress-service';
+import { interpretProgress } from '@/lib/progress-interpreter';
+import type { ProgressSnapshot, ProgressInterpretation } from '@/lib/progress-types';
+import { getHumanSupportInsight, dismissHumanSupportInsight, type HumanSupportInsight } from '@/services/human-support-service';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -142,6 +146,19 @@ function AchievementBadge({ a }: { a: Achievement }) {
   );
 }
 
+// ── Day 6 — human-support insight copy ──────────────────────────────────────
+// Never phrased as ACP failing — a trainer is framed as an expert layer on
+// top of ACP, and this card only ever renders when a real signal fired.
+const HUMAN_SUPPORT_HEADLINE: Record<string, string> = {
+  PAIN_REPORTED: 'Consider getting professional guidance',
+  REPEATED_DIFFICULTY: 'A trainer could help you progress further',
+  REPEATED_LOW_ADHERENCE: 'A trainer could help you stay on track',
+  PROGRESS_PLATEAU: 'A trainer could help you progress further',
+  REPEATED_ADAPTATION: 'A trainer could take a closer look',
+  BEGINNER_TECHNIQUE_SUPPORT: 'Want help getting started?',
+  TRAINER_REVIEW_RECOMMENDED: 'Something to review with your trainer',
+};
+
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function FitnessJourneyScreen() {
@@ -155,11 +172,16 @@ export default function FitnessJourneyScreen() {
   const [level, setLevel]           = useState<string | null>(null);
   const [startingWeight, setStartingWeight] = useState<number | null>(null);
   const [goalWeight, setGoalWeight] = useState<number | null>(null);
+  const [initialWeightKg, setInitialWeightKg] = useState<number | null>(null);
   const [measurements, setMeasurements] = useState<MeasurementRow[]>([]);
   const [checkins, setCheckins] = useState<CheckinRow[]>([]);
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [nutrition, setNutrition] = useState<NutritionStats>({ streak: 0, mealsLogged: 0, avgProtein: 0, avgHydration: 0 });
   const [communityActivity, setCommunityActivity] = useState<CommunityActivityRow[]>([]);
+  const [progressInsight, setProgressInsight] = useState<ProgressInterpretation | null>(null);
+  const [progressSnapshot, setProgressSnapshot] = useState<ProgressSnapshot | null>(null);
+  const [humanSupport, setHumanSupport] = useState<HumanSupportInsight | null>(null);
+  const [dismissingSupport, setDismissingSupport] = useState(false);
 
   useFocusEffect(useCallback(() => {
     let active = true;
@@ -173,6 +195,22 @@ export default function FitnessJourneyScreen() {
         setLoading(false);
         return;
       }
+
+      // Day 4 — ACP Progress Intelligence. Read-only: derives its insight
+      // from the same persisted programme/workout/measurement data this
+      // screen already reads elsewhere; never modifies anything.
+      getProgressSnapshot(session.user.id).then(snapshot => {
+        if (!active || !snapshot) return;
+        setProgressSnapshot(snapshot);
+        setProgressInsight(interpretProgress(snapshot));
+      });
+
+      // Day 6 — human-support detection. Context-driven only: this card
+      // renders nothing at all unless a real signal fires (never a generic
+      // "book a trainer" promotion).
+      getHumanSupportInsight(session.user.id).then(insight => {
+        if (active) setHumanSupport(insight);
+      });
 
       setIsLoggedIn(true);
       setUserId(session.user.id);
@@ -189,7 +227,7 @@ export default function FitnessJourneyScreen() {
           .limit(500),
         supabase
           .from('fitness_profile')
-          .select('goals, experience_level, starting_weight_kg, goal_weight_kg')
+          .select('goals, experience_level, starting_weight_kg, goal_weight_kg, initial_weight_kg')
           .eq('user_id', session.user.id)
           .maybeSingle(),
         supabase
@@ -237,6 +275,7 @@ export default function FitnessJourneyScreen() {
       if (active && profileData?.experience_level) setLevel(profileData.experience_level);
       if (active) setStartingWeight(profileData?.starting_weight_kg ?? null);
       if (active) setGoalWeight(profileData?.goal_weight_kg ?? null);
+      if (active) setInitialWeightKg(profileData?.initial_weight_kg ?? null);
       if (active) setMeasurements((measurementData as unknown as MeasurementRow[]) ?? []);
       if (active) setCheckins((checkinData as unknown as CheckinRow[]) ?? []);
       if (active) setTasks((taskData as unknown as TaskRow[]) ?? []);
@@ -307,6 +346,18 @@ export default function FitnessJourneyScreen() {
 
   const pendingTaskCount = tasks.filter(t => !isTaskDoneNow(t)).length;
 
+  // Moved here from the Profile tab — same calc: progress between the
+  // one-time initial-weight snapshot and the goal, using the latest
+  // self-reported weight as "current".
+  const weightProgressPct = (() => {
+    if (initialWeightKg == null || startingWeight == null || goalWeight == null) return 0;
+    const totalDelta = goalWeight - initialWeightKg;
+    if (totalDelta === 0) return startingWeight === goalWeight ? 100 : 0;
+    const progressDelta = startingWeight - initialWeightKg;
+    const pct = (progressDelta / totalDelta) * 100;
+    return Math.max(0, Math.min(100, Math.round(pct)));
+  })();
+
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
@@ -337,6 +388,95 @@ export default function FitnessJourneyScreen() {
           </View>
         ) : (
           <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
+            {/* ── ACP Progress Intelligence (Day 4) — leads the screen, ── */}
+            {/* charts/stats stay below as supporting detail. ── */}
+            {progressInsight && progressSnapshot && (
+              <View style={s.progressCard}>
+                <ThemedText style={s.progressEyebrow}>ACP INTELLIGENCE™</ThemedText>
+                <ThemedText style={s.progressHeadline}>{progressInsight.headline}</ThemedText>
+                {progressInsight.supporting.map((line, i) => (
+                  <ThemedText key={i} style={s.progressSupporting}>{line}</ThemedText>
+                ))}
+
+                <View style={s.progressDivider} />
+
+                <View style={s.progressRow}>
+                  <ThemedText style={s.progressRowLabel}>Consistency</ThemedText>
+                  <ThemedText style={s.progressRowValue}>
+                    {progressSnapshot.behavioural.plannedWorkouts > 0
+                      ? `${progressSnapshot.behavioural.completedWorkouts} / ${progressSnapshot.behavioural.plannedWorkouts} workouts · ${Math.round((progressSnapshot.behavioural.adherenceRate ?? 0) * 100)}% adherence`
+                      : 'Not enough data yet'}
+                  </ThemedText>
+                </View>
+
+                {progressSnapshot.performance.exerciseTrends.filter(t => t.direction !== 'insufficient_data').slice(0, 2).map(t => (
+                  <View key={t.exerciseId} style={s.progressRow}>
+                    <ThemedText style={s.progressRowLabel}>{t.exerciseName}</ThemedText>
+                    <ThemedText style={s.progressRowValue}>
+                      {t.metric === 'weight_reps' ? `${t.firstLoadKg}kg → ${t.latestLoadKg}kg` : `${t.firstReps} → ${t.latestReps} reps`}
+                    </ThemedText>
+                  </View>
+                ))}
+
+                {(['weight', 'waist', 'bodyFat'] as const).map(key => {
+                  const trend = progressSnapshot.outcomes[key];
+                  if (!trend || trend.direction === 'insufficient_data') return null;
+                  const unit = key === 'waist' ? 'cm' : key === 'bodyFat' ? '%' : 'kg';
+                  const label = key === 'weight' ? 'Weight' : key === 'waist' ? 'Waist' : 'Body fat';
+                  return (
+                    <View key={key} style={s.progressRow}>
+                      <ThemedText style={s.progressRowLabel}>{label}</ThemedText>
+                      <ThemedText style={s.progressRowValue}>{trend.baseline}{unit} → {trend.latest}{unit}</ThemedText>
+                    </View>
+                  );
+                })}
+
+                {(!progressSnapshot.outcomes.weight || progressSnapshot.outcomes.weight.isStale) && (
+                  <TouchableOpacity style={s.progressCta} onPress={() => router.push('/log-progress' as any)} activeOpacity={0.8}>
+                    <ThemedText style={s.progressCtaText}>Update progress</ThemedText>
+                    <Ionicons name="arrow-forward" size={14} color={palette.blue500} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
+            {/* ── Human-support insight (Day 6) — context-driven only, never a generic marketplace promotion ── */}
+            {humanSupport?.primary && (
+              <View style={s.supportCard}>
+                <ThemedText style={s.supportHeadline}>{HUMAN_SUPPORT_HEADLINE[humanSupport.primary.trigger] ?? 'A trainer could help'}</ThemedText>
+                <ThemedText style={s.supportReason}>{humanSupport.primary.reason}</ThemedText>
+
+                {humanSupport.trainerOwned ? null : humanSupport.ptRecommendations[0] ? (
+                  <TouchableOpacity
+                    style={s.supportCta}
+                    onPress={() => router.push({ pathname: '/trainer-profile', params: { id: humanSupport.ptRecommendations[0].id } } as any)}
+                    activeOpacity={0.85}
+                  >
+                    <ThemedText style={s.supportCtaText}>See trainers for your goal</ThemedText>
+                    <Ionicons name="arrow-forward" size={14} color="#fff" />
+                  </TouchableOpacity>
+                ) : (
+                  <ThemedText style={s.supportEmptyText}>We couldn&apos;t find a trainer matching this need right now.</ThemedText>
+                )}
+
+                {humanSupport.primary.severity !== 'HIGH' && (
+                  <TouchableOpacity
+                    style={s.supportDismiss}
+                    disabled={dismissingSupport}
+                    onPress={async () => {
+                      if (!userId || !humanSupport.primary) return;
+                      setDismissingSupport(true);
+                      await dismissHumanSupportInsight(userId, humanSupport.primary.trigger);
+                      setDismissingSupport(false);
+                      setHumanSupport(prev => prev ? { ...prev, primary: null } : prev);
+                    }}
+                  >
+                    <ThemedText style={s.supportDismissText}>Not now</ThemedText>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
             {/* ── Stats grid ── */}
             <View style={s.statsGrid}>
               <StatCard value={String(stats.totalWorkouts)} label="Workouts" icon="barbell-outline" />
@@ -344,6 +484,25 @@ export default function FitnessJourneyScreen() {
               <StatCard value={`${stats.streakDays}d`} label="Streak" icon="flame-outline" />
               <StatCard value={`${stats.longestStreak}d`} label="Best" icon="trophy-outline" />
             </View>
+
+            {/* ── Your Weight ── */}
+            {initialWeightKg != null && startingWeight != null && goalWeight != null && (
+              <View style={s.weightCard}>
+                <View style={s.weightCardHeader}>
+                  <ThemedText style={s.weightCardTitle}>Your Weight</ThemedText>
+                  <TouchableOpacity style={s.weightUpdateBtn} onPress={() => router.push('/progress-hub' as any)}>
+                    <ThemedText style={s.weightUpdateBtnText}>Update Progress</ThemedText>
+                  </TouchableOpacity>
+                </View>
+                <View style={s.weightProgressTrack}>
+                  <View style={[s.weightProgressFill, { width: `${weightProgressPct}%` }]} />
+                </View>
+                <ThemedText style={s.weightProgressPctText}>{weightProgressPct}%</ThemedText>
+                <ThemedText style={s.weightSummary}>
+                  Current weight {startingWeight} kg / target weight {goalWeight} kg
+                </ThemedText>
+              </View>
+            )}
 
             {/* ── Analytics ── */}
             <TouchableOpacity
@@ -599,6 +758,45 @@ export default function FitnessJourneyScreen() {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: palette.white },
 
+  progressCard: {
+    borderRadius: radii.xl, backgroundColor: palette.ink900,
+    padding: 18, marginBottom: 20,
+  },
+  progressEyebrow: {
+    fontSize: 10.5, fontWeight: '700', color: 'rgba(255,255,255,0.5)',
+    textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6,
+  },
+  progressHeadline: { fontSize: 19, fontWeight: '800', color: '#fff', letterSpacing: -0.3, marginBottom: 6 },
+  progressSupporting: { fontSize: 13, color: 'rgba(255,255,255,0.75)', lineHeight: 18, marginBottom: 2 },
+  progressDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginVertical: 14 },
+  progressRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 6,
+  },
+  progressRowLabel: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.65)', flexShrink: 1, marginRight: 8 },
+  progressRowValue: { fontSize: 13, fontWeight: '700', color: '#fff' },
+  progressCta: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    marginTop: 12, paddingVertical: 10, borderRadius: radii.pill,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  progressCtaText: { fontSize: 13, fontWeight: '700', color: '#fff' },
+
+  supportCard: {
+    borderRadius: radii.xl, backgroundColor: palette.surfaceMuted,
+    borderWidth: 1, borderColor: palette.hairline, padding: 16, marginBottom: 20,
+  },
+  supportHeadline: { fontSize: 15.5, fontWeight: '800', color: palette.ink900, marginBottom: 4 },
+  supportReason: { fontSize: 13, color: palette.gray450, lineHeight: 18 },
+  supportCta: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    marginTop: 12, paddingVertical: 11, borderRadius: radii.pill, backgroundColor: palette.blue500,
+  },
+  supportCtaText: { fontSize: 13, fontWeight: '700', color: '#fff' },
+  supportEmptyText: { fontSize: 12, color: palette.gray300, marginTop: 10, fontStyle: 'italic' },
+  supportDismiss: { alignSelf: 'center', marginTop: 8, paddingVertical: 6 },
+  supportDismissText: { fontSize: 12.5, fontWeight: '600', color: palette.gray300 },
+
   header: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
     paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16,
@@ -663,6 +861,28 @@ const s = StyleSheet.create({
   weightProgressItem: { alignItems: 'center' },
   weightProgressLabel: { fontSize: 10.5, fontWeight: '700', color: palette.success700, opacity: 0.7, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.4 },
   weightProgressVal: { fontSize: 16, fontWeight: '800', color: palette.ink900 },
+
+  // Your Weight card (moved here from the Profile tab)
+  weightCard: {
+    marginHorizontal: 16, marginTop: 16, marginBottom: 8,
+    borderRadius: radii.lg, padding: 18, backgroundColor: palette.white, ...shadows.sm,
+  },
+  weightCardHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginBottom: 18,
+  },
+  weightCardTitle: { fontSize: fontSize.lg, fontWeight: '800', color: palette.ink900 },
+  weightUpdateBtn: {
+    backgroundColor: palette.blue500, borderRadius: radii.pill,
+    paddingVertical: 10, paddingHorizontal: 16,
+  },
+  weightUpdateBtnText: { fontSize: fontSize.sm, fontWeight: '700', color: palette.white },
+  weightProgressTrack: {
+    height: 6, borderRadius: 3, backgroundColor: palette.surfaceMuted, overflow: 'hidden',
+  },
+  weightProgressFill: { height: '100%', borderRadius: 3, backgroundColor: palette.blue500 },
+  weightProgressPctText: { fontSize: fontSize.sm, color: palette.gray450, marginTop: 8 },
+  weightSummary: { fontSize: fontSize.base, color: palette.gray450, marginTop: 20 },
   logMeasurementBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: palette.blue25, borderRadius: radii.pill,

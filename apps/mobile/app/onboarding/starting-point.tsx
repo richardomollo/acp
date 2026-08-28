@@ -1,14 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/themed-text';
 import { OnboardingHeader } from '@/components/onboarding/onboarding-header';
 import { OnboardingFooter } from '@/components/onboarding/onboarding-footer';
-import { SelectCard } from '@/components/onboarding/select-card';
 import { NumericGoalInput } from '@/components/onboarding/numeric-input';
+import { ActivitySlider } from '@/components/onboarding/activity-slider';
 import { useOnboarding } from '@/contexts/onboarding-context';
-import { ACTIVITY_LEVEL_OPTIONS } from '@/lib/onboarding';
+import { deriveActivityLevel, describeWorkHours, describeSportHours, describeLeisureHours } from '@/lib/onboarding';
 import { supabase } from '@/lib/supabase';
 import { palette, radii, fontSize } from '@/constants/theme';
 
@@ -21,6 +21,37 @@ export default function OnboardingStartingPointScreen() {
   const [chest, setChest] = useState('');
   const [hips, setHips] = useState('');
   const [saved, setSaved] = useState(false);
+
+  const [sleepHours, setSleepHours] = useState('');
+  const [workHours, setWorkHours] = useState('');
+  const [sportHours, setSportHours] = useState('');
+
+  // Resume: pre-fill with whatever was already saved (e.g. the user filled
+  // this in, then skipped out before Continue) instead of showing blanks.
+  useEffect(() => {
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      if (!userId) return;
+      const { data } = await supabase
+        .from('health_profile')
+        .select('sleep_hours_per_night, hours_working_per_week, hours_exercising_per_week')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (data?.sleep_hours_per_night != null) setSleepHours(String(data.sleep_hours_per_night));
+      if (data?.hours_working_per_week != null) setWorkHours(String(data.hours_working_per_week));
+      if (data?.hours_exercising_per_week != null) setSportHours(String(data.hours_exercising_per_week));
+    })();
+  }, []);
+
+  const sleepNum = sleepHours.trim() ? Number(sleepHours) : null;
+  const workNum = workHours.trim() ? Number(workHours) : null;
+  const sportNum = sportHours.trim() ? Number(sportHours) : null;
+  const leisureHours = sleepNum !== null && workNum !== null && sportNum !== null
+    ? Math.max(0, Math.round((168 - sleepNum * 7 - workNum - sportNum) * 10) / 10)
+    : null;
+
+  const canContinue = !!sleepNum && sleepNum > 0 && workNum !== null && workNum >= 0 && sportNum !== null && sportNum >= 0;
 
   const handleAddMeasurements = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -45,7 +76,24 @@ export default function OnboardingStartingPointScreen() {
     }
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
+    setActivityLevel(deriveActivityLevel(sportNum ?? 0));
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const userId = session?.user?.id;
+    if (userId) {
+      try {
+        await supabase.from('health_profile').upsert({
+          user_id: userId,
+          sleep_hours_per_night: sleepNum,
+          hours_working_per_week: workNum,
+          hours_exercising_per_week: sportNum,
+        });
+      } catch {
+        // Non-critical — don't block onboarding on a sync failure.
+      }
+    }
+
     saveProgress();
     router.push('/onboarding/barriers');
   };
@@ -56,26 +104,62 @@ export default function OnboardingStartingPointScreen() {
       <OnboardingHeader step={3} onBack={() => router.back()} onExit={handleExit} />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        <ThemedText style={styles.headline}>Let’s understand your starting point.</ThemedText>
-        <ThemedText style={styles.sub}>Your starting point helps us create a plan that’s right for you.</ThemedText>
+        <ThemedText style={styles.headline}>What does a typical week look like?</ThemedText>
+        <ThemedText style={styles.sub}>Your plan should fit your life — not the other way around.</ThemedText>
 
-        <View style={styles.list}>
-          {ACTIVITY_LEVEL_OPTIONS.map(o => (
-            <SelectCard
-              key={o.key}
-              label={o.label}
-              desc={o.desc}
-              selected={answers.activityLevel === o.key}
-              onPress={() => setActivityLevel(o.key)}
-            />
-          ))}
-        </View>
+        <ThemedText style={styles.fieldLabel}>Sleep</ThemedText>
+        <NumericGoalInput label="Hours per night" unit="hrs" value={sleepHours} onChangeText={setSleepHours} placeholder="e.g. 7" />
+
+        <View style={{ height: 16 }} />
+        <ThemedText style={styles.fieldLabel}>Work</ThemedText>
+        <ActivitySlider
+          value={workNum ?? 0}
+          minimumValue={0}
+          maximumValue={60}
+          step={0.5}
+          onValueChange={v => setWorkHours(String(v))}
+          describe={describeWorkHours}
+        />
+        <View style={{ height: 12 }} />
+        <NumericGoalInput label="Hours per week" unit="hrs" value={workHours} onChangeText={setWorkHours} placeholder="e.g. 40" />
+
+        <View style={{ height: 16 }} />
+        <ThemedText style={styles.fieldLabel}>Sport / training</ThemedText>
+        <ActivitySlider
+          value={sportNum ?? 0}
+          minimumValue={0}
+          maximumValue={15}
+          step={0.5}
+          onValueChange={v => setSportHours(String(v))}
+          describe={describeSportHours}
+        />
+        <View style={{ height: 12 }} />
+        <NumericGoalInput label="Hours per week" unit="hrs" value={sportHours} onChangeText={setSportHours} placeholder="e.g. 3" />
+
+        <View style={{ height: 16 }} />
+        <ThemedText style={styles.fieldLabel}>Leisure</ThemedText>
+        <ActivitySlider
+          value={leisureHours ?? 0}
+          minimumValue={0}
+          maximumValue={168}
+          describe={describeLeisureHours}
+          disabled
+        />
+        <View style={{ height: 12 }} />
+        <NumericGoalInput
+          label="Remaining hours per week"
+          unit="hrs"
+          value={leisureHours !== null ? String(leisureHours) : ''}
+          onChangeText={() => {}}
+          placeholder="—"
+          editable={false}
+        />
 
         <View style={{ height: 24 }} />
 
         {!showBodyComp ? (
           <TouchableOpacity style={styles.addBtn} onPress={() => setShowBodyComp(true)} activeOpacity={0.8}>
-            <Ionicons name="add-circle-outline" size={18} color={palette.blue500} />
+            <Ionicons name="add-circle-outline" size={18} color={palette.ink900} />
             <ThemedText style={styles.addBtnText}>Add body composition (optional)</ThemedText>
           </TouchableOpacity>
         ) : saved ? (
@@ -103,7 +187,7 @@ export default function OnboardingStartingPointScreen() {
         )}
       </ScrollView>
 
-      <OnboardingFooter label="Continue" onPress={handleContinue} disabled={!answers.activityLevel} />
+      <OnboardingFooter label="Continue" onPress={handleContinue} disabled={!canContinue} />
     </View>
   );
 }
@@ -123,8 +207,6 @@ const styles = StyleSheet.create({
     color: palette.gray450,
     marginBottom: 24,
   },
-  list: { gap: 10 },
-
   addBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -134,7 +216,7 @@ const styles = StyleSheet.create({
   addBtnText: {
     fontSize: fontSize.sm,
     fontWeight: '700',
-    color: palette.blue500,
+    color: palette.ink900,
   },
   savedRow: {
     flexDirection: 'row',
@@ -157,6 +239,7 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     fontWeight: '700',
     color: palette.ink600,
+    marginBottom: 8,
   },
   row: { flexDirection: 'row', gap: 10 },
   bodyCompActions: {

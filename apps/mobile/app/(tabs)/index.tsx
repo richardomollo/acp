@@ -4,9 +4,9 @@ import {
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Circle } from 'react-native-svg';
 import { ThemedText } from '@/components/themed-text';
 import { TourOverlay, type TourStep } from '@/components/tour-overlay';
-import { DateRail, buildDateRange } from '@/components/date-rail';
 import { useTour } from '@/hooks/use-tour';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { palette, radii, fontSize, shadows } from '@/constants/theme';
@@ -14,9 +14,24 @@ import { useState, useEffect, useCallback, useMemo, useRef, type ReactNode } fro
 import { supabase } from '@/lib/supabase';
 import { authService } from '@/services/auth';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuthModal } from '@/contexts/auth-modal-context';
 import { type Recurrence } from '@/services/notifications';
 import { computeStreak, type Stats } from '@/services/fitnessStats';
+import { syncHealthData } from '@/services/health';
+import { estimateTodayStepsFromStrava, getStravaStatus } from '@/services/strava';
+import { buildPlanSummary, GOAL_OPTIONS, EMPTY_ANSWERS, isStep2Complete } from '@/lib/onboarding';
+import { isValidAssessment, CATEGORY_LABEL, type AIAssessment } from '@/lib/ai-assessment';
+import {
+  selectMealsForNutritionFocus, nutritionFocusTagLabel, selectDailyMeals,
+  type FoodCandidate, type DailyMealCandidates,
+} from '@/lib/nutrition-matching';
+import { getFulfilmentForActivity, nextDateForWeekday, type PlanActivityFulfilment, type MarketplaceInventoryItem } from '@/lib/fulfilment';
+import {
+  getCompletionProgress, findStravaCandidates, findExerciseDbCandidates, findAcpBookingCandidates, findHealthKitCandidates,
+  type PlanActivityCompletion, type CompletionCandidate, type StravaActivityRow, type WorkoutHistoryRow, type AcpCheckedInRow, type HealthKitWorkoutRow,
+} from '@/lib/completion';
+import { getHomeIntelligenceInsight, findTodayActivity } from '@/lib/home-intelligence';
+import { pickHomeInsight, type CoachingMemoryRow } from '@/lib/coaching-memory';
+import { isPlanReadyForReview, fetchPlanDateUpgrade } from '@/lib/weekly-review';
 
 const { width } = Dimensions.get('window');
 const RAIL_CARD_W = Math.round(width * 0.5);
@@ -29,22 +44,6 @@ interface Gym {
   image_url: string | null;
   description: string | null;
 }
-
-interface CommunityHome {
-  id: string;
-  slug: string | null;
-  name: string;
-  category: string;
-  location: string | null;
-  logo_url: string | null;
-  member_count: number;
-}
-
-const COMMUNITY_CATEGORY_LABEL: Record<string, string> = {
-  running: 'Running', walking: 'Walking', cycling: 'Cycling', strength: 'Strength',
-  boxing: 'Boxing', yoga: 'Yoga', pilates: 'Pilates', hiking: 'Hiking', dance: 'Dance',
-  outdoor_fitness: 'Outdoor Fitness', football: 'Football', other: 'Community',
-};
 
 interface Session {
   id: string;
@@ -63,6 +62,7 @@ interface Session {
 
 interface UserProfile {
   name: string;
+  avatarUrl: string | null;
 }
 
 const MOODS = [
@@ -73,17 +73,8 @@ const MOODS = [
   { value: 5, emoji: '😄' },
 ] as const;
 
-interface PTHome {
-  id: string;
-  full_name: string;
-  professional_name: string | null;
-  photo_url: string | null;
-  specialisations: string[];
-  years_of_experience: number | null;
-  is_certified_verified: boolean;
-  avg_rating: number | null;
-  min_price: number | null;
-}
+const STEPS_GOAL = 8000;
+const WATER_GOAL = 8;
 
 interface ActiveBooking {
   id: string;
@@ -113,6 +104,23 @@ interface TaskRow {
   last_completed_date: string | null;
 }
 
+interface TodayMeal {
+  id: string;
+  mealId: string;
+  name: string;
+  image_url: string | null;
+  calories: number | null;
+  slotLabel: string;
+  // Home Nutrition Integration — set only when this meal was chosen because
+  // it carries the current nutrition_focus's real ACP tag (never invented);
+  // undefined for the existing general/meal-plan suggestions.
+  focusTagLabel?: string;
+}
+
+const MEAL_SLOT_LABEL: Record<string, string> = {
+  breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snack', smoothie: 'Smoothie',
+};
+
 interface Experience {
   id: string;
   name: string;
@@ -138,17 +146,24 @@ function Eyebrow({ text, color = palette.gray300 }: { text: string; color?: stri
 }
 
 function SectionHeader({
-  eyebrow, title, onSeeAll,
-}: { eyebrow: string; title: string; onSeeAll?: () => void }) {
+  eyebrow, title, onInfoPress, onSeeAll, seeAllLabel = 'See All',
+}: { eyebrow?: string; title: string; onInfoPress?: () => void; onSeeAll?: () => void; seeAllLabel?: string }) {
   return (
     <View style={styles.sectionHeaderRow}>
       <View>
-        <Eyebrow text={eyebrow} />
-        <ThemedText style={styles.sectionTitle}>{title}</ThemedText>
+        {eyebrow && <Eyebrow text={eyebrow} />}
+        <View style={styles.sectionTitleRow}>
+          <ThemedText style={styles.sectionTitle}>{title}</ThemedText>
+          {onInfoPress && (
+            <TouchableOpacity onPress={onInfoPress} hitSlop={8} activeOpacity={0.7}>
+              <Ionicons name="information-circle-outline" size={16} color={palette.gray300} />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
       {onSeeAll && (
         <TouchableOpacity onPress={onSeeAll}>
-          <ThemedText style={styles.seeAllText}>See All</ThemedText>
+          <ThemedText style={styles.seeAllText}>{seeAllLabel}</ThemedText>
         </TouchableOpacity>
       )}
     </View>
@@ -164,14 +179,104 @@ function CatTag({ icon, label }: { icon?: string; label: string }) {
   );
 }
 
-function RatingPill({ value }: { value: number | null }) {
-  if (value == null) {
-    return <View style={styles.ratingPill}><ThemedText style={styles.ratingPillText}>New</ThemedText></View>;
-  }
+// ─── Combined goal rings (Steps / Water / Exercises — "For this day") ────────
+// One Apple-Health-style concentric-ring card with a legend, replacing three
+// separate ring cards. Rings are purely informational (matches the reference
+// design); the existing interactions (log water, open today's workout,
+// connect Health) live on the legend rows instead of dedicated buttons.
+
+const RINGS_SIZE = 118;
+const RINGS_STROKE = 11;
+const RINGS_GAP = 5;
+
+const RING_COLOR = {
+  steps: palette.warning500,
+  water: palette.blue500,
+  exercises: palette.success700,
+} as const;
+
+interface GoalRingDef {
+  key: string;
+  color: string;
+  label: string;
+  value: number;
+  goal: number;
+  displayValue: string;
+  displayGoal: string;
+  subtitle?: string;
+  onPress?: () => void;
+  onLongPress?: () => void;
+}
+
+function RingArc({ radius, color, progress }: { radius: number; color: string; progress: number }) {
+  const circumference = 2 * Math.PI * radius;
+  const clamped = Math.max(0, Math.min(1, progress));
   return (
-    <View style={styles.ratingPill}>
-      <Ionicons name="star" size={11} color={palette.warning500} />
-      <ThemedText style={styles.ratingPillText}>{value}</ThemedText>
+    <>
+      <Circle
+        cx={RINGS_SIZE / 2}
+        cy={RINGS_SIZE / 2}
+        r={radius}
+        stroke={palette.border}
+        strokeWidth={RINGS_STROKE}
+        fill="none"
+      />
+      <Circle
+        cx={RINGS_SIZE / 2}
+        cy={RINGS_SIZE / 2}
+        r={radius}
+        stroke={color}
+        strokeWidth={RINGS_STROKE}
+        fill="none"
+        strokeDasharray={`${circumference}, ${circumference}`}
+        strokeDashoffset={circumference * (1 - clamped)}
+        strokeLinecap="round"
+        rotation={-90}
+        origin={`${RINGS_SIZE / 2}, ${RINGS_SIZE / 2}`}
+      />
+    </>
+  );
+}
+
+function CombinedGoalRingsCard({ rings }: { rings: GoalRingDef[] }) {
+  return (
+    <View style={styles.ringsCombinedRow}>
+      <Svg width={RINGS_SIZE} height={RINGS_SIZE}>
+        {rings.map((ring, i) => (
+          <RingArc
+            key={ring.key}
+            radius={(RINGS_SIZE - RINGS_STROKE) / 2 - i * (RINGS_STROKE + RINGS_GAP)}
+            color={ring.color}
+            progress={ring.goal > 0 ? ring.value / ring.goal : 0}
+          />
+        ))}
+      </Svg>
+      <View style={styles.ringsLegend}>
+        {rings.map(ring => {
+          const Row = ring.onPress || ring.onLongPress ? TouchableOpacity : View;
+          return (
+            <Row
+              key={ring.key}
+              style={styles.ringsLegendRow}
+              onPress={ring.onPress}
+              onLongPress={ring.onLongPress}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.ringsLegendDot, { backgroundColor: ring.color }]} />
+              <View style={{ flex: 1 }}>
+                <ThemedText style={styles.ringsLegendLabel}>{ring.label}</ThemedText>
+                {ring.subtitle && (
+                  <ThemedText style={styles.ringsLegendSubtitle} numberOfLines={1}>{ring.subtitle}</ThemedText>
+                )}
+              </View>
+              <View style={styles.ringsLegendValueRow}>
+                <ThemedText style={styles.ringsLegendValue}>{ring.displayValue}</ThemedText>
+                <ThemedText style={styles.ringsLegendGoal}>{ring.displayGoal}</ThemedText>
+              </View>
+            </Row>
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -262,89 +367,6 @@ function OverlayCard({
             {priceSub ? <ThemedText style={styles.stackedAside}>{priceSub}</ThemedText> : null}
             {priceRemainder ? <ThemedText style={styles.stackedAside}>{priceRemainder}</ThemedText> : null}
           </View>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-// ─── Stacked card (Venues + Trainers) ────────────────────────────────────────
-
-interface StackedCardProps {
-  imageUrl: string | null;
-  fallbackIcon?: string;
-  fallbackBg?: string;
-  catLabel: string;
-  catIcon?: string;
-  rating?: number | null;
-  verifiedBadge?: boolean;
-  name: string;
-  tagline?: string | null;
-  meta1?: string | null;
-  meta2?: string | null;
-  priceLabel: string;
-  aside?: string | null;
-  onPress: () => void;
-  width?: number;
-  imageHeight?: number;
-}
-
-function StackedCard({
-  imageUrl, fallbackIcon = 'fitness', fallbackBg = palette.blue500,
-  catLabel, catIcon, rating, verifiedBadge = false,
-  name, tagline, meta1, meta2,
-  priceLabel, aside,
-  onPress,
-  width: cardW = RAIL_CARD_W,
-  imageHeight = Math.round(cardW * 0.62),
-}: StackedCardProps) {
-  return (
-    <TouchableOpacity
-      style={[styles.stackedCard, { width: cardW }]}
-      onPress={onPress}
-      activeOpacity={0.9}
-    >
-      <View style={{ position: 'relative', height: imageHeight }}>
-        {imageUrl ? (
-          <Image source={{ uri: imageUrl.split(',')[0] }} style={[StyleSheet.absoluteFill, { borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl }]} resizeMode="cover" />
-        ) : (
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: fallbackBg, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, alignItems: 'center', justifyContent: 'center' }]}>
-            <Ionicons name={fallbackIcon as any} size={40} color="rgba(255,255,255,0.5)" />
-          </View>
-        )}
-        <View style={styles.stackedTopRow}>
-          <CatTag icon={catIcon} label={catLabel} />
-          <RatingPill value={rating ?? null} />
-        </View>
-        {verifiedBadge && (
-          <View style={styles.verifiedBadge}>
-            <Ionicons name="checkmark-circle" size={13} color={palette.blue500} />
-            <ThemedText style={styles.verifiedText}>Verified Pro</ThemedText>
-          </View>
-        )}
-      </View>
-      <View style={styles.stackedBody}>
-        <ThemedText style={styles.stackedName} numberOfLines={1}>{name}</ThemedText>
-        {tagline ? <ThemedText style={styles.stackedTagline} numberOfLines={1}>{tagline}</ThemedText> : null}
-        {(meta1 || meta2) ? (
-          <View style={styles.stackedMetaRow}>
-            {meta1 ? (
-              <View style={styles.stackedMetaItem}>
-                <Ionicons name="location-outline" size={12} color={palette.gray300} />
-                <ThemedText style={styles.stackedMetaText} numberOfLines={1}>{meta1}</ThemedText>
-              </View>
-            ) : null}
-            {meta2 ? (
-              <View style={styles.stackedMetaItem}>
-                <Ionicons name="barbell-outline" size={12} color={palette.gray300} />
-                <ThemedText style={styles.stackedMetaText} numberOfLines={1}>{meta2}</ThemedText>
-              </View>
-            ) : null}
-          </View>
-        ) : null}
-        <View style={styles.stackedFooter}>
-          <ThemedText style={styles.stackedPrice}>{priceLabel}</ThemedText>
-          {aside ? <ThemedText style={styles.stackedAside}>{aside}</ThemedText> : null}
         </View>
       </View>
     </TouchableOpacity>
@@ -449,25 +471,53 @@ const HOME_TOUR: TourStep[] = [
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { showAuthModal } = useAuthModal();
   const { visible: tourVisible, dismiss: dismissTour } = useTour('home');
   const [isGuest, setIsGuest] = useState(true);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [todayMood, setTodayMood] = useState<number | null>(null);
+  const [goalStatus, setGoalStatus] = useState<'not_set' | 'incomplete' | 'complete'>('complete');
+  const [goalSummary, setGoalSummary] = useState<{ goalLine: string; icon: string } | null>(null);
   const [savingMood, setSavingMood] = useState(false);
-  const [gyms, setGyms] = useState<Gym[]>([]);
-  const [nearTermSessions, setNearTermSessions] = useState<Session[]>([]);
   const [activeBooking, setActiveBooking] = useState<ActiveBooking | null>(null);
   const [workoutSchedules, setWorkoutSchedules] = useState<WorkoutSchedule[]>([]);
   const [completedWorkoutKeys, setCompletedWorkoutKeys] = useState<Set<string>>(new Set());
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [fitnessStats, setFitnessStats] = useState<Stats>({ totalWorkouts: 0, totalMinutes: 0, streakDays: 0, longestStreak: 0 });
-  const [trainers, setTrainers] = useState<PTHome[]>([]);
+  const [todayGoals, setTodayGoals] = useState({ steps: 0, waterCups: 0, sleepHours: 0 });
+  const [stepsGoal, setStepsGoal] = useState(STEPS_GOAL);
+  const [stepsFromStrava, setStepsFromStrava] = useState(false);
+  // Connection-status notifications (bell icon) — default true/connected so
+  // nothing flashes on load; only flips once we've actually confirmed the
+  // account has no synced Health data / no linked Strava account.
+  const [healthEverSynced, setHealthEverSynced] = useState(true);
+  const [stravaConnected, setStravaConnected] = useState(true);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [upcomingWorkoutProgress, setUpcomingWorkoutProgress] = useState<{ completed: number; total: number } | null>(null);
+  const [todayMeals, setTodayMeals] = useState<TodayMeal[]>([]);
+  const [todayMealsAreSuggested, setTodayMealsAreSuggested] = useState(false);
+  const [cuisinePreference, setCuisinePreference] = useState<string | null>(null);
+  // ACP Intelligence™ Home integration — loaded independently of loadData()
+  // above (see the dedicated effect below), so it never delays the existing
+  // Home content or the main `loading` spinner. Home makes no AI call of
+  // its own: this is purely a presentation layer over the assessment /
+  // completions data Days 1-4 already produced.
+  const [homeAssessment, setHomeAssessment] = useState<AIAssessment | null>(null);
+  const [homePlanId, setHomePlanId] = useState<string | null>(null);
+  const [homeCompletions, setHomeCompletions] = useState<PlanActivityCompletion[]>([]);
+  // Day 6 — already-computed longitudinal coaching evidence, read once
+  // alongside homeAssessment; never recomputed on Home.
+  const [homeCoachingMemory, setHomeCoachingMemory] = useState<CoachingMemoryRow[]>([]);
+  // True once the load attempt (success or failure) has finished — gates
+  // rendering so nothing flashes/shifts layout while it's in flight; per
+  // spec, quietly omitting is preferred over a new loading indicator.
+  const [homeIntelLoaded, setHomeIntelLoaded] = useState(false);
+  const [todayFulfilment, setTodayFulfilment] = useState<PlanActivityFulfilment | null>(null);
+  const [todayCandidate, setTodayCandidate] = useState<CompletionCandidate | null>(null);
+  const [showIntelligenceInfo, setShowIntelligenceInfo] = useState(false);
   const [experiences, setExperiences] = useState<Experience[]>([]);
-  const [communities, setCommunities] = useState<CommunityHome[]>([]);
   const [loading, setLoading] = useState(true);
-  const [calSelected, setCalSelected] = useState(() => new Date().toISOString().split('T')[0]);
+  const calSelected = new Date().toISOString().split('T')[0];
   const [searchVisible, setSearchVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
@@ -478,28 +528,6 @@ export default function HomeScreen() {
     trainers: { id: string; full_name: string; professional_name: string | null; photo_url: string | null; specialisations: string[] }[];
   }>({ sessions: [], gyms: [], experiences: [], trainers: [] });
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const next14Days = useMemo(() => buildDateRange(14), []);
-
-  const sessionDates = useMemo(() => new Set(nearTermSessions.map(s => s.date)), [nearTermSessions]);
-
-  const exactDaySessions = useMemo(
-    () => nearTermSessions.filter(s => s.date === calSelected),
-    [nearTermSessions, calSelected],
-  );
-
-  // nearTermSessions is pre-sorted by date, so the first match after calSelected is the soonest;
-  // fall back to the very first upcoming session if none fall after the selected day.
-  const nextAvailableSessionDate = useMemo(() => {
-    if (exactDaySessions.length > 0) return null;
-    return nearTermSessions.find(s => s.date > calSelected)?.date ?? nearTermSessions[0]?.date ?? null;
-  }, [nearTermSessions, exactDaySessions, calSelected]);
-
-  const visibleSessions = useMemo(() => {
-    if (exactDaySessions.length > 0) return exactDaySessions;
-    if (nextAvailableSessionDate) return nearTermSessions.filter(s => s.date === nextAvailableSessionDate);
-    return [];
-  }, [exactDaySessions, nextAvailableSessionDate, nearTermSessions]);
 
   const isTaskDoneOnSelectedDate = (task: TaskRow): boolean =>
     task.recurrence === 'once' ? task.status === 'done' : task.last_completed_date === calSelected;
@@ -542,28 +570,32 @@ export default function HomeScreen() {
     [scheduledTasksForDay, calSelected],
   );
 
-  const allDoneForDay = (scheduledWorkoutsForDay.length > 0 || scheduledTasksForDay.length > 0)
-    && dayWorkouts.length === 0 && dayTasks.length === 0;
+  // Exercises ring — when there's an upcoming/current scheduled workout, show
+  // progress through *that workout's* individual exercises (e.g. 1/4 sets of
+  // exercises done); otherwise fall back to a simple scheduled-items count
+  // (workouts + trainer tasks for the day).
+  const exercisesTotal = upcomingWorkoutProgress?.total ?? (scheduledWorkoutsForDay.length + scheduledTasksForDay.length);
+  const exercisesCompleted = upcomingWorkoutProgress
+    ? upcomingWorkoutProgress.completed
+    : exercisesTotal - dayWorkouts.length - dayTasks.length;
 
-  const isSelectedDateToday = calSelected === new Date().toISOString().split('T')[0];
-
-  const toggleDayTask = async (task: TaskRow) => {
-    if (!isSelectedDateToday) return;
-    const doneNow = isTaskDoneOnSelectedDate(task);
-
-    if (task.recurrence === 'once') {
-      const nextStatus = doneNow ? 'pending' : 'done';
-      setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: nextStatus } : t));
-      const { error } = await supabase.from('client_tasks').update({ status: nextStatus }).eq('id', task.id);
-      if (error) setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: task.status } : t));
-    } else {
-      const nextDate = doneNow ? null : calSelected;
-      setTasks(prev => prev.map(t => t.id === task.id ? { ...t, last_completed_date: nextDate } : t));
-      const { error } = await supabase.from('client_tasks').update({ last_completed_date: nextDate }).eq('id', task.id);
-      if (error) setTasks(prev => prev.map(t => t.id === task.id ? { ...t, last_completed_date: task.last_completed_date } : t));
-    }
+  const adjustGoal = async (field: 'waterCups' | 'sleepHours', delta: number) => {
+    if (!userId) return;
+    const prev = todayGoals;
+    const next = { ...prev, [field]: Math.max(0, prev[field] + delta) };
+    setTodayGoals(next);
+    const today = new Date().toISOString().split('T')[0];
+    const { error } = await supabase.from('health_daily_stats').upsert({
+      user_id: userId,
+      date: today,
+      water_cups: next.waterCups,
+      sleep_hours: next.sleepHours,
+    }, { onConflict: 'user_id,date' });
+    if (error) setTodayGoals(prev);
   };
 
+  // Only meals from a real meal plan have a meal_plan_items row to log
+  // against — suggested meals (no active plan) toggle locally only.
   const bookingAt = useMemo(
     () => activeBooking ? new Date(`${activeBooking.booking_date}T${activeBooking.booking_time}`) : null,
     [activeBooking],
@@ -578,8 +610,117 @@ export default function HomeScreen() {
     if (activeBooking && bookingAt && bookingAt.getTime() > Date.now()) {
       items.push({ kind: 'booking', key: `booking-${activeBooking.id}`, at: bookingAt, booking: activeBooking });
     }
+    const todayStr = new Date().toISOString().split('T')[0];
+    for (const schedule of workoutSchedules) {
+      if (!scheduleMatchesDate(schedule, todayStr)) continue;
+      if (completedWorkoutKeys.has(`${schedule.workout_id}|${todayStr}`)) continue;
+      const at = new Date(`${todayStr}T${schedule.time_of_day}`);
+      if (at.getTime() <= Date.now()) continue;
+      items.push({ kind: 'workout', key: `workout-${schedule.id}`, at, schedule });
+    }
     return items.sort((a, b) => a.at.getTime() - b.at.getTime());
-  }, [activeBooking, bookingAt]);
+  }, [activeBooking, bookingAt, workoutSchedules, completedWorkoutKeys]);
+
+  const upcomingWorkoutId = nextUpItems[0]?.kind === 'workout' ? nextUpItems[0].schedule.workout_id : null;
+
+  // Exercises ring: how many of *this specific upcoming workout's* exercises
+  // have already been logged today, out of how many it has in total.
+  useEffect(() => {
+    if (!userId || !upcomingWorkoutId) { setUpcomingWorkoutProgress(null); return; }
+    let cancelled = false;
+    (async () => {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const [{ count: total }, { data: historyRow }] = await Promise.all([
+        supabase.from('workout_exercises').select('id', { count: 'exact', head: true }).eq('workout_id', upcomingWorkoutId),
+        supabase.from('workout_history').select('id')
+          .eq('user_id', userId).eq('workout_id', upcomingWorkoutId)
+          .gte('completed_at', `${todayStr}T00:00:00.000Z`).lte('completed_at', `${todayStr}T23:59:59.999Z`)
+          .maybeSingle(),
+      ]);
+      if (cancelled) return;
+      if (!total) { setUpcomingWorkoutProgress(null); return; }
+
+      let completed = 0;
+      if (historyRow?.id) {
+        const { data: setLogs } = await supabase
+          .from('workout_set_logs')
+          .select('exercise_id')
+          .eq('workout_history_id', historyRow.id);
+        completed = new Set((setLogs ?? []).map(r => r.exercise_id)).size;
+      }
+      if (!cancelled) setUpcomingWorkoutProgress({ completed, total });
+    })();
+    return () => { cancelled = true; };
+  }, [userId, upcomingWorkoutId]);
+
+  // Derived purely from already-loaded state — no extra query, no AI call.
+  const homeTodayActivity = homeAssessment ? findTodayActivity(homeAssessment.starting_plan.activities) : null;
+  const homeTodayIndex = homeAssessment && homeTodayActivity ? homeAssessment.starting_plan.activities.indexOf(homeTodayActivity) : -1;
+  const homeTodayCompletionRecord = homeTodayIndex >= 0 ? homeCompletions.find(c => c.activityIndex === homeTodayIndex) : undefined;
+  const homeTodayCompleted = !!homeTodayCompletionRecord;
+  const homeTodaySyncSourceLabel = homeTodayCompletionRecord?.completionSource === 'strava'
+    ? 'Synced from Strava'
+    : homeTodayCompletionRecord?.completionSource === 'healthkit'
+    ? 'Synced from Apple Health'
+    : null;
+  const homeWeeklyProgress = homeAssessment
+    ? getCompletionProgress(homeAssessment.starting_plan.activities.length, homeCompletions)
+    : { completed: 0, total: 0, percent: 0 };
+  // When today's canonical plan activity is strength, the Exercises ring
+  // switches from the general trainer-workout schedule (a different,
+  // unrelated system) to representing that specific plan activity instead —
+  // same completion signal already used by the "Today's Plan" section.
+  const todayIsStrength = homeIntelLoaded && !!homeAssessment && homeTodayActivity?.category === 'strength';
+  // Day 5 — a compact entry point when the current plan's week has ended and
+  // a review is available, reusing the exact same ACP Intelligence card
+  // slot (no new card/notification system, per Part 43) rather than
+  // duplicating any review/adaptation logic here — generating the review
+  // itself only ever happens on My Plan, from an explicit tap.
+  const homeReviewReady = homeIntelLoaded && isPlanReadyForReview(homeAssessment, new Date());
+  const homeInsight = homeReviewReady
+    ? {
+        headline: 'Your weekly review is ready',
+        body: 'See what ACP Intelligence™ learned from last week and get your next plan.',
+        ctaLabel: 'See what ACP Intelligence™ learned →',
+        ctaTarget: '/my-plan',
+      }
+    : homeIntelLoaded
+    ? getHomeIntelligenceInsight({
+        assessment: homeAssessment,
+        todayActivity: homeTodayActivity,
+        todayCompleted: homeTodayCompleted,
+        weeklyProgress: homeWeeklyProgress,
+        longitudinalInsight: pickHomeInsight(homeCoachingMemory),
+      })
+    : null;
+
+  // Confirming a synced signal (e.g. today's Strava walk) records the same
+  // plan_activity_completions row My Plan's "Mark as done" would — same
+  // insert shape, so both screens immediately agree on progress. Dismissing
+  // is a local-only nudge (matches My Plan's dismissal, not persisted).
+  const handleConfirmTodayCandidate = async () => {
+    if (!userId || !homeAssessment || !homePlanId || homeTodayIndex < 0 || !todayCandidate) return;
+    const candidate = todayCandidate;
+    const day = homeAssessment.starting_plan.activities[homeTodayIndex]?.day;
+    const plannedDate = day ? nextDateForWeekday(day, new Date()) : new Date().toISOString().split('T')[0];
+    const { data } = await supabase
+      .from('plan_activity_completions')
+      .insert({
+        user_id: userId, plan_id: homePlanId,
+        activity_index: homeTodayIndex, planned_date: plannedDate,
+        completion_source: candidate.source, source_entity_id: candidate.sourceEntityId,
+      })
+      .select('id, plan_id, activity_index, planned_date, completed_at, completion_source, source_entity_id')
+      .single();
+    if (!data) return;
+    setHomeCompletions(prev => [...prev, {
+      id: data.id, planId: data.plan_id, activityIndex: data.activity_index, plannedDate: data.planned_date,
+      completedAt: data.completed_at, completionSource: data.completion_source, sourceEntityId: data.source_entity_id,
+    }]);
+    setTodayCandidate(null);
+  };
+
+  const handleDismissTodayCandidate = () => setTodayCandidate(null);
 
   const getGreeting = () => {
     const h = new Date().getHours();
@@ -608,6 +749,284 @@ export default function HomeScreen() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // ACP Intelligence™ Home integration — deliberately independent of
+  // loadData() above: it never touches `loading`, so existing Home content
+  // renders first regardless of whether/how fast this finishes. Reads only
+  // data Days 1-4 already produced (assessment, completions) — makes NO
+  // OpenAI call. Any failure here just leaves the section omitted; nothing
+  // else on Home is affected. Only runs once a complete goal exists — if
+  // the goal itself isn't set up yet, the existing goal banner above
+  // already covers that messaging, so this section stays hidden rather
+  // than duplicating it.
+  useEffect(() => {
+    if (isGuest || !userId || goalStatus !== 'complete') {
+      setHomeIntelLoaded(false);
+      return;
+    }
+    let cancelled = false;
+    setHomeIntelLoaded(false);
+
+    (async () => {
+      const { data } = await supabase
+        .from('fitness_profile')
+        .select('ai_assessment, ai_assessment_generated_at')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (cancelled) return;
+
+      // Old Day-1-shaped or otherwise invalid rows are treated as "no
+      // assessment yet" (Priority 5) — same safety rule as My Plan.
+      if (!data?.ai_assessment || !isValidAssessment(data.ai_assessment) || !data.ai_assessment_generated_at) {
+        setHomeAssessment(null);
+        setHomePlanId(null);
+        setHomeCompletions([]);
+        setTodayFulfilment(null);
+        setTodayCandidate(null);
+        setHomeCoachingMemory([]);
+        setHomeIntelLoaded(true);
+        return;
+      }
+
+      const assessment = data.ai_assessment;
+      const planId = data.ai_assessment_generated_at as string;
+      setHomeAssessment(assessment);
+      setHomePlanId(planId);
+
+      // Day 6 — coaching memory is already fully computed server-side; a
+      // plain, non-blocking read, same pattern as the date upgrade below.
+      supabase
+        .from('coaching_memory')
+        .select('memory_type, subject, confidence, evidence, user_message')
+        .eq('user_id', userId)
+        .eq('active', true)
+        .then(({ data: memoryRows }) => { if (!cancelled) setHomeCoachingMemory((memoryRows ?? []) as CoachingMemoryRow[]); });
+
+      // Day 5.5 Problem C — same opportunistic, lazy date upgrade as My
+      // Plan: never blocks this render, never surfaces an error if it fails
+      // (the plan already rendered above is left exactly as-is either way).
+      if (!assessment.starting_plan?.week_end_date) {
+        authService.getSession().then(authSession => {
+          if (authSession?.access_token) {
+            fetchPlanDateUpgrade({ userId, accessToken: authSession.access_token }).then(result => {
+              if (!cancelled && result.upgraded && result.assessment) {
+                setHomeAssessment(result.assessment);
+              }
+            });
+          }
+        });
+      }
+
+      const { data: completionsData } = await supabase
+        .from('plan_activity_completions')
+        .select('id, plan_id, activity_index, planned_date, completed_at, completion_source, source_entity_id')
+        .eq('user_id', userId)
+        .eq('plan_id', planId);
+      if (cancelled) return;
+
+      const completions: PlanActivityCompletion[] = ((completionsData ?? []) as any[]).map(c => ({
+        id: c.id, planId: c.plan_id, activityIndex: c.activity_index, plannedDate: c.planned_date,
+        completedAt: c.completed_at, completionSource: c.completion_source, sourceEntityId: c.source_entity_id,
+      }));
+      setHomeCompletions(completions);
+
+      const today = new Date();
+      const todayActivity = findTodayActivity(assessment.starting_plan.activities, today);
+
+      if (!todayActivity) {
+        setTodayFulfilment(null);
+        setTodayCandidate(null);
+      } else {
+        const todayIndex = assessment.starting_plan.activities.indexOf(todayActivity);
+        const alreadyDone = completions.some(c => c.activityIndex === todayIndex);
+        if (alreadyDone) {
+          setTodayFulfilment(null);
+          setTodayCandidate(null);
+        } else {
+          // Only fetched when there's actually an incomplete activity today
+          // to enhance — no query at all on rest days or once today is done.
+          const todayIso = today.toISOString().split('T')[0];
+          const twoDaysAgoIso = new Date(today.getTime() - 2 * 86400000).toISOString();
+          const [sessionsRes, experiencesRes, stravaStatus, stravaActivitiesRes, healthWorkoutsRes, workoutHistoryRes, checkedInBookingsRes, checkedInExperiencesRes] = await Promise.all([
+            supabase.from('sessions')
+              .select('id, name, category, date, time, duration_minutes, is_active, spots_left, image_url, drop_in_price, gyms(name)')
+              .eq('date', todayIso).eq('is_active', true),
+            supabase.from('experiences')
+              .select('id, name, category, date, start_time, price_kes, is_active, spots_left, image_url, gyms(name)')
+              .eq('date', todayIso).eq('is_active', true),
+            getStravaStatus(),
+            // Existing signals from things the user already did — synced
+            // against the plan here so "Today's Plan" never shows a blind
+            // "track activity" CTA when e.g. a Strava walk or an Apple
+            // Health workout already logged today would satisfy it (same
+            // Day 4 candidate-matching used on My Plan, just scoped to
+            // today's single activity). Strava/HealthKit are device/OS-
+            // verified, so a match here is auto-counted below rather than
+            // requiring a confirm tap; ExerciseDB/ACP-booking matches remain
+            // suggestion-only, further down.
+            supabase.from('activities')
+              .select('id, activity_type, start_time, duration_seconds')
+              .eq('user_id', userId).eq('source', 'strava').gte('start_time', twoDaysAgoIso),
+            supabase.from('health_workouts')
+              .select('id, activity_type, start_date, duration_seconds')
+              .eq('user_id', userId).gte('start_date', twoDaysAgoIso),
+            supabase.from('workout_history')
+              .select('id, completed_at, workouts(category)')
+              .eq('user_id', userId).gte('completed_at', twoDaysAgoIso),
+            supabase.from('bookings')
+              .select('id, checked_in, check_in_time, sessions(name, category)')
+              .eq('user_id', userId).eq('checked_in', true).gte('check_in_time', twoDaysAgoIso),
+            supabase.from('experience_bookings')
+              .select('id, updated_at, experiences(name, category)')
+              .eq('user_id', userId).eq('status', 'checked_in').gte('updated_at', twoDaysAgoIso),
+          ]);
+          if (cancelled) return;
+          const inventory: MarketplaceInventoryItem[] = [
+            ...((sessionsRes?.data ?? []) as any[]).map(s => ({
+              id: s.id, type: 'session' as const, name: s.name, category: s.category ?? null,
+              date: s.date ?? null, startTime: s.time ?? null, durationMinutes: s.duration_minutes ?? null,
+              gymName: s.gyms?.name ?? null, isActive: !!s.is_active, spotsLeft: s.spots_left ?? null,
+              imageUrl: s.image_url ?? null, priceKes: s.drop_in_price ?? null,
+            })),
+            ...((experiencesRes?.data ?? []) as any[]).map(e => ({
+              id: e.id, type: 'experience' as const, name: e.name, category: e.category ?? null,
+              date: e.date ?? null, startTime: e.start_time ?? null, durationMinutes: null,
+              gymName: e.gyms?.name ?? null, isActive: !!e.is_active, spotsLeft: e.spots_left ?? null,
+              imageUrl: e.image_url ?? null, priceKes: e.price_kes ?? null,
+            })),
+          ];
+          setTodayFulfilment(getFulfilmentForActivity(todayActivity, todayIndex, inventory, stravaStatus.connected, today));
+
+          const completedIndexes = new Set(completions.map(c => c.activityIndex));
+          const usedSourceEntityIds = new Set(completions.map(c => c.sourceEntityId).filter((id): id is string => !!id));
+          const stravaRows: StravaActivityRow[] = ((stravaActivitiesRes?.data ?? []) as any[]).map(a => ({
+            id: a.id, activityType: a.activity_type, startTime: a.start_time, durationSeconds: a.duration_seconds ?? 0,
+          }));
+          const healthKitRows: HealthKitWorkoutRow[] = ((healthWorkoutsRes?.data ?? []) as any[]).map(w => ({
+            id: w.id, activityType: w.activity_type, startDate: w.start_date, durationSeconds: Math.round(w.duration_seconds ?? 0),
+          }));
+          const workoutRows: WorkoutHistoryRow[] = ((workoutHistoryRes?.data ?? []) as any[]).map(w => ({
+            id: w.id, workoutCategory: w.workouts?.category ?? null, completedAt: w.completed_at,
+          }));
+          const checkedInRows: AcpCheckedInRow[] = [
+            ...((checkedInBookingsRes?.data ?? []) as any[]).map(b => ({
+              id: b.id, type: 'acp_session' as const, name: b.sessions?.name ?? '', category: b.sessions?.category ?? null,
+              checkedInDate: (b.check_in_time ?? '').split('T')[0],
+            })),
+            ...((checkedInExperiencesRes?.data ?? []) as any[]).map(e => ({
+              id: e.id, type: 'acp_experience' as const, name: e.experiences?.name ?? '', category: e.experiences?.category ?? null,
+              checkedInDate: (e.updated_at ?? '').split('T')[0],
+            })),
+          ];
+
+          // Strava + Apple Health are device/OS-verified — auto-counted, no
+          // tap required. ExerciseDB/ACP-booking matches stay suggestion-only.
+          const autoCandidates = [
+            ...findStravaCandidates(assessment.starting_plan.activities, completedIndexes, usedSourceEntityIds, stravaRows, today),
+            ...findHealthKitCandidates(assessment.starting_plan.activities, completedIndexes, usedSourceEntityIds, healthKitRows, today),
+          ];
+          const autoMatch = autoCandidates.find(c => c.activityIndex === todayIndex);
+
+          if (autoMatch) {
+            const day = todayActivity.day;
+            const plannedDate = day ? nextDateForWeekday(day, today) : todayIso;
+            const { data: inserted } = await supabase
+              .from('plan_activity_completions')
+              .insert({
+                user_id: userId, plan_id: planId, activity_index: todayIndex, planned_date: plannedDate,
+                completion_source: autoMatch.source, source_entity_id: autoMatch.sourceEntityId,
+              })
+              .select('id, plan_id, activity_index, planned_date, completed_at, completion_source, source_entity_id')
+              .single();
+            if (cancelled) return;
+            if (inserted) {
+              setHomeCompletions(prev => [...prev, {
+                id: inserted.id, planId: inserted.plan_id, activityIndex: inserted.activity_index, plannedDate: inserted.planned_date,
+                completedAt: inserted.completed_at, completionSource: inserted.completion_source, sourceEntityId: inserted.source_entity_id,
+              }]);
+            }
+            setTodayCandidate(null);
+          } else {
+            const manualCandidates = [
+              ...findExerciseDbCandidates(assessment.starting_plan.activities, completedIndexes, usedSourceEntityIds, workoutRows, today),
+              ...findAcpBookingCandidates(assessment.starting_plan.activities, completedIndexes, usedSourceEntityIds, checkedInRows, today),
+            ];
+            setTodayCandidate(manualCandidates.find(c => c.activityIndex === todayIndex) ?? null);
+          }
+        }
+      }
+
+      setHomeIntelLoaded(true);
+    })().catch(() => {
+      if (!cancelled) {
+        setHomeAssessment(null);
+        setHomePlanId(null);
+        setHomeCompletions([]);
+        setTodayFulfilment(null);
+        setTodayCandidate(null);
+        setHomeIntelLoaded(true);
+      }
+    });
+
+    return () => { cancelled = true; };
+  }, [isGuest, userId, goalStatus]);
+
+  // Home Nutrition Integration — deterministic, never a second OpenAI call.
+  // Only ever overrides the existing GENERAL/suggested meal path
+  // (todayMealsAreSuggested) — an active, self-built or nutritionist-
+  // assigned meal_plan (the "Today's plan" path) is left completely alone,
+  // since that's a deliberate, already-curated choice a generic tag
+  // heuristic shouldn't second-guess. Runs only after loadData()'s own
+  // todayMeals/todayMealsAreSuggested have already settled and the ACP
+  // Intelligence assessment has loaded, so it never blocks Home's first
+  // render or introduces a new loading state.
+  useEffect(() => {
+    if (loading || !homeIntelLoaded || !todayMealsAreSuggested) return;
+    const focus = homeAssessment?.nutrition_focus;
+    if (!focus) return;
+
+    let cancelled = false;
+    (async () => {
+      const categories = ['breakfast', 'lunch', 'dinner'];
+      const categoryResults = await Promise.all(
+        categories.map(category =>
+          supabase.from('meals')
+            .select('id, name, image_url, calories, category, cuisine, tags')
+            .eq('is_active', true)
+            .eq('category', category),
+        ),
+      );
+      if (cancelled) return;
+
+      const mealsBySlot = categories.map((category, i) => ({
+        category,
+        foods: ((categoryResults[i].data ?? []) as any[]).map(m => ({
+          id: m.id, name: m.name, category: m.category, cuisine: m.cuisine, tags: m.tags ?? [],
+        } as FoodCandidate)),
+      }));
+      const selections = selectMealsForNutritionFocus(focus.type, cuisinePreference, mealsBySlot);
+      if (selections.length === 0) return; // nothing safe/available for this focus — leave the existing general suggestions exactly as they are
+
+      const rawById = new Map<string, any>();
+      categoryResults.forEach(r => (r.data ?? []).forEach((m: any) => rawById.set(m.id, m)));
+
+      const focusMeals: TodayMeal[] = selections.map(sel => {
+        const raw = rawById.get(sel.food.id);
+        return {
+          id: sel.food.id,
+          mealId: sel.food.id,
+          name: sel.food.name,
+          image_url: raw?.image_url ?? null,
+          calories: raw?.calories ?? null,
+          slotLabel: MEAL_SLOT_LABEL[sel.category] ?? sel.category,
+          focusTagLabel: sel.matchesFocus ? nutritionFocusTagLabel(focus.type) : undefined,
+        };
+      });
+      setTodayMeals(focusMeals);
+    })().catch(() => { /* leave the existing general suggestions exactly as they were */ });
+
+    return () => { cancelled = true; };
+  }, [loading, homeIntelLoaded, todayMealsAreSuggested, homeAssessment?.nutrition_focus, cuisinePreference]);
+
   const loadData = async () => {
     try {
       setLoading(true);
@@ -618,12 +1037,13 @@ export default function HomeScreen() {
         setUserId(authSession.user.id);
         const { data: userData } = await supabase
           .from('users')
-          .select('name')
+          .select('name, avatar_url')
           .eq('id', authSession.user.id)
           .maybeSingle();
 
         setUser({
           name: userData?.name || authSession.user.user_metadata?.full_name || authSession.user.email?.split('@')[0] || 'there',
+          avatarUrl: userData?.avatar_url || null,
         });
 
         const today = new Date().toISOString().split('T')[0];
@@ -635,6 +1055,176 @@ export default function HomeScreen() {
           .eq('checkin_date', today)
           .maybeSingle();
         setTodayMood(checkinData?.mood ?? null);
+
+        const { data: fitnessProfileData } = await supabase
+          .from('fitness_profile')
+          .select(`
+            goal, onboarding_completed, daily_steps_goal, trainer_daily_steps_goal,
+            starting_weight_kg, goal_weight_kg, goal_target_date,
+            activity_level, experience_level, goal_details, barriers, preferred_activities,
+            cuisine_preference
+          `)
+          .eq('user_id', authSession.user.id)
+          .maybeSingle();
+        setCuisinePreference(fitnessProfileData?.cuisine_preference ?? null);
+        if (!fitnessProfileData?.goal) { setGoalStatus('not_set'); setGoalSummary(null); }
+        else if (!fitnessProfileData.onboarding_completed) { setGoalStatus('incomplete'); setGoalSummary(null); }
+        else {
+          const goalAnswers = {
+            ...EMPTY_ANSWERS,
+            goal: fitnessProfileData.goal,
+            startingWeightKg: fitnessProfileData.starting_weight_kg,
+            goalWeightKg: fitnessProfileData.goal_weight_kg,
+            goalTargetDate: fitnessProfileData.goal_target_date,
+            activityLevel: fitnessProfileData.activity_level,
+            strengthExperience: fitnessProfileData.experience_level,
+            goalDetails: fitnessProfileData.goal_details ?? {},
+            barriers: fitnessProfileData.barriers ?? [],
+            preferredActivities: fitnessProfileData.preferred_activities ?? [],
+          };
+          // onboarding_completed can be stale relative to the current goal
+          // (e.g. it was changed later from the My Goals page, which doesn't
+          // walk back through the weight/target-date/focus questions) — treat
+          // that case the same as an incomplete goal so the "finish setting
+          // up your goals" CTA shows instead of silently hiding both banners.
+          if (isStep2Complete(goalAnswers)) {
+            setGoalStatus('complete');
+            const goalOpt = GOAL_OPTIONS.find(g => g.key === fitnessProfileData.goal);
+            const { goalLine } = buildPlanSummary(goalAnswers);
+            setGoalSummary({ goalLine, icon: goalOpt?.icon ?? 'flag-outline' });
+          } else {
+            setGoalStatus('incomplete');
+            setGoalSummary(null);
+          }
+        }
+        // Trainer-set goal wins over the client's own, which wins over the default.
+        setStepsGoal(fitnessProfileData?.trainer_daily_steps_goal ?? fitnessProfileData?.daily_steps_goal ?? STEPS_GOAL);
+
+        // Today's meals — from the user's active meal plan (self-built or
+        // nutritionist-assigned) if they have one, same query shape as
+        // nutrition-hub.tsx; otherwise a handful of suggestions from the
+        // curated meal library so the section isn't empty for new users.
+        const { data: mealPlanData } = await supabase
+          .from('meal_plans')
+          .select('id')
+          .eq('user_id', authSession.user.id)
+          .eq('is_active', true)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        let planMeals: TodayMeal[] = [];
+        if (mealPlanData) {
+          const todayDow = new Date().getDay();
+          const { data: planItemsData } = await supabase
+            .from('meal_plan_items')
+            .select('id, meal_slot, sort_order, meals(id, name, image_url, calories)')
+            .eq('meal_plan_id', mealPlanData.id)
+            .eq('day_of_week', todayDow)
+            .order('sort_order');
+          planMeals = ((planItemsData as any[]) ?? [])
+            .filter(item => item.meals)
+            .map(item => ({
+              id: item.id,
+              mealId: item.meals.id,
+              name: item.meals.name,
+              image_url: item.meals.image_url,
+              calories: item.meals.calories,
+              slotLabel: MEAL_SLOT_LABEL[item.meal_slot] ?? item.meal_slot,
+            }));
+        }
+
+        if (planMeals.length > 0) {
+          setTodayMeals(planMeals);
+          setTodayMealsAreSuggested(false);
+        } else {
+          // One query per category (rather than a single shared limit) so a
+          // category-skewed table can't crowd the others out of the results.
+          const categories = ['breakfast', 'lunch', 'dinner'];
+          const categoryResults = await Promise.all(
+            categories.map(category =>
+              supabase.from('meals')
+                .select('id, name, image_url, calories, category')
+                .eq('is_active', true)
+                .eq('category', category)
+                .limit(5),
+            ),
+          );
+          // Stable daily selection (Home Nutrition Hardening, Problem B) —
+          // deterministic from user + calendar date + slot, never
+          // Math.random(). Same user opening Home twice today always sees
+          // the same suggestions; they can only rotate on a new date.
+          const mealsBySlot: DailyMealCandidates[] = categories.map((category, i) => ({
+            category,
+            foods: ((categoryResults[i].data ?? []) as any[]).map(m => ({
+              id: m.id, name: m.name, image_url: m.image_url, calories: m.calories,
+            })),
+          }));
+          const dailySelections = selectDailyMeals(authSession.user.id, today, mealsBySlot);
+          const suggested: TodayMeal[] = dailySelections.map(sel => ({
+            id: sel.food.id,
+            mealId: sel.food.id,
+            name: sel.food.name,
+            image_url: sel.food.image_url,
+            calories: sel.food.calories,
+            slotLabel: MEAL_SLOT_LABEL[sel.category] ?? sel.category,
+          }));
+          setTodayMeals(suggested);
+          setTodayMealsAreSuggested(true);
+        }
+
+        const { data: dailyStatsData } = await supabase
+          .from('health_daily_stats')
+          .select('steps, water_cups, sleep_hours')
+          .eq('user_id', authSession.user.id)
+          .eq('date', today)
+          .maybeSingle();
+        setTodayGoals({
+          steps: dailyStatsData?.steps ?? 0,
+          waterCups: dailyStatsData?.water_cups ?? 0,
+          sleepHours: dailyStatsData?.sleep_hours ?? 0,
+        });
+        setStepsFromStrava(false);
+
+        // Connection-status notifications — Apple never reveals HealthKit
+        // grant/deny (see services/health.ts), so "ever having a synced row"
+        // is the same proxy the steps ring already relies on for connection
+        // state; Strava has a real status endpoint.
+        if (Platform.OS === 'ios') {
+          supabase.from('health_daily_stats').select('id').eq('user_id', authSession.user.id).limit(1)
+            .then(({ data }) => setHealthEverSynced(!!data && data.length > 0));
+        }
+        getStravaStatus().then(status => setStravaConnected(status.connected));
+
+        // If there's no real HealthKit step count for today, fall back to a
+        // rough estimate from today's Strava walk/run distance — better than
+        // showing 0 for someone who tracks activity via Strava instead.
+        if (!dailyStatsData?.steps) {
+          estimateTodayStepsFromStrava(authSession.user.id, today).then(estimated => {
+            if (estimated != null) {
+              setTodayGoals(g => ({ ...g, steps: estimated }));
+              setStepsFromStrava(true);
+            }
+          });
+        }
+
+        // Opportunistic background refresh — if Apple Health access was
+        // already granted, this quietly pulls in today's real step count
+        // without blocking the rest of the page from rendering.
+        syncHealthData(1).then(async synced => {
+          if (!synced) return;
+          const { data: freshStats } = await supabase
+            .from('health_daily_stats')
+            .select('steps')
+            .eq('user_id', authSession.user.id)
+            .eq('date', today)
+            .maybeSingle();
+          if (freshStats?.steps != null) {
+            setTodayGoals(g => ({ ...g, steps: freshStats.steps }));
+            setStepsFromStrava(false);
+          }
+        });
+
         const nowTime = new Date().toTimeString().slice(0, 8);
         const { data: bookingData } = await supabase
           .from('bookings')
@@ -687,59 +1277,21 @@ export default function HomeScreen() {
         setUser(null);
         setUserId(null);
         setTodayMood(null);
+        setGoalStatus('complete');
+        setGoalSummary(null);
         setActiveBooking(null);
         setWorkoutSchedules([]);
         setCompletedWorkoutKeys(new Set());
         setTasks([]);
         setFitnessStats({ totalWorkouts: 0, totalMinutes: 0, streakDays: 0, longestStreak: 0 });
+        setTodayGoals({ steps: 0, waterCups: 0, sleepHours: 0 });
+        setStepsGoal(STEPS_GOAL);
+        setStepsFromStrava(false);
+        setTodayMeals([]);
+        setTodayMealsAreSuggested(false);
       }
-
-      const { data: gymsData } = await supabase
-        .from('gyms')
-        .select('id, name, location, image_url, description')
-        .eq('is_active', true)
-        .limit(6);
-      if (gymsData) setGyms(gymsData);
 
       const todayStr = new Date().toISOString().split('T')[0];
-      const fourteenDaysLater = new Date();
-      fourteenDaysLater.setDate(fourteenDaysLater.getDate() + 13);
-
-      const { data: nearTermData } = await supabase
-        .from('sessions')
-        .select('id, name, instructor, description, date, time, drop_in_price, image_url, gym_id, spots_left, category, gyms(name, deposit_pct)')
-        .gte('date', todayStr)
-        .lte('date', fourteenDaysLater.toISOString().split('T')[0])
-        .order('date', { ascending: true })
-        .order('time', { ascending: true })
-        .limit(60);
-      if (nearTermData) setNearTermSessions(nearTermData as any);
-
-      const { data: ptData } = await supabase
-        .from('personal_trainers')
-        .select('id, full_name, professional_name, photo_url, specialisations, years_of_experience, is_certified_verified')
-        .eq('status', 'approved')
-        .order('created_at', { ascending: false })
-        .limit(8);
-
-      if (ptData?.length) {
-        const ptIds = ptData.map((p: any) => p.id);
-        const [{ data: ptPrices }, { data: ptReviews }] = await Promise.all([
-          supabase.from('pt_offerings').select('pt_id, price_kes').in('pt_id', ptIds).eq('is_active', true).eq('is_draft', false),
-          supabase.from('pt_reviews').select('pt_id, rating').in('pt_id', ptIds),
-        ]);
-        setTrainers(ptData.map((pt: any) => {
-          const offers = ptPrices?.filter((o: any) => o.pt_id === pt.id) ?? [];
-          const reviews = ptReviews?.filter((r: any) => r.pt_id === pt.id) ?? [];
-          const prices = offers.map((o: any) => o.price_kes).filter(Boolean) as number[];
-          const avg = reviews.length ? reviews.reduce((s: number, r: any) => s + r.rating, 0) / reviews.length : null;
-          return {
-            ...pt,
-            min_price: prices.length ? Math.min(...prices) : null,
-            avg_rating: avg ? Math.round(avg * 10) / 10 : null,
-          };
-        }));
-      }
 
       const { data: expData } = await supabase
         .from('experiences')
@@ -750,37 +1302,11 @@ export default function HomeScreen() {
         .limit(6);
       if (expData) setExperiences(expData as any);
 
-      const { data: communityData } = await supabase
-        .from('communities')
-        .select('id, slug, name, category, location, logo_url, member_count')
-        .eq('review_status', 'approved')
-        .eq('is_active', true)
-        .order('member_count', { ascending: false })
-        .limit(8);
-      if (communityData) setCommunities(communityData as any);
-
     } catch (error) {
       console.error('Error loading home data:', error);
     } finally {
       setLoading(false);
     }
-  };
-
-  const formatTime = (timeString: string) => {
-    try {
-      const [h, m] = timeString.split(':');
-      const hour = parseInt(h, 10);
-      return `${hour % 12 || 12}:${m} ${hour >= 12 ? 'PM' : 'AM'}`;
-    } catch { return timeString; }
-  };
-
-  const formatNextUpWhen = (d: Date) => {
-    const now = new Date();
-    const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1);
-    const time = d.toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit' });
-    if (d.toDateString() === now.toDateString()) return `Today · ${time}`;
-    if (d.toDateString() === tomorrow.toDateString()) return `Tomorrow · ${time}`;
-    return `${d.toLocaleDateString('en-GB', { weekday: 'short' })} · ${time}`;
   };
 
   const sessionDeposit = (session: Session) => {
@@ -839,30 +1365,113 @@ export default function HomeScreen() {
     );
   }
 
+  const homeNotifications: { key: string; icon: string; title: string; body: string; onPress: () => void }[] = [
+    ...(Platform.OS === 'ios' && !healthEverSynced ? [{
+      key: 'watch', icon: 'watch-outline', title: 'Connect Apple Watch',
+      body: 'Sync workouts and activity automatically from your Apple Watch.',
+      onPress: () => router.push('/health-settings' as any),
+    }] : []),
+    ...(Platform.OS === 'ios' && !healthEverSynced ? [{
+      key: 'health', icon: 'heart-outline', title: 'Connect Apple Health',
+      body: 'Bring in your steps, heart rate, and workouts from Apple Health.',
+      onPress: () => router.push('/health-settings' as any),
+    }] : []),
+    ...(!stravaConnected ? [{
+      key: 'strava', icon: 'bicycle-outline', title: 'Connect Strava',
+      body: 'Automatically log your rides and runs from Strava.',
+      onPress: () => router.push('/strava-settings' as any),
+    }] : []),
+  ];
+
   return (
     <>
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+        <LinearGradient
+          colors={[palette.blue100, 'rgba(208,224,255,0)']}
+          style={styles.topFadeBg}
+          pointerEvents="none"
+        />
 
         {/* ─── Header greeting / guest hero ─── */}
         {isGuest ? (
           <GuestHero onSearch={() => setSearchVisible(true)} />
         ) : (
           <View style={styles.header}>
-            <View>
-              <ThemedText style={styles.headerGreeting}>{getGreeting()}</ThemedText>
-              <ThemedText style={styles.headerName}>{user?.name?.split(' ')[0] || 'there'}</ThemedText>
-            </View>
-            <View style={styles.headerActions}>
+            <View style={styles.headerLeft}>
               <TouchableOpacity
-                style={styles.journeyChip}
-                onPress={() => router.push('/fitness-journey')}
+                onPress={() => router.push('/(tabs)/profile' as any)}
                 activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Open profile"
               >
-                <Ionicons name="trophy-outline" size={14} color={palette.blue500} />
-                <ThemedText style={styles.journeyChipText}>My Journey</ThemedText>
+                {user?.avatarUrl ? (
+                  <ExpoImage source={{ uri: user.avatarUrl }} style={styles.headerAvatar} />
+                ) : (
+                  <View style={[styles.headerAvatar, styles.headerAvatarFallback]}>
+                    <ThemedText style={styles.headerAvatarInitial}>
+                      {(user?.name?.[0] || '?').toUpperCase()}
+                    </ThemedText>
+                  </View>
+                )}
               </TouchableOpacity>
+              <View>
+                <ThemedText style={styles.headerGreeting}>{getGreeting()}</ThemedText>
+                <ThemedText style={styles.headerName}>{user?.name?.split(' ')[0] || 'there'}</ThemedText>
+              </View>
             </View>
+            <TouchableOpacity
+              onPress={() => setShowNotifications(true)}
+              hitSlop={10}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Notifications"
+            >
+              <Ionicons name="notifications-outline" size={24} color={palette.ink900} />
+              {homeNotifications.length > 0 && <View style={styles.headerBellDot} />}
+            </TouchableOpacity>
           </View>
+        )}
+
+        {/* ─── Goal status banner ─── */}
+        {!isGuest && goalStatus !== 'complete' && (
+          <TouchableOpacity
+            style={styles.goalBanner}
+            onPress={() => router.push('/onboarding/goal' as any)}
+            activeOpacity={0.85}
+          >
+            <View style={styles.goalBannerIcon}>
+              <Ionicons name="flag-outline" size={18} color={palette.blue600} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <ThemedText style={styles.goalBannerTitle}>
+                {goalStatus === 'not_set' ? 'Goals not set' : 'Incomplete set of goals'}
+              </ThemedText>
+              <ThemedText style={styles.goalBannerSub}>
+                {goalStatus === 'not_set'
+                  ? "Tell us what you're working toward so we can personalise your plan"
+                  : 'Finish setting up your goals to get the most out of your plan'}
+              </ThemedText>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={palette.blue600} />
+          </TouchableOpacity>
+        )}
+
+        {/* ─── Your goal (once set) — same slot as the status banner above ─── */}
+        {!isGuest && goalStatus === 'complete' && goalSummary && (
+          <TouchableOpacity
+            style={styles.goalBanner}
+            onPress={() => router.push('/fitness-goals' as any)}
+            activeOpacity={0.85}
+          >
+            <View style={styles.goalBannerIcon}>
+              <Ionicons name={goalSummary.icon as any} size={18} color={palette.blue600} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <ThemedText style={styles.goalBannerTitle}>Your goal</ThemedText>
+              <ThemedText style={styles.goalBannerSub}>{goalSummary.goalLine}</ThemedText>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={palette.blue600} />
+          </TouchableOpacity>
         )}
 
         {/* ─── How are you feeling: full-width check-in CTA (hidden once logged today) ─── */}
@@ -885,199 +1494,287 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* ─── Next up: booking + scheduled workout, compact ─── */}
-        {!isGuest && nextUpItems.length > 0 && (
-          <View style={styles.nextUpCard}>
-            <ThemedText style={styles.nextUpHeader}>Next Up</ThemedText>
-            {nextUpItems.map((item, i) => (
-              <TouchableOpacity
-                key={item.key}
-                style={[styles.nextUpRow, i < nextUpItems.length - 1 && styles.nextUpRowDivider]}
-                onPress={() => item.kind === 'booking'
-                  ? router.push({ pathname: '/(tabs)/check-in', params: { sessionId: item.booking.session_id ?? '' } } as any)
-                  : router.push({ pathname: '/workout-detail', params: { workoutId: item.schedule.workout_id } } as any)
-                }
-                activeOpacity={0.7}
-              >
-                <View style={styles.nextUpRowIcon}>
-                  <Ionicons
-                    name={item.kind === 'booking' ? 'qr-code-outline' : 'barbell-outline'}
-                    size={15} color={palette.blue500}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <ThemedText style={styles.nextUpRowTitle} numberOfLines={1}>
-                    {item.kind === 'booking' ? item.booking.sessions?.name : (item.schedule.workouts?.title ?? 'Workout')}
-                  </ThemedText>
-                  <ThemedText style={styles.nextUpRowMeta} numberOfLines={1}>
-                    {item.kind === 'booking'
-                      ? `${item.booking.sessions?.gyms?.name ?? ''} · ${formatTime(item.booking.booking_time)}`
-                      : formatNextUpWhen(item.at)}
-                  </ThemedText>
-                </View>
-                <View style={[styles.nextUpBadge, item.kind === 'booking' ? styles.nextUpBadgeClass : styles.nextUpBadgeWorkout]}>
-                  <ThemedText style={[styles.nextUpBadgeText, item.kind === 'booking' ? styles.nextUpBadgeTextClass : styles.nextUpBadgeTextWorkout]}>
-                    {item.kind === 'booking' ? 'Class' : 'Workout'}
-                  </ThemedText>
-                </View>
-                <Ionicons name="chevron-forward" size={14} color={palette.gray300} />
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-
-        {/* ─── Date strip: next 14 days ─── */}
-        <DateRail
-          days={next14Days}
-          selected={calSelected}
-          sessionDates={sessionDates}
-          onSelect={setCalSelected}
-        />
-
-        {/* ─── Your Exercises & Tasks (filtered by date strip above) ─── */}
+        {/* ─── Today's Focus (filtered by date strip above) ─── */}
         {!isGuest && (
           <View style={styles.section}>
-            <View style={styles.sectionPad}>
-              <SectionHeader eyebrow="For this day" title="Your Exercises & Tasks" />
-            </View>
-            {dayWorkouts.length === 0 && dayTasks.length === 0 ? (
-              <View style={styles.noSessionsRow}>
-                <Ionicons
-                  name={allDoneForDay ? 'checkmark-circle' : 'calendar-outline'}
-                  size={16}
-                  color={allDoneForDay ? palette.success700 : palette.gray300}
+            <View style={styles.todaysFocusCard}>
+              <View style={{ marginBottom: 12 }}>
+                <SectionHeader
+                  title="Today's Focus"
+                  onInfoPress={() => setShowIntelligenceInfo(true)}
+                  onSeeAll={homeInsight ? () => router.push(homeInsight.ctaTarget as any) : undefined}
+                  seeAllLabel={homeInsight?.ctaLabel}
                 />
-                <ThemedText style={styles.noSessionsText}>
-                  {allDoneForDay ? 'All done for this day 🎉' : 'Nothing scheduled for this day'}
-                </ThemedText>
-              </View>
-            ) : (
-              <View style={styles.dayItemsList}>
-                {dayWorkouts.map(schedule => (
-                  <TouchableOpacity
-                    key={`w-${schedule.id}`}
-                    style={styles.dayItemRow}
-                    onPress={() => router.push({ pathname: '/workout-detail', params: { workoutId: schedule.workout_id } } as any)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.dayItemIcon}>
-                      <Ionicons name="barbell-outline" size={16} color={palette.blue500} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <ThemedText style={styles.dayItemTitle} numberOfLines={1}>
-                        {schedule.workouts?.title ?? 'Workout'}
-                      </ThemedText>
-                      <ThemedText style={styles.dayItemMeta}>{schedule.time_of_day.slice(0, 5)}</ThemedText>
-                    </View>
-                    <Ionicons name="chevron-forward" size={14} color={palette.gray300} />
-                  </TouchableOpacity>
-                ))}
-                {dayTasks.map(task => {
-                  const done = isTaskDoneOnSelectedDate(task);
-                  return (
-                    <TouchableOpacity
-                      key={`t-${task.id}`}
-                      style={styles.dayItemRow}
-                      onPress={() => toggleDayTask(task)}
-                      activeOpacity={0.7}
-                    >
-                      <View style={[styles.dayItemIcon, { backgroundColor: palette.surfaceMuted }]}>
-                        <Ionicons
-                          name={done ? 'checkmark-circle' : 'ellipse-outline'}
-                          size={16} color={done ? palette.blue500 : palette.gray300}
-                        />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <ThemedText
-                          style={[styles.dayItemTitle, done && styles.dayItemTitleDone]}
-                          numberOfLines={1}
-                        >
-                          {task.title}
-                        </ThemedText>
-                        <ThemedText style={styles.dayItemMeta}>Task from your trainer</ThemedText>
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            )}
-          </View>
-        )}
 
-        {/* ─── Classes and Sessions for You ─── */}
-        {nearTermSessions.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionPad}>
-              <SectionHeader
-                eyebrow={nextAvailableSessionDate ? 'Next available' : 'For this day'}
-                title="Classes & Sessions for You"
-                onSeeAll={() => router.push('/(tabs)/classes' as any)}
+                {/* ─── ACP Intelligence™ — compact insight, presentation layer
+                      only. Never calls OpenAI: reads the assessment/completions
+                      Days 1-4 already produced. Hidden entirely while
+                      goalStatus isn't 'complete' (the banners above already
+                      cover that), and while still loading, to avoid a layout
+                      shift. ─── */}
+                {!isGuest && homeInsight && (
+                  <TouchableOpacity
+                    style={styles.intelligenceInline}
+                    onPress={() => router.push(homeInsight.ctaTarget as any)}
+                    activeOpacity={0.85}
+                  >
+                    <ThemedText style={styles.intelligenceCardHeadline}>{homeInsight.headline}</ThemedText>
+                    <ThemedText style={styles.intelligenceCardBody}>{homeInsight.body}</ThemedText>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              <CombinedGoalRingsCard
+                rings={[
+                  {
+                    key: 'steps',
+                    color: RING_COLOR.steps,
+                    label: 'Steps',
+                    value: todayGoals.steps,
+                    goal: stepsGoal,
+                    displayValue: `${todayGoals.steps}`,
+                    displayGoal: ` /${stepsGoal}`,
+                    subtitle: stepsFromStrava
+                      ? 'Estimated · tap to connect Health'
+                      : (Platform.OS === 'ios' ? 'Connect Apple Health' : 'Connect Health'),
+                    onPress: () => router.push('/health-settings' as any),
+                  },
+                  {
+                    key: 'water',
+                    color: RING_COLOR.water,
+                    label: 'Water',
+                    value: todayGoals.waterCups,
+                    goal: WATER_GOAL,
+                    displayValue: `${todayGoals.waterCups}`,
+                    displayGoal: ` /${WATER_GOAL} cups`,
+                    subtitle: 'Tap to add · hold to remove',
+                    onPress: () => adjustGoal('waterCups', 1),
+                    onLongPress: () => adjustGoal('waterCups', -1),
+                  },
+                  {
+                    key: 'exercises',
+                    color: RING_COLOR.exercises,
+                    label: 'Exercises',
+                    value: todayIsStrength ? (homeTodayCompleted ? 1 : 0) : exercisesCompleted,
+                    goal: todayIsStrength ? 1 : exercisesTotal,
+                    displayValue: todayIsStrength ? (homeTodayCompleted ? '1' : '0') : `${exercisesCompleted}`,
+                    displayGoal: todayIsStrength ? ' /1' : ` /${exercisesTotal}`,
+                    subtitle: todayIsStrength
+                      ? `${homeTodayActivity!.title} · ${homeTodayActivity!.duration_minutes} min`
+                      : (!isGuest && nextUpItems.length > 0
+                        ? `${nextUpItems[0].kind === 'booking'
+                          ? nextUpItems[0].booking.sessions?.name
+                          : (nextUpItems[0].schedule.workouts?.title ?? 'Workout')} · ${nextUpItems[0].at.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`
+                        : undefined),
+                    onPress: todayIsStrength
+                      ? () => router.push('/my-plan' as any)
+                      : (!isGuest && nextUpItems.length > 0 ? () => (
+                        nextUpItems[0].kind === 'booking'
+                          ? router.push({ pathname: '/(tabs)/check-in', params: { sessionId: nextUpItems[0].booking.session_id ?? '' } } as any)
+                          : router.push({ pathname: '/workout-detail', params: { workoutId: nextUpItems[0].schedule.workout_id } } as any)
+                      ) : undefined),
+                  },
+                ]}
               />
             </View>
-            {visibleSessions.length === 0 ? (
-              <View style={styles.noSessionsRow}>
-                <Ionicons name="calendar-outline" size={16} color={palette.gray300} />
-                <ThemedText style={styles.noSessionsText}>No upcoming classes</ThemedText>
-              </View>
-            ) : (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.railPad}>
-                {visibleSessions.map((session) => {
-                  const { deposit, remainder } = sessionDeposit(session);
-                  const isFree = (Number(session.drop_in_price) || 0) === 0;
-                  const d = new Date(session.date);
-                  return (
-                    <OverlayCard
-                      key={session.id}
-                      imageUrl={session.image_url}
-                      fallbackIcon="fitness"
-                      catLabel={session.category || 'Class'}
-                      catIcon="barbell-outline"
-                      name={session.name}
-                      tagline={session.gyms?.name}
-                      metaIcon="time-outline"
-                      metaText={formatTime(session.time)}
-                      dateBadge={{
-                        mon: d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase(),
-                        day: d.getDate(),
-                      }}
-                      priceLabel={isFree ? 'Book for Free!' : `KES ${deposit.toLocaleString()}`}
-                      priceSub={isFree ? '' : 'deposit'}
-                      priceRemainder={!isFree && remainder > 0 ? `+${remainder.toLocaleString()} at venue` : null}
-                      onPress={() => router.push({ pathname: '/session-details', params: { sessionId: session.id } })}
-                    />
-                  );
-                })}
-              </ScrollView>
-            )}
           </View>
         )}
 
-        {/* ─── My Journey CTA (fitness + nutrition, merged) ─── */}
-        <TouchableOpacity
-          style={styles.journeyCta}
-          onPress={() => isGuest
-            ? showAuthModal(undefined, { defaultTab: 'signup' })
-            : router.push('/fitness-journey' as any)
-          }
-          activeOpacity={0.85}
-        >
-          <LinearGradient
-            colors={[palette.blue500, palette.success700]}
-            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-            style={styles.journeyCtaGrad}
-          >
-            <View style={styles.journeyCtaIcon}>
-              <Ionicons name="trophy-outline" size={22} color="#fff" />
+        {/* ─── Today's Plan — the single canonical plan activity for today,
+              if any. Reuses Day 3 fulfilment for its CTA and Day 4
+              completion data for its state; never duplicates the full My
+              Plan card, and never fabricates an activity on a rest day
+              (the ACP Intelligence insight above already covers that). ─── */}
+        {!isGuest && homeIntelLoaded && homeTodayActivity && (
+          <View style={styles.section}>
+            <View style={styles.sectionPad}>
+              <SectionHeader title="Today's Plan" />
             </View>
-            <View style={{ flex: 1 }}>
-              <ThemedText style={styles.journeyCtaTitle}>My Journey</ThemedText>
-              <ThemedText style={styles.journeyCtaSub}>
-                {isGuest ? 'Sign up to track your progress' : 'Workouts, meals, streaks & achievements'}
+            <View style={styles.mealsList}>
+              <View style={styles.todayPlanCard}>
+                {homeTodayCompleted ? (
+                  <View style={styles.todayPlanCompletedRow}>
+                    <Ionicons name="checkmark-circle" size={15} color={palette.success700} />
+                    <ThemedText style={styles.todayPlanCompletedText}>
+                      {CATEGORY_LABEL[homeTodayActivity.category]} completed
+                      {homeTodaySyncSourceLabel ? ` · ${homeTodaySyncSourceLabel}` : ''}
+                    </ThemedText>
+                  </View>
+                ) : (
+                  <ThemedText style={styles.todayPlanCategory}>{CATEGORY_LABEL[homeTodayActivity.category]}</ThemedText>
+                )}
+                <ThemedText style={styles.mealRowTitle}>{homeTodayActivity.title}</ThemedText>
+                <ThemedText style={styles.mealRowMeta}>
+                  {homeTodayActivity.activity} · {homeTodayActivity.duration_minutes} min
+                </ThemedText>
+
+                {!homeTodayCompleted && todayCandidate ? (
+                  // Something the user already did (e.g. a Strava walk logged
+                  // today) matches this activity — surface it instead of a
+                  // blind "track activity" CTA. Still requires a tap to
+                  // confirm, never auto-completed.
+                  <View style={styles.candidateBanner}>
+                    <ThemedText style={styles.candidateText}>
+                      We found a {todayCandidate.label} from {
+                        todayCandidate.source === 'strava' ? 'Strava' : todayCandidate.source === 'exercise_db' ? 'your workout history' : 'ACP'
+                      } today. Count this toward today&apos;s {homeTodayActivity.activity.toLowerCase()}?
+                    </ThemedText>
+                    <View style={styles.candidateActions}>
+                      <TouchableOpacity onPress={handleConfirmTodayCandidate} activeOpacity={0.85}>
+                        <ThemedText style={styles.candidateConfirm}>Yes, count it</ThemedText>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={handleDismissTodayCandidate} activeOpacity={0.85}>
+                        <ThemedText style={styles.candidateDismiss}>Not this one</ThemedText>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : !homeTodayCompleted ? (
+                  <>
+                    {/* Both options, same as My Plan — never forced to pick
+                        just one: do it yourself (ExerciseDB/Strava) and/or
+                        do it with ACP (marketplace sessions/experiences). */}
+                    {todayFulfilment?.selfDirected && (
+                      <View style={styles.fulfilmentBlock}>
+                        <ThemedText style={styles.fulfilmentHeader}>
+                          {todayFulfilment.selfDirected.source === 'exercise_db' ? 'DO IT YOURSELF' : 'TRACK YOUR ACTIVITY'}
+                        </ThemedText>
+                        <TouchableOpacity
+                          onPress={() => router.push(todayFulfilment.selfDirected!.navigationTarget as any)}
+                          activeOpacity={0.7}
+                        >
+                          <ThemedText style={styles.fulfilmentLink}>{todayFulfilment.selfDirected.title} →</ThemedText>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                    {(todayFulfilment?.marketplaceMatches.length ?? 0) > 0 && (
+                      <View style={styles.fulfilmentBlock}>
+                        <View style={styles.fulfilmentHeaderRow}>
+                          <ThemedText style={[styles.fulfilmentHeader, { marginBottom: 0 }]}>DO IT WITH ACP</ThemedText>
+                          <TouchableOpacity onPress={() => setShowIntelligenceInfo(true)} hitSlop={8} activeOpacity={0.7}>
+                            <Ionicons name="information-circle-outline" size={12} color={palette.gray300} />
+                          </TouchableOpacity>
+                        </View>
+                        {todayFulfilment!.marketplaceMatches.map((m, idx) => (
+                          <TouchableOpacity
+                            key={m.id}
+                            style={[
+                              styles.marketplaceMatchRow,
+                              idx < todayFulfilment!.marketplaceMatches.length - 1 && styles.marketplaceMatchRowBorder,
+                            ]}
+                            onPress={() => router.push(m.navigationTarget as any)}
+                            activeOpacity={0.7}
+                          >
+                            {m.imageUrl ? (
+                              <Image source={{ uri: m.imageUrl }} style={styles.marketplaceMatchImage} />
+                            ) : (
+                              <View style={[styles.marketplaceMatchImage, styles.mealImageFallback]}>
+                                <Ionicons name={m.type === 'experience' ? 'sparkles-outline' : 'barbell-outline'} size={20} color={palette.gray300} />
+                              </View>
+                            )}
+                            <View style={{ flex: 1 }}>
+                              <ThemedText style={styles.mealRowTitle}>{m.title}</ThemedText>
+                              <ThemedText style={styles.mealRowMeta}>
+                                {m.isAlternateDay ? 'Available on ACP · ' : ''}
+                                {new Date(m.date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long' })}
+                                {m.startTime ? ` · ${m.startTime.slice(0, 5)}` : ''}
+                                {m.priceKes != null ? ` · KES ${m.priceKes.toLocaleString()}` : ''}
+                              </ThemedText>
+                            </View>
+                            <ThemedText style={styles.fulfilmentLink}>View activity →</ThemedText>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                    {!todayFulfilment?.selfDirected && (todayFulfilment?.marketplaceMatches.length ?? 0) === 0 && (
+                      <TouchableOpacity onPress={() => router.push('/weekly-plan' as any)} activeOpacity={0.7} style={{ marginTop: 10 }}>
+                        <ThemedText style={styles.todayPlanCta}>View this week&apos;s plan →</ThemedText>
+                      </TouchableOpacity>
+                    )}
+                  </>
+                ) : null}
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* ─── Today's Meals ───
+              nutrition focus and meal fulfilment are each gated
+              independently — a meal-query failure (empty todayMeals) no
+              longer hides a genuine nutrition_focus. */}
+        {!isGuest && (!!homeAssessment?.nutrition_focus || todayMeals.length > 0) && (
+          <View style={styles.section}>
+            {/* ONE eyebrow for the whole nutrition area (Part 3/23) — never
+                repeated per sub-block. "Today's plan" when these are the
+                user's own/nutritionist-assigned meals, "Suggested"
+                otherwise — same signal the old per-block eyebrow gave. */}
+            <View style={styles.sectionPad}>
+              <Eyebrow text={todayMealsAreSuggested ? 'Suggested' : "Today's plan"} />
+
+              {/* Home Nutrition Integration — the WEEK's intent, independent
+                  of which specific meals are listed below (plan-driven or
+                  ranked). A compact, editorial block, not a card — the
+                  "Your plan →" link sits below the reason, never beside the
+                  title (Part 2/4). */}
+              {!!homeAssessment?.nutrition_focus && (
+                <View style={{ marginTop: 10 }}>
+                  <Eyebrow text="This week's nutrition focus" />
+                  <ThemedText style={styles.sectionTitle}>{homeAssessment.nutrition_focus.title}</ThemedText>
+                  <ThemedText style={styles.mealRowMeta}>{homeAssessment.nutrition_focus.reason}</ThemedText>
+                  <TouchableOpacity
+                    onPress={() => router.push('/my-plan' as any)}
+                    activeOpacity={0.7}
+                    style={{ alignSelf: 'flex-end', marginTop: 6 }}
+                  >
+                    <ThemedText style={styles.seeAllText}>Your plan →</ThemedText>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+
+            {/* Today's Meals — a compact CTA rather than the full list; the
+                meals themselves (with logging) live on /today-nutrition. */}
+            {todayMeals.length > 0 && (
+              <TouchableOpacity
+                style={styles.todaysMealsCta}
+                onPress={() => router.push('/today-nutrition' as any)}
+                activeOpacity={0.85}
+              >
+                <View style={{ flex: 1 }}>
+                  <ThemedText style={styles.sectionTitle}>Today&apos;s Meals</ThemedText>
+                  <ThemedText style={styles.mealRowMeta}>
+                    {todayMeals.length} suggested {todayMeals.length === 1 ? 'meal' : 'meals'} for today
+                  </ThemedText>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={palette.blue600} />
+              </TouchableOpacity>
+            )}
+
+          </View>
+        )}
+
+        {/* ─── Health Testing CTA ─── */}
+        {!isGuest && (
+          <View style={styles.section}>
+            <TouchableOpacity
+              style={[styles.supportCard, { marginHorizontal: 20 }]}
+              onPress={() => router.push('/health-testing' as any)}
+              activeOpacity={0.85}
+            >
+              <ThemedText style={styles.supportCardEyebrow}>Health Testing</ThemedText>
+              <ThemedText style={styles.supportRowValue}>
+                Comprehensive health insights through lab testing
               </ThemedText>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.7)" />
-          </LinearGradient>
-        </TouchableOpacity>
+              <ThemedText style={styles.supportBody}>
+                Hormone Panel and Nutritional Deficiency Tests processed by certified laboratories with home collection
+                available in Nairobi, Mombasa, and Kisumu.
+              </ThemedText>
+              <View style={styles.exploreSupportBtn}>
+                <ThemedText style={styles.exploreSupportBtnText}>Learn more →</ThemedText>
+              </View>
+            </TouchableOpacity>
+          </View>
+        )}
+
 
         {/* ─── Something for everyone ─── */}
         {/* <View style={styles.section}>
@@ -1095,126 +1792,6 @@ export default function HomeScreen() {
         <View style={styles.sectionPad}>
           <HowItWorks />
         </View> */}
-
-        {/* ─── Explore top venues ─── */}
-        {gyms.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionPad}>
-              <SectionHeader
-                eyebrow="Near you"
-                title="Explore Top Venues"
-                onSeeAll={() => router.push('/(tabs)/venues')}
-              />
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.railPad, { alignItems: 'stretch' }]}>
-              {gyms.map((gym) => (
-                <StackedCard
-                  key={gym.id}
-                  imageUrl={gym.image_url}
-                  fallbackIcon="fitness"
-                  catLabel="Venue"
-                  catIcon="business-outline"
-                  rating={null}
-                  name={gym.name}
-                  tagline={gym.description}
-                  meta1={gym.location}
-                  priceLabel="Explore"
-                  onPress={() => router.push({ pathname: '/gym-details', params: { gymId: gym.id } })}
-                />
-              ))}
-              <TouchableOpacity
-                style={styles.seeAllTile}
-                onPress={() => router.push('/(tabs)/venues')}
-              >
-                <View style={styles.seeAllTileIcon}>
-                  <Ionicons name="arrow-forward" size={28} color={palette.blue500} />
-                </View>
-                <ThemedText style={styles.seeAllTileText}>All Venues</ThemedText>
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-        )}
-
-        {/* ─── Communities & Clubs (guests + logged-in) ─── */}
-        {communities.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionPad}>
-              <SectionHeader
-                eyebrow="Find your people"
-                title="Communities & Clubs"
-                onSeeAll={() => router.push('/(tabs)/communities' as any)}
-              />
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.railPad, { alignItems: 'stretch' }]}>
-              {communities.map((c) => (
-                <StackedCard
-                  key={c.id}
-                  imageUrl={c.logo_url}
-                  fallbackIcon="people"
-                  fallbackBg={palette.blue500}
-                  catLabel={COMMUNITY_CATEGORY_LABEL[c.category] ?? c.category}
-                  catIcon="people-outline"
-                  rating={null}
-                  name={c.name}
-                  tagline={c.location}
-                  meta1={`${c.member_count} member${c.member_count === 1 ? '' : 's'}`}
-                  priceLabel="View Community"
-                  onPress={() => router.push({ pathname: '/community/[id]', params: { id: c.slug ?? c.id } } as any)}
-                />
-              ))}
-              <TouchableOpacity
-                style={styles.seeAllTile}
-                onPress={() => router.push('/(tabs)/communities' as any)}
-              >
-                <View style={styles.seeAllTileIcon}>
-                  <Ionicons name="arrow-forward" size={28} color={palette.blue500} />
-                </View>
-                <ThemedText style={styles.seeAllTileText}>All Communities</ThemedText>
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-        )}
-
-        {/* ─── Train with a Pro ─── */}
-        {trainers.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionPad}>
-              <SectionHeader
-                eyebrow="1-on-1 coaching"
-                title="Train with a Pro"
-                onSeeAll={() => router.push('/(tabs)/trainers' as any)}
-              />
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.railPad}>
-              {trainers.map((pt) => (
-                <StackedCard
-                  key={pt.id}
-                  imageUrl={pt.photo_url}
-                  fallbackIcon="person"
-                  fallbackBg={palette.blue500}
-                  catLabel={pt.specialisations[0] || 'Trainer'}
-                  catIcon="ribbon-outline"
-                  rating={pt.avg_rating}
-                  verifiedBadge={pt.is_certified_verified}
-                  name={pt.professional_name ?? pt.full_name}
-                  tagline={pt.specialisations.slice(0, 2).join(' · ') || null}
-                  meta1={pt.years_of_experience ? `${pt.years_of_experience} yrs exp` : null}
-                  priceLabel={pt.min_price ? `from KES ${pt.min_price.toLocaleString()} / session` : 'Book a session'}
-                  onPress={() => router.push({ pathname: '/trainer-profile', params: { id: pt.id } })}
-                />
-              ))}
-              <TouchableOpacity
-                style={styles.seeAllTile}
-                onPress={() => router.push('/(tabs)/trainers' as any)}
-              >
-                <View style={styles.seeAllTileIcon}>
-                  <Ionicons name="arrow-forward" size={28} color={palette.blue500} />
-                </View>
-                <ThemedText style={styles.seeAllTileText}>All Trainers</ThemedText>
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-        )}
 
         {/* ─── Experiences (guests only) ─── */}
         {isGuest && experiences.length > 0 && (
@@ -1388,6 +1965,56 @@ export default function HomeScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Reuses the exact ACP Intelligence™ tooltip copy from onboarding/plan.tsx and my-plan.tsx — one definition, not a competing one. */}
+      <Modal visible={showIntelligenceInfo} transparent animationType="fade" onRequestClose={() => setShowIntelligenceInfo(false)}>
+        <TouchableOpacity style={styles.intelligenceTooltipOverlay} activeOpacity={1} onPress={() => setShowIntelligenceInfo(false)}>
+          <View style={styles.intelligenceTooltipCard}>
+            <ThemedText style={styles.intelligenceTooltipTitle}>ACP Intelligence™</ThemedText>
+            <ThemedText style={styles.intelligenceTooltipBody}>
+              ACP Intelligence™ is AI that personalises your fitness and nutrition plan, learns from
+              your progress, and adapts what to do next based on what works for you.
+            </ThemedText>
+            <TouchableOpacity style={styles.intelligenceTooltipCloseBtn} onPress={() => setShowIntelligenceInfo(false)} activeOpacity={0.85}>
+              <ThemedText style={styles.intelligenceTooltipCloseText}>Got it</ThemedText>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal visible={showNotifications} transparent animationType="fade" onRequestClose={() => setShowNotifications(false)}>
+        <TouchableOpacity style={styles.intelligenceTooltipOverlay} activeOpacity={1} onPress={() => setShowNotifications(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.notificationsCard} onPress={() => {}}>
+            <ThemedText style={styles.intelligenceTooltipTitle}>Notifications</ThemedText>
+            {homeNotifications.length === 0 ? (
+              <ThemedText style={styles.intelligenceTooltipBody}>You&apos;re all caught up.</ThemedText>
+            ) : (
+              <View style={{ marginTop: 8 }}>
+                {homeNotifications.map(n => (
+                  <TouchableOpacity
+                    key={n.key}
+                    style={styles.notificationRow}
+                    activeOpacity={0.7}
+                    onPress={() => { setShowNotifications(false); n.onPress(); }}
+                  >
+                    <View style={styles.notificationIconWrap}>
+                      <Ionicons name={n.icon as any} size={18} color={palette.blue600} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <ThemedText style={styles.notificationRowTitle}>{n.title}</ThemedText>
+                      <ThemedText style={styles.mealRowMeta}>{n.body}</ThemedText>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color={palette.gray300} />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+            <TouchableOpacity style={styles.intelligenceTooltipCloseBtn} onPress={() => setShowNotifications(false)} activeOpacity={0.85}>
+              <ThemedText style={styles.intelligenceTooltipCloseText}>Close</ThemedText>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </>
   );
 }
@@ -1396,11 +2023,65 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: palette.white },
+  topFadeBg: { position: 'absolute', top: 0, left: 0, right: 0, height: 460 },
 
   // Header
   header: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerBellDot: {
+    position: 'absolute', top: 0, right: 0, width: 8, height: 8, borderRadius: 4,
+    backgroundColor: palette.danger500, borderWidth: 1.5, borderColor: palette.white,
+  },
   headerGreeting: { fontSize: fontSize.base, color: palette.gray450, fontWeight: '500' },
   headerName: { fontSize: 30, fontWeight: '800', paddingTop:10, color: palette.ink900, letterSpacing: -0.5 },
+  headerAvatar: { width: 44, height: 44, borderRadius: 22 },
+  headerAvatarFallback: { backgroundColor: palette.blue500, alignItems: 'center', justifyContent: 'center' },
+  headerAvatarInitial: { fontSize: fontSize.lg, fontWeight: '700', color: palette.white },
+
+  // Goal status banner (right after header, before mood check-in)
+  goalBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    margin: 20, marginTop: 16, marginBottom: 0, backgroundColor: 'transparent',
+    borderRadius: radii.xl, borderWidth: 1, borderColor: palette.blue100,
+    paddingHorizontal: 14, paddingVertical: 14,
+  },
+  goalBannerIcon: {
+    width: 36, height: 36, borderRadius: 18, backgroundColor: palette.blue100,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  goalBannerTitle: { fontSize: 14, fontWeight: '800', color: palette.blue600 },
+  goalBannerSub: { fontSize: 12, color: palette.blue500, marginTop: 2, lineHeight: 16 },
+
+  // ACP Intelligence™ — sits directly under the "Today's Focus" title, no
+  // card treatment at all (no background, no border) — reads as part of the
+  // section rather than a separate boxed element.
+  intelligenceInline: { marginTop: 12 },
+  intelligenceCardHeadline: { fontSize: 15, fontWeight: '800', color: palette.ink900, letterSpacing: -0.2, marginBottom: 4 },
+  intelligenceCardBody: { fontSize: 13, color: palette.ink600, lineHeight: 18 },
+
+  intelligenceTooltipOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32,
+  },
+  intelligenceTooltipCard: { backgroundColor: palette.white, borderRadius: radii.xl, padding: 22, maxWidth: 340 },
+  intelligenceTooltipTitle: { fontSize: fontSize.lg, fontWeight: '800', color: palette.ink700, marginBottom: 8 },
+  intelligenceTooltipBody: { fontSize: fontSize.sm, color: palette.ink600, lineHeight: 20 },
+  intelligenceTooltipCloseBtn: {
+    marginTop: 18, alignSelf: 'flex-end', paddingHorizontal: 16, paddingVertical: 8,
+    borderRadius: radii.pill, backgroundColor: palette.surfaceMuted,
+  },
+  intelligenceTooltipCloseText: { fontSize: fontSize.sm, fontWeight: '700', color: palette.ink700 },
+
+  // Notifications panel (bell icon)
+  notificationsCard: { backgroundColor: palette.white, borderRadius: radii.xl, padding: 22, width: 320 },
+  notificationRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingVertical: 10, borderTopWidth: 1, borderTopColor: palette.hairline,
+  },
+  notificationIconWrap: {
+    width: 34, height: 34, borderRadius: 17, backgroundColor: palette.blue50,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  notificationRowTitle: { fontSize: fontSize.sm, fontWeight: '700', color: palette.ink700 },
 
   // Mood check-in CTA (full-width, right after header)
   moodCtaCard: {
@@ -1413,31 +2094,6 @@ const styles = StyleSheet.create({
   moodCtaBtn: { flex: 1, alignItems: 'center', paddingVertical: 4 },
   moodCtaEmoji: { fontSize: 30, lineHeight: 40 },
 
-  // Next up card
-  nextUpCard: {
-    margin: 20, marginTop: 16, backgroundColor: palette.blue50,
-    borderRadius: radii.xl, borderWidth: 1, borderColor: palette.blue100,
-    paddingHorizontal: 14, paddingTop: 10, paddingBottom: 4,
-  },
-  nextUpHeader: {
-    fontSize: 10.5, fontWeight: '700', color: palette.blue500,
-    letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 4,
-  },
-  nextUpRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
-  nextUpRowDivider: { borderBottomWidth: 1, borderBottomColor: palette.blue100 },
-  nextUpRowIcon: {
-    width: 28, height: 28, borderRadius: 14, backgroundColor: palette.white,
-    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-  },
-  nextUpRowTitle: { fontSize: 13.5, fontWeight: '700', color: palette.ink900 },
-  nextUpRowMeta: { fontSize: 11.5, color: palette.gray450, marginTop: 1 },
-  nextUpBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radii.pill, flexShrink: 0 },
-  nextUpBadgeClass: { backgroundColor: palette.blue100 },
-  nextUpBadgeWorkout: { backgroundColor: palette.warning100 },
-  nextUpBadgeText: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.3 },
-  nextUpBadgeTextClass: { color: palette.blue500 },
-  nextUpBadgeTextWorkout: { color: palette.warning700 },
-
   // Guest hero
   guestHero: { paddingHorizontal: 24, paddingTop: 64, paddingBottom: 8 },
   guestHeadline: { fontSize: 30, fontWeight: '800', color: palette.ink900, lineHeight: 37, marginBottom: 12, letterSpacing: -0.5 },
@@ -1446,11 +2102,27 @@ const styles = StyleSheet.create({
   // Section layout
   section: { marginTop: 20 },
   sectionPad: { paddingHorizontal: 20, marginBottom: 16, },
+  todaysFocusCard: {
+    backgroundColor: palette.white,
+    borderRadius: radii['2xl'],
+    marginHorizontal: 20,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
   railPad: { paddingHorizontal: 20, gap: 14, paddingBottom: 4 },
   sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
   eyebrow: { fontSize: 11, fontWeight: '700', letterSpacing: 0.16 * 11, textTransform: 'uppercase', marginBottom: 5 },
   sectionTitle: { fontSize: fontSize['2xl'], fontWeight: '800', color: palette.ink900, letterSpacing: -0.5 },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   seeAllText: { fontSize: fontSize.sm, fontWeight: '700', color: palette.blue500 },
+  todaysMealsCta: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: palette.surfaceMuted,
+    borderRadius: radii['2xl'],
+    marginHorizontal: 20,
+    padding: 16,
+  },
 
   // Overlay card
   overlayCard: { borderRadius: radii.xl, overflow: 'hidden', backgroundColor: palette.white, borderWidth: 1, borderColor: palette.hairline, ...shadows.md },
@@ -1468,15 +2140,81 @@ const styles = StyleSheet.create({
   catTag: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 11, paddingVertical: 5, borderRadius: radii.pill },
   catTagText: { fontSize: 11.5, fontWeight: '700', color: '#fff' },
 
-  // Rating pill (shared)
-  ratingPill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fff', paddingHorizontal: 10, paddingVertical: 5, borderRadius: radii.pill, ...shadows.sm },
-  ratingPillText: { fontSize: 12, fontWeight: '700', color: palette.ink900 },
+  // Combined goal rings (Steps / Water / Exercises — "For this day")
+  ringsCombinedRow: { flexDirection: 'row', alignItems: 'center', gap: 18, paddingVertical: 4, paddingBottom: 8 },
+  ringsLegend: { flex: 1, gap: 10 },
+  ringsLegendRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  ringsLegendDot: { width: 10, height: 10, borderRadius: 5 },
+  ringsLegendLabel: { fontSize: fontSize.sm, fontWeight: '700', color: palette.ink700, lineHeight: fontSize.sm },
+  ringsLegendSubtitle: { fontSize: 11, color: palette.gray450, marginTop: 2, lineHeight: 12 },
+  ringsLegendValueRow: { flexDirection: 'row', alignItems: 'baseline' },
+  ringsLegendValue: { fontSize: fontSize.xl, fontWeight: '800', color: palette.ink900 },
+  ringsLegendGoal: { fontSize: fontSize.xs, color: palette.gray450, marginLeft: 2 },
 
-  // Stacked card
-  stackedCard: { borderRadius: radii.xl, overflow: 'hidden', backgroundColor: palette.white, borderWidth: 1, borderColor: palette.hairline, ...shadows.md },
-  stackedTopRow: { position: 'absolute', top: 12, left: 12, right: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  verifiedBadge: { position: 'absolute', bottom: 12, left: 12, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.94)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: radii.pill },
-  verifiedText: { fontSize: 11.5, fontWeight: '700', color: palette.blue500 },
+  // Today's Meals
+  mealsList: { paddingHorizontal: 20, gap: 8 },
+  mealRowTitle: { fontSize: 14, fontWeight: '700', color: palette.ink900 },
+  mealRowMeta: { fontSize: 12, color: palette.gray450, marginTop: 2 },
+  // Today's Plan — same white-card language as the (now CTA-only) meals
+  // section, just laid out vertically since it has no thumbnail image.
+  todayPlanCard: {
+    backgroundColor: palette.white, borderRadius: radii.xl,
+    borderWidth: 1, borderColor: palette.hairline, padding: 14,
+  },
+  todayPlanCategory: {
+    fontSize: 11, fontWeight: '800', color: palette.gray300,
+    textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4,
+  },
+  todayPlanCompletedRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 4 },
+  todayPlanCompletedText: { fontSize: 11, fontWeight: '800', color: palette.success700, letterSpacing: 0.5, textTransform: 'uppercase' },
+  todayPlanCta: { fontSize: 13, fontWeight: '700', color: palette.blue600 },
+  // Fulfilment blocks — identical shape/copy conventions to My Plan's, so
+  // "do it yourself" / "do it with ACP" read the same on both screens.
+  fulfilmentBlock: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: palette.hairline },
+  fulfilmentHeader: {
+    fontSize: 10, fontWeight: '700', color: palette.gray300,
+    textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6,
+  },
+  fulfilmentHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6 },
+  fulfilmentLink: { fontSize: fontSize.xs, fontWeight: '700', color: palette.ink700 },
+  marketplaceMatchRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingBottom: 10, marginBottom: 8 },
+  marketplaceMatchRowBorder: { borderBottomWidth: 1, borderBottomColor: palette.hairline },
+  marketplaceMatchImage: { width: 56, height: 56, borderRadius: radii.lg, alignItems: 'center', justifyContent: 'center' },
+  // Candidate-confirmation banner — identical shape/copy conventions to
+  // My Plan's, so a synced signal reads the same on both screens.
+  candidateBanner: { marginTop: 10, padding: 12, borderRadius: radii.lg, backgroundColor: palette.blue100 },
+  candidateText: { fontSize: fontSize.xs, color: palette.ink700, lineHeight: 17 },
+  candidateActions: { flexDirection: 'row', gap: 16, marginTop: 8 },
+  candidateConfirm: { fontSize: fontSize.xs, fontWeight: '700', color: palette.blue600 },
+  candidateDismiss: { fontSize: fontSize.xs, fontWeight: '700', color: palette.gray450 },
+  mealImageFallback: { backgroundColor: palette.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
+  // Health Testing CTA — same card language as My Plan's support section.
+  supportCard: {
+    backgroundColor: palette.surfaceMuted,
+    borderRadius: radii['2xl'],
+    padding: 20,
+  },
+  supportCardEyebrow: {
+    fontSize: fontSize.xs,
+    fontWeight: '700',
+    color: palette.gray300,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 16,
+  },
+  supportRowValue: { fontSize: fontSize.lg, fontWeight: '700', color: palette.ink700 },
+  supportBody: { fontSize: fontSize.sm, color: palette.ink600, marginTop: 6, lineHeight: 20 },
+  exploreSupportBtn: {
+    alignSelf: 'flex-start',
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: radii.pill,
+    backgroundColor: palette.white,
+  },
+  exploreSupportBtnText: { fontSize: fontSize.sm, fontWeight: '700', color: palette.ink700 },
+
+  // Stacked-style body (shared with OverlayCard)
   stackedBody: { padding: 15, gap: 4 },
   stackedName: { fontSize: 17, fontWeight: '700', color: palette.ink900, letterSpacing: -0.2 },
   stackedTagline: { fontSize: 13, color: palette.gray450, fontStyle: 'italic' },
@@ -1510,44 +2248,6 @@ const styles = StyleSheet.create({
   // No sessions empty state
   noSessionsRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingVertical: 20 },
   noSessionsText: { fontSize: fontSize.sm, color: palette.gray300, fontWeight: '500' },
-
-  // Day items (exercises & tasks filtered by date strip)
-  dayItemsList: { paddingHorizontal: 20, gap: 8 },
-  dayItemRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: palette.white, borderRadius: radii.lg,
-    borderWidth: 1, borderColor: palette.hairline, padding: 12,
-  },
-  dayItemIcon: {
-    width: 34, height: 34, borderRadius: 17, backgroundColor: palette.blue25,
-    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-  },
-  dayItemTitle: { fontSize: 14, fontWeight: '700', color: palette.ink900 },
-  dayItemTitleDone: { color: palette.gray300, textDecorationLine: 'line-through' },
-  dayItemMeta: { fontSize: 12, color: palette.gray450, marginTop: 2 },
-
-  // Date rail
-
-  // See-all tile
-  seeAllTile: { width: 130, borderRadius: radii.xl, backgroundColor: palette.surfaceMuted, borderWidth: 1, borderColor: palette.borderFaint, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', gap: 12 },
-  seeAllTileIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: palette.white, alignItems: 'center', justifyContent: 'center', ...shadows.md },
-  seeAllTileText: { fontSize: fontSize.base, fontWeight: '700', color: palette.blue500, textAlign: 'center', paddingHorizontal: 16 },
-
-  // Fitness + Nutrition split CTA
-  // My Journey CTA (fitness + nutrition, merged)
-  journeyCta: { marginHorizontal: 20, marginTop: 6 },
-  journeyCtaGrad: { flexDirection: 'row', alignItems: 'center', gap: 14, borderRadius: radii.xl, paddingHorizontal: 18, paddingVertical: 16 },
-  journeyCtaIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
-  journeyCtaTitle: { fontSize: fontSize.lg, fontWeight: '800', color: '#fff', letterSpacing: -0.3 },
-  journeyCtaSub: { fontSize: fontSize.sm, color: 'rgba(255,255,255,0.82)', marginTop: 2 },
-
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  journeyChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: palette.blue25, borderRadius: radii.pill,
-    paddingHorizontal: 14, height: 34, borderWidth: 1, borderColor: palette.blue100,
-  },
-  journeyChipText: { fontSize: 13, fontWeight: '800', color: palette.blue500 },
 
   // Guest hero search bar
   guestSearchBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 18, backgroundColor: palette.surfaceMuted, borderRadius: radii.xl, paddingHorizontal: 16, paddingVertical: 13, borderWidth: 1, borderColor: palette.borderFaint },

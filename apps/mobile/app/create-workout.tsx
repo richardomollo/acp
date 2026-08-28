@@ -12,10 +12,9 @@ import { supabase } from '@/lib/supabase';
 import { authService } from '@/services/auth';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  fetchExercisesByBodyPart,
-  type ExerciseDBExercise,
-} from '@/services/exercisedb';
+import { exerciseService } from '@/services/exercise-service';
+import { type ACPExercise, friendlyProviderErrorMessage } from '@/lib/exercise-types';
+import { useMuscleWikiMedia } from '@/hooks/use-musclewiki-media';
 
 // ── GIF URL helper (same mapping as exercises-by-body-part.tsx) ─────────────────
 
@@ -44,6 +43,12 @@ function getGifUrl(name: string, target: string): string | null {
   return `${GIF_BASE}/${folder}/${slug}.gif`;
 }
 
+// Provider media (MuscleWiki video/image) wins when present; falls back to
+// the jsDelivr-hosted GIF set derived from name + muscle otherwise.
+function getDemoUrl(ex: ACPExercise): string | null {
+  return ex.media[0]?.url ?? getGifUrl(ex.name, ex.target);
+}
+
 const thumbStyles = StyleSheet.create({
   fallback: {
     backgroundColor: palette.surfaceMuted,
@@ -61,7 +66,8 @@ function ExerciseThumb({
   size?: number;
 }) {
   const [failed, setFailed] = useState(false);
-  if (!gifUrl || failed) {
+  const resolvedGifUrl = useMuscleWikiMedia(gifUrl); // MuscleWiki stream URLs need a fresh short-lived token; other URLs pass through unchanged
+  if (!resolvedGifUrl || failed) {
     return (
       <View style={[thumbStyles.fallback, { width: size, height: size, borderRadius: size * 0.28 }]}>
         <Ionicons name={icon as any} size={size * 0.45} color={palette.ink900} />
@@ -70,7 +76,7 @@ function ExerciseThumb({
   }
   return (
     <Image
-      source={{ uri: gifUrl }}
+      source={{ uri: resolvedGifUrl }}
       style={{ width: size, height: size, borderRadius: size * 0.28, backgroundColor: palette.surfaceMuted }}
       contentFit="cover"
       onError={() => setFailed(true)}
@@ -106,10 +112,10 @@ const DIFFICULTIES = [
 ] as const;
 
 const EQUIPMENT_ICON: Record<string, string> = {
-  'body weight': 'body-outline', dumbbell: 'barbell-outline',
-  barbell: 'barbell-outline', cable: 'git-branch-outline',
-  'leverage machine': 'cog-outline', band: 'link-outline',
-  kettlebell: 'barbell-outline', 'smith machine': 'barbell-outline',
+  'body weight': 'body-outline', bodyweight: 'body-outline', dumbbell: 'barbell-outline',
+  barbell: 'barbell-outline', cable: 'git-branch-outline', cables: 'git-branch-outline',
+  'leverage machine': 'cog-outline', machine: 'cog-outline', band: 'link-outline',
+  kettlebell: 'barbell-outline', kettlebells: 'barbell-outline', 'smith machine': 'barbell-outline',
 };
 
 function goalToCategory(goal: string | null): string {
@@ -131,10 +137,10 @@ function toWorkoutGoal(goal: string | null): 'lose_weight' | 'build_muscle' | 'i
 }
 
 // ── Workout generator ──────────────────────────────────────────────────────────
-// Rules-based: ExerciseDB covers strength/cardio types by body part; yoga and
-// stretching have no ExerciseDB content at all (confirmed while migrating the
-// exercise library), so those two types draw from a small curated list using
-// real gifs from the same CDN the rest of the app already uses.
+// Rules-based: the exercise provider covers strength/cardio types by body
+// part; yoga and stretching had no ExerciseDB content and MuscleWiki's yoga
+// coverage is unverified (see MuscleWiki known-limitation notes), so those
+// two types still draw from a small curated list using the same CDN gifs.
 
 interface CuratedExercise {
   id: string; name: string; bodyPart: string; target: string;
@@ -245,7 +251,10 @@ const TYPE_BODY_PARTS: Record<string, string[]> = {
   neck:      ['neck'],
 };
 
-const HOME_EQUIPMENT = new Set(['body weight', 'dumbbell', 'band', 'kettlebell']);
+// Matches both the historical ExerciseDB-era "body weight" (two words) and
+// MuscleWiki's real "Bodyweight" (one word) vocabulary — verified live
+// (Beta Readiness Step 1).
+const HOME_EQUIPMENT = new Set(['bodyweight', 'dumbbell', 'band', 'kettlebell']);
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -258,12 +267,12 @@ function shuffle<T>(arr: T[]): T[] {
 
 function matchesLocation(location: 'gym' | 'home' | 'both', equipment: string): boolean {
   if (location === 'gym') return true;
-  return HOME_EQUIPMENT.has((equipment ?? '').toLowerCase());
+  return HOME_EQUIPMENT.has((equipment ?? '').toLowerCase().replace(/\s+/g, ''));
 }
 
 // "upper arms" mixes biceps (pull) and triceps (push) exercises — narrow it
 // down so a "Push" day doesn't surface bicep curls and vice versa.
-function matchesPushPull(type: string, ex: ExerciseDBExercise): boolean {
+function matchesPushPull(type: string, ex: ACPExercise): boolean {
   if (ex.bodyPart !== 'upper arms') return true;
   if (type === 'push') return ex.target === 'triceps';
   if (type === 'pull') return ex.target === 'biceps';
@@ -293,25 +302,20 @@ interface GeneratorInput {
 }
 
 interface GeneratedItem {
-  ex: ExerciseDBExercise | CuratedExercise;
+  ex: ACPExercise | CuratedExercise;
   type: string;
 }
 
-// ExerciseDB's plan caps each request at 10 results regardless of the `limit`
-// param — confirmed live (limit=30 still returned 10). Equipment mix is also
-// front-loaded unevenly (chest/back/shoulders' first page of 10 had zero
-// bodyweight/dumbbell/band exercises even though ~40-60% of their full ~100-item
-// lists are home-friendly), so a single page isn't enough to serve "home"
-// workouts — page through a few offsets per body part instead. Requests are
-// sequenced (not parallel) because this plan's rate limit trips easily on
-// bursts — confirmed live: firing ~15-20 requests at once returned 403s that
-// an immediate single retry succeeded at.
-async function fetchBodyPartPool(bodyPart: string, pages = 5): Promise<ExerciseDBExercise[]> {
-  const out: ExerciseDBExercise[] = [];
+// Pages through a provider's body-part results a few offsets at a time so the
+// generator has a large enough pool to filter by location/difficulty from —
+// a single page isn't guaranteed to cover every equipment type. Sequenced
+// (not parallel) since the underlying provider may itself be rate-limited.
+async function fetchBodyPartPool(bodyPart: string, pages = 5): Promise<ACPExercise[]> {
+  const out: ACPExercise[] = [];
   for (let i = 0; i < pages; i++) {
-    let page: ExerciseDBExercise[];
+    let page: ACPExercise[];
     try {
-      page = await fetchExercisesByBodyPart(bodyPart, 10, i * 10);
+      page = await exerciseService.list(bodyPart, 10, i * 10);
     } catch {
       break;
     }
@@ -345,7 +349,7 @@ async function generateExercisePool(input: GeneratorInput): Promise<GeneratedIte
     }
 
     const bodyParts = TYPE_BODY_PARTS[type] ?? ['chest'];
-    let pool: ExerciseDBExercise[] = [];
+    let pool: ACPExercise[] = [];
     for (const bp of bodyParts) {
       pool.push(...await fetchBodyPartPool(bp));
     }
@@ -362,10 +366,11 @@ function toGeneratedEntry(item: GeneratedItem): WorkoutEntry {
   const { ex, type } = item;
   const isCurated = type === 'yoga' || type === 'stretch';
   const defaults = defaultsForType(type);
-  const gifUrl = isCurated ? (ex as CuratedExercise).gifUrl : getGifUrl(ex.name, (ex as ExerciseDBExercise).target);
+  const gifUrl = isCurated ? (ex as CuratedExercise).gifUrl : getDemoUrl(ex as ACPExercise);
   return {
     tempId:       `${Date.now()}-${Math.random()}`,
     externalId:   ex.id,
+    provider:     isCurated ? 'acp' : (ex as ACPExercise).provider,
     exerciseId:   null,
     name:         ex.name,
     target:       (ex as any).target,
@@ -383,7 +388,8 @@ function toGeneratedEntry(item: GeneratedItem): WorkoutEntry {
 
 interface WorkoutEntry {
   tempId: string;
-  externalId: string;       // ExerciseDB ID
+  externalId: string;       // Provider's exercise id
+  provider: string;         // 'musclewiki' | 'acp' (curated yoga/stretch) — which provider externalId belongs to
   exerciseId: string | null; // Our DB UUID (set after upsert on save)
   name: string;
   target: string;
@@ -503,10 +509,10 @@ function ExercisePicker({
   visible: boolean;
   addedIds: Set<string>;
   onClose: () => void;
-  onAdd: (ex: ExerciseDBExercise) => void;
+  onAdd: (ex: ACPExercise) => void;
 }) {
   const [bodyPart, setBodyPart]       = useState<string>('chest');
-  const [exercises, setExercises]     = useState<ExerciseDBExercise[]>([]);
+  const [exercises, setExercises]     = useState<ACPExercise[]>([]);
   const [loading, setLoading]         = useState(false);
   const [error, setError]             = useState<string | null>(null);
 
@@ -515,10 +521,10 @@ function ExercisePicker({
     setError(null);
     setExercises([]);
     try {
-      const data = await fetchExercisesByBodyPart(bp, 20, 0);
+      const data = await exerciseService.list(bp, 20, 0);
       setExercises(data);
-    } catch (e: any) {
-      setError(e.message ?? 'Could not load exercises');
+    } catch (e) {
+      setError(friendlyProviderErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -593,7 +599,7 @@ function ExercisePicker({
             renderItem={({ item: ex }) => {
               const already = addedIds.has(ex.id);
               const equipIcon = EQUIPMENT_ICON[ex.equipment] ?? 'barbell-outline';
-              const gifUrl = getGifUrl(ex.name, ex.target);
+              const gifUrl = getDemoUrl(ex);
               return (
                 <TouchableOpacity
                   style={[ps.exRow, already && ps.exRowAdded]}
@@ -691,7 +697,7 @@ function CreateWorkoutForm() {
           .from('workout_exercises')
           .select(`
             sets, reps, rest_seconds, notes,
-            exercises ( id, external_id, name, body_part, target_muscle, equipment, difficulty, instructions, gif_url )
+            exercises ( id, external_id, source, name, body_part, target_muscle, equipment, difficulty, instructions, gif_url )
           `)
           .eq('workout_id', editWorkoutId)
           .order('sort_order'),
@@ -711,6 +717,7 @@ function CreateWorkoutForm() {
           return {
             tempId:       `existing-${ex.id}-${i}`,
             externalId:   ex.external_id ?? ex.id,
+            provider:     ex.source ?? 'ExerciseDB', // verbatim DB value — re-saving must reuse the exact existing source/external_id identity
             exerciseId:   ex.id,
             name:         ex.name,
             target:       ex.target_muscle,
@@ -734,11 +741,12 @@ function CreateWorkoutForm() {
 
   const addedIds = new Set(entries.map(e => e.externalId));
 
-  const handleAddExercise = (ex: ExerciseDBExercise) => {
-    const gifUrl = getGifUrl(ex.name, ex.target);
+  const handleAddExercise = (ex: ACPExercise) => {
+    const gifUrl = getDemoUrl(ex);
     const entry: WorkoutEntry = {
       tempId:      `${Date.now()}-${Math.random()}`,
       externalId:  ex.id,
+      provider:    ex.provider,
       exerciseId:  null,
       name:        ex.name,
       target:      ex.target,
@@ -835,7 +843,7 @@ function CreateWorkoutForm() {
       const equipmentList = [...new Set(
         entries
           .map(e => e.equipment?.trim())
-          .filter((eq): eq is string => !!eq && eq.toLowerCase() !== 'body weight'),
+          .filter((eq): eq is string => !!eq && eq.toLowerCase().replace(/\s+/g, '') !== 'bodyweight'),
       )].join(',');
 
       let workoutId: string;
@@ -907,9 +915,9 @@ function CreateWorkoutForm() {
               instructions: entry.instructions,
               gif_url:      entry.gifUrl,
               external_id:  entry.externalId,
-              source:       'ExerciseDB',
+              source:       entry.provider,
             },
-            { onConflict: 'external_id' },
+            { onConflict: 'source,external_id' },
           )
           .select('id')
           .single();

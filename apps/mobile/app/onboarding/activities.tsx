@@ -10,7 +10,8 @@ import { palette, fontSize } from '@/constants/theme';
 
 export default function OnboardingActivitiesScreen() {
   const router = useRouter();
-  const { answers, togglePreferredActivity, saveProgress } = useOnboarding();
+  const { answers, togglePreferredActivity, saveProgress, userName } = useOnboarding();
+  const firstName = userName.split(' ')[0];
 
   const handleBuildPlan = () => {
     saveProgress();
@@ -23,8 +24,8 @@ export default function OnboardingActivitiesScreen() {
       <OnboardingHeader step={5} onBack={() => router.back()} onExit={handleExit} />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <ThemedText style={styles.headline}>How do you want to move?</ThemedText>
-        <ThemedText style={styles.sub}>We’ll use this to personalise your recommendations.</ThemedText>
+        <ThemedText style={styles.headline}>{firstName ? `How do you like to move, ${firstName}?` : 'How do you like to move?'}</ThemedText>
+        <ThemedText style={styles.sub}>Choose the activities you enjoy. ACP Intelligence™ will prioritise ways of moving you’re more likely to stick with.</ThemedText>
 
         <View style={styles.chips}>
           {ACTIVITY_OPTIONS.map(o => (

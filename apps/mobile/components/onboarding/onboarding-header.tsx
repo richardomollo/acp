@@ -1,5 +1,6 @@
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/themed-text';
 import { ProgressIndicator } from './progress-indicator';
@@ -17,41 +18,44 @@ export function OnboardingHeader({
   onExit?: () => void;
 }) {
   return (
-    <SafeAreaView edges={['top']} style={styles.safe}>
-      <View style={styles.row}>
-        {onBack ? (
-          <TouchableOpacity style={styles.iconBtn} onPress={onBack} hitSlop={8}>
-            <Ionicons name="chevron-back" size={22} color={palette.ink700} />
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.iconBtn} />
-        )}
+    // Same soft top fade as the home page's header (palette.blue100 fading
+    // to transparent) so onboarding reads as a continuation of the app,
+    // not a separate flat-white flow.
+    <LinearGradient colors={[palette.blue100, 'rgba(208,224,255,0)']} style={styles.safe}>
+      <SafeAreaView edges={['top']}>
+        <View style={styles.topRow}>
+          {onBack ? (
+            <TouchableOpacity style={styles.iconBtn} onPress={onBack} hitSlop={8}>
+              <Ionicons name="chevron-back" size={22} color={palette.ink700} />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.iconBtn} />
+          )}
 
-        <View style={styles.progressWrap}>
-          <ProgressIndicator step={step} total={TOTAL_STEPS} />
+          {onExit && (
+            <TouchableOpacity style={styles.exitBtn} onPress={onExit} hitSlop={8}>
+              <ThemedText style={styles.exitText} numberOfLines={1}>Skip, I&apos;ll do this later</ThemedText>
+            </TouchableOpacity>
+          )}
         </View>
 
-        {onExit ? (
-          <TouchableOpacity style={styles.exitBtn} onPress={onExit} hitSlop={8}>
-            <ThemedText style={styles.exitText}>Exit</ThemedText>
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.iconBtn} />
-        )}
-      </View>
-    </SafeAreaView>
+        <View style={styles.progressRow}>
+          <ProgressIndicator step={step} total={TOTAL_STEPS} />
+        </View>
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { backgroundColor: palette.white },
-  row: {
+  safe: {},
+  topRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 14,
+    paddingTop: 20,
+    paddingBottom: 10,
   },
   iconBtn: {
     width: 36,
@@ -61,13 +65,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: palette.surfaceMuted,
   },
-  progressWrap: { flex: 1 },
+  progressRow: {
+    paddingHorizontal: 20,
+    paddingBottom: 14,
+    marginBottom: 8,
+  },
   exitBtn: {
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
   exitText: {
-    fontSize: fontSize.sm,
+    fontSize: fontSize.xs,
     fontWeight: '600',
     color: palette.gray450,
   },

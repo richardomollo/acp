@@ -62,6 +62,12 @@ export function GlobalAuthModal() {
     setTimeout(() => router.push(destination as any), 150);
   };
 
+  const goToSignup = () => {
+    handleClose();
+    const href = `/signup${redirectTo ? `?redirect=${encodeURIComponent(redirectTo)}` : ''}`;
+    setTimeout(() => router.push(href as any), 150);
+  };
+
   const handleLogin = async () => {
     if (!email.trim() || !password) {
       Alert.alert('Missing fields', 'Please enter your email and password.');
@@ -220,12 +226,8 @@ export function GlobalAuthModal() {
             {/* ── Login view ── */}
             {tab === 'login' && (
               <>
-                <View style={styles.logoRow}>
-                  <Image source={require('@/assets/images/icon.png')} style={styles.logoIcon} resizeMode="contain" />
-                  <ThemedText style={styles.logoText}>Active CityPass</ThemedText>
-                </View>
                 <ThemedText style={styles.headline}>Welcome back</ThemedText>
-                <ThemedText style={styles.subheadline}>Sign in to book your next session</ThemedText>
+                <ThemedText style={styles.subheadline}>Let’s keep working towards your goals.</ThemedText>
 
                 <TextInput
                   style={styles.input}
@@ -291,7 +293,7 @@ export function GlobalAuthModal() {
                   </>
                 )}
 
-                <TouchableOpacity style={styles.switchRow} onPress={() => setTab('signup')}>
+                <TouchableOpacity style={styles.switchRow} onPress={goToSignup}>
                   <ThemedText style={styles.switchText}>No account yet? </ThemedText>
                   <ThemedText style={styles.switchLink}>Create one free</ThemedText>
                 </TouchableOpacity>

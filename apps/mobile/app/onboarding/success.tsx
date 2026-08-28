@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
-import { View, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, ScrollView, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/themed-text';
 import { OnboardingHeader } from '@/components/onboarding/onboarding-header';
 import { OnboardingFooter } from '@/components/onboarding/onboarding-footer';
@@ -10,81 +9,55 @@ import { NumericGoalInput } from '@/components/onboarding/numeric-input';
 import { DateSelector, formatMonthYear } from '@/components/onboarding/date-selector';
 import { useOnboarding } from '@/contexts/onboarding-context';
 import {
-  ACTIVITY_LEVEL_OPTIONS, STRENGTH_EXPERIENCE_OPTIONS, STRENGTH_TARGET_OPTIONS,
-  HEALTH_FOCUS_OPTIONS, LIFESTYLE_FOCUS_OPTIONS,
+  STRENGTH_EXPERIENCE_OPTIONS, HEALTH_FOCUS_OPTIONS,
 } from '@/lib/onboarding';
 import { palette, radii, fontSize } from '@/constants/theme';
-
-function parseTime(totalSeconds: number | null | undefined) {
-  if (!totalSeconds) return { min: '', sec: '' };
-  return { min: String(Math.floor(totalSeconds / 60)), sec: String(totalSeconds % 60) };
-}
-function toSeconds(min: string, sec: string): number | undefined {
-  const m = parseInt(min, 10) || 0;
-  const s = parseInt(sec, 10) || 0;
-  if (!min && !sec) return undefined;
-  return m * 60 + s;
-}
 
 export default function OnboardingSuccessScreen() {
   const router = useRouter();
   const {
-    answers, setWeightGoal, setGoalTargetDate, setActivityLevel,
-    setStrengthExperience, setGoalDetails, saveProgress,
+    answers, setWeightGoal, setGoalTargetDate,
+    setStrengthExperience, setGoalDetails, saveProgress, userName,
   } = useOnboarding();
+  const firstName = userName.split(' ')[0];
 
   const goal = answers.goal;
+  const isWeightGoal = goal === 'lose_weight' || goal === 'build_muscle' || goal === 'maintain_weight';
 
   useEffect(() => {
     if (!goal) router.replace('/onboarding/goal');
   }, [goal, router]);
 
-  // ── Weight loss local state ──
+  // ── Weight local state (shared by lose_weight / build_muscle) ──
   const [currentWeight, setCurrentWeight] = useState(answers.startingWeightKg ? String(answers.startingWeightKg) : '');
   const [targetWeight, setTargetWeight] = useState(answers.goalWeightKg ? String(answers.goalWeightKg) : '');
 
-  // ── Running local state ──
-  const currentParsed = parseTime(answers.goalDetails.current_5k_seconds);
-  const targetParsed = parseTime(answers.goalDetails.target_5k_seconds);
-  const [curMin, setCurMin] = useState(currentParsed.min);
-  const [curSec, setCurSec] = useState(currentParsed.sec);
-  const [tgtMin, setTgtMin] = useState(targetParsed.min);
-  const [tgtSec, setTgtSec] = useState(targetParsed.sec);
-  const [noCurrent5k, setNoCurrent5k] = useState(!!answers.goalDetails.no_current_5k);
-
   useEffect(() => {
-    if (goal !== 'improve_running') return;
-    setGoalDetails({
-      current_5k_seconds: noCurrent5k ? null : (toSeconds(curMin, curSec) ?? null),
-      target_5k_seconds: toSeconds(tgtMin, tgtSec),
-      no_current_5k: noCurrent5k,
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [curMin, curSec, tgtMin, tgtSec, noCurrent5k]);
-
-  useEffect(() => {
-    if (goal !== 'lose_weight') return;
+    if (!isWeightGoal) return;
     const cw = currentWeight ? Number(currentWeight) : null;
     const gw = targetWeight ? Number(targetWeight) : null;
     setWeightGoal(cw as any, gw as any, answers.goalTargetDate as any);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentWeight, targetWeight]);
 
+  const toggleHealthFocus = (key: string) => {
+    const current = answers.goalDetails.health_focus ?? [];
+    const next = current.includes(key) ? current.filter(k => k !== key) : [...current, key];
+    setGoalDetails({ health_focus: next });
+  };
+
   const canContinue = (() => {
     switch (goal) {
-      case 'lose_weight': {
+      case 'lose_weight':
+      case 'build_muscle':
+      case 'maintain_weight': {
         const cw = Number(currentWeight);
         const gw = Number(targetWeight);
-        return !!currentWeight && !!targetWeight && cw > 0 && gw > 0 && gw < cw && !!answers.goalTargetDate;
+        return !!currentWeight && !!targetWeight && cw > 0 && gw > 0
+          && !!answers.goalTargetDate && !!answers.strengthExperience;
       }
-      case 'improve_running':
-        return toSeconds(tgtMin, tgtSec) !== undefined && !!answers.goalTargetDate;
-      case 'build_muscle':
-        return !!answers.strengthExperience && !!answers.goalDetails.strength_target;
-      case 'improve_health':
-        return !!answers.activityLevel && !!answers.goalDetails.health_focus;
-      case 'healthy_lifestyle':
-        return !!answers.activityLevel && !!answers.goalDetails.lifestyle_focus;
+      case 'reduce_stress':
+        return (answers.goalDetails.health_focus ?? []).length > 0;
       default:
         return false;
     }
@@ -96,12 +69,15 @@ export default function OnboardingSuccessScreen() {
   };
   const handleExit = () => { saveProgress(); router.replace('/(tabs)'); };
 
-  const weightLossSummary = (() => {
+  const weightSummary = (() => {
+    if (!isWeightGoal) return null;
     const cw = Number(currentWeight);
     const gw = Number(targetWeight);
-    if (!currentWeight || !targetWeight || !(cw > gw) || !answers.goalTargetDate) return null;
-    const diff = Math.round((cw - gw) * 10) / 10;
-    return `Lose ${diff} kg by ${formatMonthYear(answers.goalTargetDate)}`;
+    if (!currentWeight || !targetWeight || !answers.goalTargetDate) return null;
+    const suffix = goal === 'build_muscle' ? ' while building muscle' : '';
+    if (gw > cw) return `Gain ${Math.round((gw - cw) * 10) / 10} kg by ${formatMonthYear(answers.goalTargetDate)}${suffix}`;
+    if (gw < cw) return `Lose ${Math.round((cw - gw) * 10) / 10} kg by ${formatMonthYear(answers.goalTargetDate)}${suffix}`;
+    return goal === 'build_muscle' ? `Maintain your current weight while building muscle` : `Maintain your current weight`;
   })();
 
   return (
@@ -109,58 +85,31 @@ export default function OnboardingSuccessScreen() {
       <OnboardingHeader step={2} onBack={() => router.back()} onExit={handleExit} />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        <ThemedText style={styles.headline}>What does success look like for you?</ThemedText>
+        <ThemedText style={styles.headline}>{firstName ? `Where are you starting from, ${firstName}?` : 'Where are you starting from?'}</ThemedText>
+        <ThemedText style={styles.sub}>Help ACP Intelligence™ understand your current level so your first plan starts in the right place.</ThemedText>
 
-        {goal === 'lose_weight' && (
+        {isWeightGoal && (
           <>
             <View style={styles.row}>
               <NumericGoalInput label="Current weight" unit="kg" value={currentWeight} onChangeText={setCurrentWeight} placeholder="e.g. 78" />
-              <NumericGoalInput label="Goal weight" unit="kg" value={targetWeight} onChangeText={setTargetWeight} placeholder="e.g. 70" />
+              <NumericGoalInput label="Goal weight" unit="kg" value={targetWeight} onChangeText={setTargetWeight} placeholder={goal === 'lose_weight' ? 'e.g. 70' : 'e.g. 85'} />
             </View>
+
             <View style={{ height: 16 }} />
             <DateSelector label="Target date" value={answers.goalTargetDate} onChange={setGoalTargetDate} />
 
-            {currentWeight && targetWeight && Number(targetWeight) >= Number(currentWeight) && (
-              <ThemedText style={styles.errorText}>Goal weight should be lower than your current weight.</ThemedText>
-            )}
-
-            {weightLossSummary && (
+            {weightSummary && (
               <View style={styles.summaryCard}>
                 <ThemedText style={styles.summaryLabel}>Your goal</ThemedText>
-                <ThemedText style={styles.summaryValue}>{weightLossSummary}</ThemedText>
+                <ThemedText style={styles.summaryValue}>{weightSummary}</ThemedText>
               </View>
             )}
           </>
         )}
 
-        {goal === 'improve_running' && (
+        {isWeightGoal && (
           <>
-            <ThemedText style={styles.fieldLabel}>Current 5K time</ThemedText>
-            <View style={styles.row}>
-              <NumericGoalInput label="Minutes" value={curMin} onChangeText={setCurMin} placeholder="28" editable={!noCurrent5k} />
-              <NumericGoalInput label="Seconds" value={curSec} onChangeText={setCurSec} placeholder="30" editable={!noCurrent5k} />
-            </View>
-            <TouchableOpacity style={styles.checkRow} onPress={() => setNoCurrent5k(v => !v)} activeOpacity={0.8}>
-              <View style={[styles.checkbox, noCurrent5k && styles.checkboxChecked]}>
-                {noCurrent5k && <Ionicons name="checkmark" size={13} color={palette.white} />}
-              </View>
-              <ThemedText style={styles.checkLabel}>I don’t know my current 5K time</ThemedText>
-            </TouchableOpacity>
-
             <View style={{ height: 20 }} />
-            <ThemedText style={styles.fieldLabel}>Target 5K time</ThemedText>
-            <View style={styles.row}>
-              <NumericGoalInput label="Minutes" value={tgtMin} onChangeText={setTgtMin} placeholder="24" />
-              <NumericGoalInput label="Seconds" value={tgtSec} onChangeText={setTgtSec} placeholder="00" />
-            </View>
-
-            <View style={{ height: 16 }} />
-            <DateSelector label="Target date" value={answers.goalTargetDate} onChange={setGoalTargetDate} />
-          </>
-        )}
-
-        {goal === 'build_muscle' && (
-          <>
             <ThemedText style={styles.fieldLabel}>Current experience</ThemedText>
             <View style={styles.list}>
               {STRENGTH_EXPERIENCE_OPTIONS.map(o => (
@@ -173,38 +122,11 @@ export default function OnboardingSuccessScreen() {
                 />
               ))}
             </View>
-
-            <View style={{ height: 20 }} />
-            <ThemedText style={styles.fieldLabel}>What’s your strength goal?</ThemedText>
-            <View style={styles.list}>
-              {STRENGTH_TARGET_OPTIONS.map(o => (
-                <SelectCard
-                  key={o.key}
-                  label={o.label}
-                  selected={answers.goalDetails.strength_target === o.key}
-                  onPress={() => setGoalDetails({ strength_target: o.key })}
-                />
-              ))}
-            </View>
           </>
         )}
 
-        {goal === 'improve_health' && (
+        {goal === 'reduce_stress' && (
           <>
-            <ThemedText style={styles.fieldLabel}>Current activity level</ThemedText>
-            <View style={styles.list}>
-              {ACTIVITY_LEVEL_OPTIONS.map(o => (
-                <SelectCard
-                  key={o.key}
-                  label={o.label}
-                  desc={o.desc}
-                  selected={answers.activityLevel === o.key}
-                  onPress={() => setActivityLevel(o.key)}
-                />
-              ))}
-            </View>
-
-            <View style={{ height: 20 }} />
             <ThemedText style={styles.fieldLabel}>What would you most like to improve?</ThemedText>
             <View style={styles.chipsWrap}>
               {HEALTH_FOCUS_OPTIONS.map(o => (
@@ -212,39 +134,8 @@ export default function OnboardingSuccessScreen() {
                   key={o.key}
                   icon={o.icon}
                   label={o.label}
-                  selected={answers.goalDetails.health_focus === o.key}
-                  onPress={() => setGoalDetails({ health_focus: o.key })}
-                />
-              ))}
-            </View>
-          </>
-        )}
-
-        {goal === 'healthy_lifestyle' && (
-          <>
-            <ThemedText style={styles.fieldLabel}>Current activity level</ThemedText>
-            <View style={styles.list}>
-              {ACTIVITY_LEVEL_OPTIONS.map(o => (
-                <SelectCard
-                  key={o.key}
-                  label={o.label}
-                  desc={o.desc}
-                  selected={answers.activityLevel === o.key}
-                  onPress={() => setActivityLevel(o.key)}
-                />
-              ))}
-            </View>
-
-            <View style={{ height: 20 }} />
-            <ThemedText style={styles.fieldLabel}>What would you like to improve?</ThemedText>
-            <View style={styles.chipsWrap}>
-              {LIFESTYLE_FOCUS_OPTIONS.map(o => (
-                <SelectCard
-                  key={o.key}
-                  icon={o.icon}
-                  label={o.label}
-                  selected={answers.goalDetails.lifestyle_focus === o.key}
-                  onPress={() => setGoalDetails({ lifestyle_focus: o.key })}
+                  selected={(answers.goalDetails.health_focus ?? []).includes(o.key)}
+                  onPress={() => toggleHealthFocus(o.key)}
                 />
               ))}
             </View>
@@ -265,7 +156,12 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: palette.ink700,
     letterSpacing: -0.4,
-    marginBottom: 20,
+    marginBottom: 6,
+  },
+  sub: {
+    fontSize: fontSize.base,
+    color: palette.gray450,
+    marginBottom: 24,
   },
   fieldLabel: {
     fontSize: fontSize.sm,
@@ -277,24 +173,18 @@ const styles = StyleSheet.create({
   list: { gap: 10 },
   chipsWrap: { gap: 10 },
 
-  errorText: {
-    fontSize: fontSize.xs,
-    color: palette.danger600,
-    marginTop: 8,
-  },
-
   summaryCard: {
     marginTop: 20,
     padding: 18,
     borderRadius: radii.xl,
-    backgroundColor: palette.blue25,
+    backgroundColor: palette.surfaceMuted,
     borderWidth: 1,
-    borderColor: palette.blue100,
+    borderColor: palette.border,
   },
   summaryLabel: {
     fontSize: fontSize.xs,
     fontWeight: '700',
-    color: palette.blue600,
+    color: palette.ink700,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 4,
@@ -303,30 +193,5 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xl,
     fontWeight: '800',
     color: palette.ink700,
-  },
-
-  checkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginTop: 10,
-  },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 5,
-    borderWidth: 1.5,
-    borderColor: palette.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxChecked: {
-    backgroundColor: palette.blue500,
-    borderColor: palette.blue500,
-  },
-  checkLabel: {
-    fontSize: fontSize.sm,
-    color: palette.gray450,
-    fontWeight: '500',
   },
 });

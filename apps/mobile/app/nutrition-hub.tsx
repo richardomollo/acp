@@ -366,14 +366,12 @@ const s = StyleSheet.create({
 
   emptyText: { fontSize: 13, color: palette.gray300, marginBottom: 24 },
 
-  planList: {
-    backgroundColor: palette.white, borderRadius: radii.xl,
-    borderWidth: 1, borderColor: palette.hairline, marginBottom: 28, overflow: 'hidden',
-  },
+  planList: { gap: 12, marginBottom: 28 },
   planRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingHorizontal: 14, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: palette.hairline,
+    paddingHorizontal: 14, paddingVertical: 14,
+    backgroundColor: palette.white, borderRadius: radii.xl,
+    borderWidth: 1, borderColor: palette.hairline,
   },
   planRowTitle: { fontSize: 14, fontWeight: '700', color: palette.ink900 },
   planRowTitleDone: { color: palette.gray300, textDecorationLine: 'line-through' },

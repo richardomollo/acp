@@ -25,7 +25,7 @@ export function DateSelector({
   onChange: (iso: string) => void;
 }) {
   const [showPicker, setShowPicker] = useState(false);
-  const minimumDate = new Date(Date.now() + 24 * 60 * 60 * 1000); // must be in the future
+  const minimumDate = new Date(Date.now() + 21 * 24 * 60 * 60 * 1000); // at least 3 weeks out
 
   const dateValue = value ? new Date(value + 'T00:00:00') : minimumDate;
 
@@ -79,7 +79,7 @@ const styles = StyleSheet.create({
     backgroundColor: palette.white,
   },
   btnText: {
-    fontSize: fontSize.base,
+    fontSize: fontSize.lg,
     fontWeight: '700',
     color: palette.ink700,
   },

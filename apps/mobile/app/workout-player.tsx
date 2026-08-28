@@ -15,6 +15,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ensureNotificationPermission, scheduleRestEndNotification, cancelNotification,
 } from '@/services/notifications';
+import { workoutExecutionService, type PerceivedDifficulty } from '@/services/workout-execution-service';
+import { useMuscleWikiMedia } from '@/hooks/use-musclewiki-media';
 
 const SCREEN_W = Dimensions.get('window').width;
 const GIF_SIZE = SCREEN_W - 120;
@@ -45,6 +47,8 @@ interface Workout {
   title: string;
   category: string;
   duration_minutes: number;
+  is_activity_block: boolean;
+  description: string | null;
 }
 
 interface SetLog {
@@ -120,8 +124,11 @@ function useCountdown(from: number, onDone: () => void) {
   return remaining;
 }
 
+// Matches both the historical ExerciseDB-era "body weight" (two words) and
+// MuscleWiki's real "Bodyweight" (one word) vocabulary — verified live
+// (Beta Readiness Step 1) that MuscleWiki's own equipment value has no space.
 function isBodyweight(equipment: string | null): boolean {
-  return (equipment ?? '').trim().toLowerCase() === 'body weight';
+  return (equipment ?? '').toLowerCase().replace(/\s+/g, '') === 'bodyweight';
 }
 
 function formatTime(s: number) {
@@ -264,6 +271,12 @@ export default function WorkoutPlayerScreen() {
   const [sessionRating, setSessionRating]     = useState(0);
   const [savingRating, setSavingRating]       = useState(false);
 
+  // Day 3 — session persistence/resume + activity-block + difficulty check-in
+  const [reopenedSummary, setReopenedSummary] = useState(false); // true if this session was already completed (read-only reopen)
+  const [perceivedDifficulty, setPerceivedDifficulty] = useState<PerceivedDifficulty | null>(null);
+  const [activityDurationMin, setActivityDurationMin] = useState(0);
+  const [completionPct, setCompletionPct]     = useState<number | null>(null);
+
   const lastSetCompletedAtRef                 = useRef<number | null>(null);
 
   const cancelPendingRestNotification = useCallback(() => {
@@ -289,7 +302,7 @@ export default function WorkoutPlayerScreen() {
       setUserId(uid);
 
       const [wRes, exRes, favRes, ratingRes] = await Promise.all([
-        supabase.from('workouts').select('id, title, category, duration_minutes').eq('id', workoutId).single(),
+        supabase.from('workouts').select('id, title, category, duration_minutes, is_activity_block, description').eq('id', workoutId).single(),
         supabase
           .from('workout_exercises')
           .select(`
@@ -302,11 +315,49 @@ export default function WorkoutPlayerScreen() {
         uid ? supabase.from('exercise_ratings').select('exercise_id, rating').eq('user_id', uid).eq('source', 'db') : Promise.resolve({ data: [] }),
       ]);
       const loadedExercises = (exRes.data as unknown as WorkoutExercise[]) ?? [];
-      setWorkout(wRes.data as Workout ?? null);
+      const loadedWorkout = wRes.data as Workout ?? null;
+      setWorkout(loadedWorkout);
       setExercises(loadedExercises);
       setQueue(loadedExercises);
       setFavoriteExerciseIds(new Set(((favRes.data as any[]) ?? []).map(r => r.exercise_id)));
       setExerciseRatings(Object.fromEntries(((ratingRes.data as any[]) ?? []).map(r => [r.exercise_id, r.rating])));
+      setActivityDurationMin(loadedWorkout?.duration_minutes ?? 0);
+
+      // Day 3 — resolve/create the session up front: resumes an in-progress
+      // one (hydrating already-logged sets so the queue picks up where it
+      // left off), or reopens a completed one as a read-only summary rather
+      // than silently starting a duplicate.
+      if (uid && workoutId) {
+        const started = await workoutExecutionService.startWorkout(uid, workoutId as string);
+        if (started.status === 'not_authorized') {
+          setLoading(false);
+          return;
+        }
+        setHistoryId(started.historyId);
+
+        if (started.status === 'already_completed') {
+          const summary = await workoutExecutionService.getWorkoutSummary(started.historyId);
+          setCompletionPct((summary.history as any)?.completion_percentage ?? null);
+          setPerceivedDifficulty((summary.history as any)?.perceived_difficulty ?? null);
+          setReopenedSummary(true);
+          setPhase('done');
+        } else if (started.status === 'resumed') {
+          const logged = await workoutExecutionService.getLoggedSets(started.historyId);
+          const doneCounts: Record<string, number> = {};
+          const hydratedLogs: SetLog[] = [];
+          for (const log of logged) {
+            const we = loadedExercises.find(e => e.exercises.id === log.exerciseId);
+            if (!we) continue;
+            doneCounts[we.id] = Math.max(doneCounts[we.id] ?? 0, log.setNumber);
+            hydratedLogs.push({ exerciseId: log.exerciseId, setNumber: log.setNumber, weightKg: log.weightKg, reps: log.reps ?? 0, restSecondsActual: null });
+          }
+          setCompletedSets(doneCounts);
+          setSetLogs(hydratedLogs);
+          // Skip straight past any exercise whose prescribed sets are already fully logged.
+          setQueue(loadedExercises.filter(e => (doneCounts[e.id] ?? 0) < (e.sets ?? 1)));
+        }
+      }
+
       setLoading(false);
     })();
   }, [workoutId]);
@@ -344,6 +395,7 @@ export default function WorkoutPlayerScreen() {
   };
 
   const currentExercise = queue[0];
+  const resolvedDemoUrl = useMuscleWikiMedia(currentExercise?.exercises.gif_url ?? null);
   const nextExercise    = queue[1];
   const totalExercises  = exercises.length;
   const doneCount       = totalExercises - queue.length;
@@ -373,14 +425,21 @@ export default function WorkoutPlayerScreen() {
       ? Math.round((now - lastSetCompletedAtRef.current) / 1000)
       : null;
     lastSetCompletedAtRef.current = now;
+    const weightKg = bodyweight ? null : (logWeight > 0 ? logWeight : null);
     setCompletedSets(prev => ({ ...prev, [currentExercise.id]: newDone }));
     setSetLogs(prev => [...prev, {
       exerciseId: currentExercise.exercises.id,
       setNumber: newDone,
-      weightKg: bodyweight ? null : (logWeight > 0 ? logWeight : null),
+      weightKg,
       reps: logReps,
       restSecondsActual,
     }]);
+    // Persisted immediately (not batched at the end) so progress survives
+    // quitting mid-workout and the session is genuinely resumable (Day 3
+    // section 13) — optimistic, like the rest of this screen's writes.
+    if (userId && historyId) {
+      workoutExecutionService.saveSet(userId, historyId, currentExercise.exercises.id, newDone, { reps: logReps, weightKg, restSecondsActual }).catch(() => {});
+    }
 
     if (newDone < totalSets) {
       // Still more sets — start rest
@@ -411,44 +470,31 @@ export default function WorkoutPlayerScreen() {
 
   const finishWorkout = useCallback(async () => {
     setPhase('done');
-    const durationMinutes = Math.round(elapsed / 60);
-    const session = await authService.getSession();
-    if (session?.user.id && workoutId) {
+    const durationMinutes = workout?.is_activity_block ? activityDurationMin : Math.round(elapsed / 60);
+    // Every set was already persisted as it was logged (markSetDone), so
+    // finishing only needs to: save any per-exercise notes, then mark the
+    // session complete and compute its completion percentage.
+    if (userId && historyId && workoutId) {
       const cleanExerciseNotes = Object.fromEntries(
         Object.entries(exerciseNotes)
           .map(([exId, note]) => [exId, note.trim()])
           .filter(([, note]) => note.length > 0),
       );
-      const { data: history } = await supabase
-        .from('workout_history')
-        .insert({
-          user_id: session.user.id,
-          workout_id: workoutId,
-          duration_minutes: durationMinutes,
-          exercise_notes: cleanExerciseNotes,
-        })
-        .select('id')
-        .single();
-
-      if (history) {
-        setHistoryId(history.id);
-
-        if (setLogs.length > 0) {
-          await supabase.from('workout_set_logs').insert(
-            setLogs.map(log => ({
-              user_id: session.user.id,
-              workout_history_id: history.id,
-              exercise_id: log.exerciseId,
-              set_number: log.setNumber,
-              weight_kg: log.weightKg,
-              reps: log.reps,
-              rest_seconds_actual: log.restSecondsActual,
-            })),
-          );
-        }
+      if (Object.keys(cleanExerciseNotes).length > 0) {
+        await supabase.from('workout_history').update({ exercise_notes: cleanExerciseNotes }).eq('id', historyId);
       }
+      const { completionPercentage } = await workoutExecutionService.completeWorkout(
+        userId, historyId, workoutId as string, { actualDurationMinutes: durationMinutes },
+      );
+      setCompletionPct(completionPercentage);
     }
-  }, [elapsed, workoutId, setLogs, exerciseNotes]);
+  }, [elapsed, workoutId, exerciseNotes, userId, historyId, workout, activityDurationMin]);
+
+  const chooseDifficulty = async (value: PerceivedDifficulty) => {
+    if (!userId || !historyId) return;
+    setPerceivedDifficulty(value);
+    await workoutExecutionService.setPerceivedDifficulty(userId, historyId, value);
+  };
 
   const handleSaveNote = async () => {
     if (!historyId || !sessionNote.trim()) return;
@@ -466,8 +512,60 @@ export default function WorkoutPlayerScreen() {
     cancelPendingRestNotification();
   };
 
-  if (loading || !workout || exercises.length === 0) {
+  if (loading || !workout || (!workout.is_activity_block && exercises.length === 0)) {
     return <View style={s.center}><ThemedText style={{ color: palette.gray450 }}>Loading…</ThemedText></View>;
+  }
+
+  // ── Activity block (Day 3) ── Run/Walk/Mobility/Recovery blocks have no
+  // catalogue exercises at all — a simple duration + "mark done" flow rather
+  // than pretending they're MuscleWiki exercises (section 12).
+  if (workout.is_activity_block && phase !== 'done') {
+    return (
+      <>
+        <Stack.Screen options={{ headerShown: false }} />
+        <View style={s.root}>
+          <SafeAreaView edges={['top']} style={s.headerSafe}>
+            <View style={s.headerRow}>
+              <TouchableOpacity
+                style={s.quitBtn}
+                onPress={() => Alert.alert('Quit workout?', 'Your progress so far has already been saved.', [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Quit', style: 'destructive', onPress: () => router.back() },
+                ])}
+                hitSlop={10}
+              >
+                <Ionicons name="close" size={20} color={palette.ink900} />
+              </TouchableOpacity>
+              <View style={s.headerCenter}>
+                <ThemedText style={s.headerTitle}>{workout.title}</ThemedText>
+                <ThemedText style={s.headerTimer}>{formatTime(elapsed)}</ThemedText>
+              </View>
+              <View style={{ width: 36 }} />
+            </View>
+          </SafeAreaView>
+          <ScrollView contentContainerStyle={s.scrollContent}>
+            <View style={s.exTitleWrap}>
+              <ThemedText style={s.exName}>{workout.title}</ThemedText>
+            </View>
+            {workout.description ? <ThemedText style={{ fontSize: 15, color: palette.gray450, lineHeight: 21, marginBottom: 20 }}>{workout.description}</ThemedText> : null}
+            <View style={s.logCard}>
+              <ThemedText style={s.logLabel}>Actual duration</ThemedText>
+              <View style={s.logRow}>
+                <View style={s.logItem}>
+                  <LogStepper value={activityDurationMin} min={0} max={240} step={5} suffix=" min" onChange={setActivityDurationMin} />
+                </View>
+              </View>
+            </View>
+          </ScrollView>
+          <SafeAreaView edges={['bottom']} style={s.actions}>
+            <TouchableOpacity style={[s.actionBtn, s.actionBtnGrad]} onPress={finishWorkout} activeOpacity={0.85}>
+              <Ionicons name="checkmark-circle" size={22} color="#fff" />
+              <ThemedText style={s.actionBtnText}>Mark as Done</ThemedText>
+            </TouchableOpacity>
+          </SafeAreaView>
+        </View>
+      </>
+    );
   }
 
   // ── Done screen ──────────────────────────────────────────────────────────────
@@ -506,6 +604,34 @@ export default function WorkoutPlayerScreen() {
                   <ThemedText style={s.doneStatLabel}>Sets</ThemedText>
                 </View>
               </View>
+
+              {completionPct != null ? (
+                <ThemedText style={{ color: 'rgba(255,255,255,0.75)', fontSize: 13.5, marginBottom: 20, textAlign: 'center' }}>
+                  {completionPct}% of prescribed work completed
+                </ThemedText>
+              ) : null}
+
+              {historyId && !reopenedSummary ? (
+                <View style={s.ratingCard}>
+                  <ThemedText style={s.noteCardLabel}>How did that feel?</ThemedText>
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+                    {(['easy', 'about_right', 'difficult'] as PerceivedDifficulty[]).map(opt => (
+                      <TouchableOpacity
+                        key={opt}
+                        onPress={() => chooseDifficulty(opt)}
+                        style={{
+                          flex: 1, paddingVertical: 10, borderRadius: radii.pill, alignItems: 'center',
+                          backgroundColor: perceivedDifficulty === opt ? '#fff' : 'rgba(255,255,255,0.12)',
+                        }}
+                      >
+                        <ThemedText style={{ fontSize: 12.5, fontWeight: '700', color: perceivedDifficulty === opt ? palette.ink900 : '#fff' }}>
+                          {opt === 'easy' ? 'Easy' : opt === 'about_right' ? 'About right' : 'Difficult'}
+                        </ThemedText>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              ) : null}
 
               {historyId ? (
                 <View style={s.ratingCard}>
@@ -662,11 +788,11 @@ export default function WorkoutPlayerScreen() {
             </View>
           </View>
 
-          {/* GIF demonstration */}
-          {currentExercise.exercises.gif_url ? (
+          {/* GIF/video demonstration — MuscleWiki stream URLs need a fresh short-lived token (see useMuscleWikiMedia) */}
+          {resolvedDemoUrl ? (
             <View style={s.gifWrap}>
               <Image
-                source={{ uri: currentExercise.exercises.gif_url }}
+                source={{ uri: resolvedDemoUrl }}
                 style={s.gif}
                 resizeMode="contain"
               />
