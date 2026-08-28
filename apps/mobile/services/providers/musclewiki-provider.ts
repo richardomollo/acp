@@ -21,7 +21,12 @@ import {
 } from '../../lib/exercise-types.ts';
 
 const PROXY_BASE = 'https://activecitypass.com/api/musclewiki';
-const REQUEST_TIMEOUT_MS = 8000;
+// 15s (not 8s) — a mobile network round-trip through a Vercel serverless
+// function (which can cold-start) plus the real MuscleWiki upstream call is
+// materially slower than the sub-1s response seen when testing from a
+// warm, low-latency connection; 8s was tripping the client-side timeout
+// for some real devices even when the backend itself was healthy.
+const REQUEST_TIMEOUT_MS = 15000;
 
 // Verified real shape (GET /exercises/{id} and GET /search — both return
 // this full object; GET /exercises without an id only returns {id, name}
@@ -115,15 +120,23 @@ async function callProxy(path: string, params: Record<string, string | number | 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
+  // Safe diagnostics only — the request path/params are just body-part and
+  // muscle-name text, never a credential (the permanent key never reaches
+  // the mobile app at all). Kept deliberately terse: one line per attempt.
+  console.log(`[musclewiki] request path=${path} q=${params.q ?? ''}`);
+
   let res: Response;
   try {
     res = await fetch(`${PROXY_BASE}?${qs.toString()}`, { signal: controller.signal });
   } catch (e: any) {
+    console.warn(`[musclewiki] fetch failed for path=${path}: ${e?.name ?? 'Error'} ${e?.message ?? ''}`);
     if (e?.name === 'AbortError') throw new ExerciseProviderError('timeout', 'MuscleWiki request timed out');
     throw new ExerciseProviderError('network_error', e?.message ?? 'Network request failed');
   } finally {
     clearTimeout(timeout);
   }
+
+  console.log(`[musclewiki] response path=${path} status=${res.status}`);
 
   if (!res.ok) {
     // Verified live: an invalid key returns 403 (not 401) — both are treated
@@ -167,7 +180,9 @@ export const musclewikiProvider: ExerciseProvider = {
   // has no working muscle filter at all (only category/difficulty do).
   async getExercises(bodyPart: string, limit: number, offset: number): Promise<ACPExercise[]> {
     const raw = await callProxy('search', { q: bodyPart, limit, offset });
-    return raw.map(mapMuscleWikiExercise);
+    const mapped = raw.map(mapMuscleWikiExercise);
+    console.log(`[musclewiki] getExercises('${bodyPart}') received=${raw.length} mapped=${mapped.length}`);
+    return mapped;
   },
 
   async searchExercises(filters: ExerciseSearchFilters): Promise<ACPExercise[]> {
@@ -178,7 +193,9 @@ export const musclewikiProvider: ExerciseProvider = {
       limit: filters.limit ?? 20,
       offset: filters.offset ?? 0,
     });
-    return raw.map(mapMuscleWikiExercise);
+    const mapped = raw.map(mapMuscleWikiExercise);
+    console.log(`[musclewiki] searchExercises received=${raw.length} mapped=${mapped.length}`);
+    return mapped;
   },
 
   async getExercise(externalId: string): Promise<ACPExercise | null> {
