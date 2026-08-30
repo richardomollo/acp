@@ -1,6 +1,6 @@
 import {
   StyleSheet, View, ScrollView, TouchableOpacity,
-  ActivityIndicator, Dimensions, Alert,
+  ActivityIndicator, Dimensions, Alert, Platform,
 } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ExerciseMedia } from '@/components/exercise-media';
 import { LinearGradient } from 'expo-linear-gradient';
+import { getStravaStatus, connectStrava } from '@/services/strava';
 
 const GIF_SIZE = Dimensions.get('window').width - 88; // card has 14px padding each side + 20px outer each side
 
@@ -114,6 +115,9 @@ export default function WorkoutDetailScreen() {
   const [deleting, setDeleting]     = useState(false);
   const [exerciseRatings, setExerciseRatings]         = useState<Record<string, number>>({});
   const [workoutFavorited, setWorkoutFavorited]       = useState(false);
+  // Beta Feedback #006 — connected-execution state for a run/walk block.
+  const [stravaConnected, setStravaConnected]         = useState<boolean | null>(null);
+  const [connectingStrava, setConnectingStrava]       = useState(false);
 
   useEffect(() => {
     if (!workoutId) return;
@@ -142,6 +146,34 @@ export default function WorkoutDetailScreen() {
       setLoading(false);
     })();
   }, [workoutId]);
+
+  // Beta Feedback #006 — a run/walk activity block is done with the user's
+  // own tracker (Strava / Apple Watch → Apple Health); ACP reconciles the
+  // completed activity into plan progress on My Plan. Only surface connected
+  // state for that case; strength/mobility workouts are unaffected.
+  const isActivityBlockCardio = !!workout && workout.is_activity_block && workout.category === 'cardio';
+  const cardioNoun = workout && workout.title.toLowerCase().includes('walk') ? 'walk' : 'run';
+
+  useEffect(() => {
+    if (!isActivityBlockCardio) return;
+    let active = true;
+    getStravaStatus()
+      .then(s => { if (active) setStravaConnected(!!s.connected); })
+      .catch(() => { if (active) setStravaConnected(false); });
+    return () => { active = false; };
+  }, [isActivityBlockCardio]);
+
+  const handleConnectStrava = async () => {
+    if (connectingStrava) return;
+    setConnectingStrava(true);
+    try {
+      const result = await connectStrava();
+      if (result === 'connected') setStravaConnected(true);
+      else if (result === 'error') Alert.alert('Couldn’t connect', 'Please try connecting Strava again.');
+    } finally {
+      setConnectingStrava(false);
+    }
+  };
 
   const toggleExpand = (id: string) =>
     setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
@@ -276,11 +308,18 @@ export default function WorkoutDetailScreen() {
 
             <View style={s.heroMeta}>
               <View style={s.badgeRow}>
-                <View style={[s.diffBadge, { backgroundColor: diff.bg }]}>
-                  <ThemedText style={[s.diffText, { color: diff.text }]}>
-                    {workout.difficulty.charAt(0).toUpperCase() + workout.difficulty.slice(1)}
-                  </ThemedText>
-                </View>
+                {/* Beta Feedback #006 — a run/walk activity block has no
+                    meaningful difficulty tier (it is defined by its own
+                    prescription, e.g. "Run intervals"); showing "Beginner"
+                    on an advanced user's prescribed run was misleading. The
+                    badge stays for structured exercise workouts only. */}
+                {!workout.is_activity_block && (
+                  <View style={[s.diffBadge, { backgroundColor: diff.bg }]}>
+                    <ThemedText style={[s.diffText, { color: diff.text }]}>
+                      {workout.difficulty.charAt(0).toUpperCase() + workout.difficulty.slice(1)}
+                    </ThemedText>
+                  </View>
+                )}
                 {workout.assigned_by && (
                   <View style={s.assignedBadge}>
                     <Ionicons name="person-outline" size={11} color={palette.blue600} />
@@ -310,13 +349,21 @@ export default function WorkoutDetailScreen() {
                     </View>
                   </>
                 )}
-                <View style={s.statDivider} />
-                <View style={s.statItem}>
-                  <Ionicons name={workout.location_type === 'home' ? 'home-outline' : 'barbell-outline'} size={16} color={palette.gray450} />
-                  <ThemedText style={s.statText}>
-                    {workout.location_type === 'home' ? 'Home' : workout.location_type === 'gym' ? 'Gym' : 'Any'}
-                  </ThemedText>
-                </View>
+                {/* Beta Feedback #006 — location (Home/Gym) is only
+                    meaningful for a structured exercise workout. A run is
+                    done outdoors or on a treadmill; labelling it "Gym" was
+                    wrong. */}
+                {!workout.is_activity_block && (
+                  <>
+                    <View style={s.statDivider} />
+                    <View style={s.statItem}>
+                      <Ionicons name={workout.location_type === 'home' ? 'home-outline' : 'barbell-outline'} size={16} color={palette.gray450} />
+                      <ThemedText style={s.statText}>
+                        {workout.location_type === 'home' ? 'Home' : workout.location_type === 'gym' ? 'Gym' : 'Any'}
+                      </ThemedText>
+                    </View>
+                  </>
+                )}
               </View>
             </View>
           </SafeAreaView>
@@ -379,9 +426,18 @@ export default function WorkoutDetailScreen() {
                             </View>
                           )}
 
-                          {/* Expanded: GIF + step-by-step instructions */}
+                          {/* Expanded: demonstration media (Beta #007 — at the
+                              top of the expanded exercise; renders only when
+                              the canonical exercise source supplies media and
+                              never blocks the rest of the card) → rating →
+                              note → step-by-step instructions. */}
                           {isOpen ? (
                             <>
+                              {ex.gif_url ? (
+                                <View style={s.gifWrap}>
+                                  <ExerciseMedia url={ex.gif_url} style={s.gif} />
+                                </View>
+                              ) : null}
                               <View style={s.rateRow}>
                                 <ThemedText style={s.rateLabel}>Your rating</ThemedText>
                                 <View style={{ flexDirection: 'row', gap: 4 }}>
@@ -400,11 +456,6 @@ export default function WorkoutDetailScreen() {
                                 <View style={s.noteWrap}>
                                   <Ionicons name="create-outline" size={13} color={palette.blue600} />
                                   <ThemedText style={s.noteText}>{we.notes}</ThemedText>
-                                </View>
-                              ) : null}
-                              {ex.gif_url ? (
-                                <View style={s.gifWrap}>
-                                  <ExerciseMedia url={ex.gif_url} style={s.gif} />
                                 </View>
                               ) : null}
                               {ex.instructions?.length > 0 ? (
@@ -439,6 +490,42 @@ export default function WorkoutDetailScreen() {
               );
             })}
 
+          {/* Beta Feedback #006 — connected execution for a run/walk. ACP is
+              the coach, not the stopwatch: record with your own tracker, ACP
+              reconciles the completed activity into progress. No fake
+              "start recording" control — those APIs can't be driven from here. */}
+          {isActivityBlockCardio && (
+            <View style={s.trackCard}>
+              <ThemedText style={s.trackTitle}>TRACK YOUR {cardioNoun.toUpperCase()}</ThemedText>
+              <ThemedText style={s.trackBody}>
+                Record it with Strava or your watch as you normally would. ACP picks up the
+                completed activity — open My Plan afterwards to confirm it against this session.
+              </ThemedText>
+
+              <View style={s.trackRow}>
+                <Ionicons name="pulse-outline" size={16} color={palette.gray450} />
+                <ThemedText style={s.trackRowLabel}>Strava</ThemedText>
+                {stravaConnected === null ? (
+                  <ActivityIndicator size="small" color={palette.gray300} />
+                ) : stravaConnected ? (
+                  <ThemedText style={s.trackConnected}>Connected</ThemedText>
+                ) : (
+                  <TouchableOpacity onPress={handleConnectStrava} disabled={connectingStrava} hitSlop={8}>
+                    <ThemedText style={s.trackConnect}>{connectingStrava ? 'Connecting…' : 'Connect'}</ThemedText>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {Platform.OS === 'ios' && (
+                <View style={s.trackRow}>
+                  <Ionicons name="heart-outline" size={16} color={palette.gray450} />
+                  <ThemedText style={s.trackRowLabel}>Apple Health</ThemedText>
+                  <ThemedText style={s.trackRowNote}>Apple Watch & compatible apps</ThemedText>
+                </View>
+              )}
+            </View>
+          )}
+
           <View style={{ height: 110 }} />
         </ScrollView>
 
@@ -449,8 +536,10 @@ export default function WorkoutDetailScreen() {
             onPress={() => router.push({ pathname: '/workout-player', params: { workoutId: workout.id } })}
             activeOpacity={0.88}
           >
-            <Ionicons name="play" size={20} color="#fff" />
-            <ThemedText style={s.startBtnText}>{startCtaLabel(workout)}</ThemedText>
+            <Ionicons name={isActivityBlockCardio ? 'create-outline' : 'play'} size={20} color="#fff" />
+            <ThemedText style={s.startBtnText}>
+              {isActivityBlockCardio ? `Log this ${cardioNoun} manually` : startCtaLabel(workout)}
+            </ThemedText>
           </TouchableOpacity>
         </SafeAreaView>
       </View>
@@ -524,6 +613,25 @@ const s = StyleSheet.create({
     textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 14,
   },
 
+  // Beta Feedback #006 — "Track your run" connected-execution card.
+  trackCard: {
+    backgroundColor: palette.surfaceMuted, borderRadius: radii.xl,
+    padding: 16, marginTop: 4,
+  },
+  trackTitle: {
+    fontSize: 11, fontWeight: '700', color: palette.gray300,
+    textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8,
+  },
+  trackBody: { fontSize: fontSize.sm, color: palette.ink600, lineHeight: 19, marginBottom: 12 },
+  trackRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingVertical: 8, borderTopWidth: 1, borderTopColor: palette.hairline,
+  },
+  trackRowLabel: { flex: 1, fontSize: fontSize.sm, fontWeight: '700', color: palette.ink700 },
+  trackRowNote: { fontSize: fontSize.xs, color: palette.gray450 },
+  trackConnected: { fontSize: fontSize.xs, fontWeight: '700', color: palette.success700 },
+  trackConnect: { fontSize: fontSize.xs, fontWeight: '700', color: palette.blue600 },
+
   groupHeader: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     marginTop: 4, marginBottom: 10,
@@ -572,8 +680,8 @@ const s = StyleSheet.create({
   noteText: { flex: 1, fontSize: 12.5, color: palette.ink700, lineHeight: 17, fontStyle: 'italic' },
 
   gifWrap: {
-    marginTop: 10, borderRadius: radii.lg, overflow: 'hidden',
-    backgroundColor: palette.surfaceMuted,
+    marginTop: 0, marginBottom: 0, borderRadius: radii.lg, overflow: 'hidden',
+    backgroundColor: palette.white,
     alignItems: 'center',
   },
   gif: {

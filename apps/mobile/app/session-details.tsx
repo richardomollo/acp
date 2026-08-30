@@ -88,6 +88,12 @@ const SESSION_TOUR: TourStep[] = [
 
 export default function SessionDetailsScreen() {
   const router = useRouter();
+  // router.back() is a no-op when this screen was opened via a deep link
+  // (no history) — fall back to a sensible parent so the control is never dead.
+  const goBack = useCallback(() => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(tabs)' as any);
+  }, [router]);
   const { visible: tourVisible, dismiss: dismissTour } = useTour('session-details');
   const { sessionId } = useLocalSearchParams();
   const { showAuthModal } = useAuthModal();
@@ -252,7 +258,7 @@ export default function SessionDetailsScreen() {
       <SafeAreaView style={[styles.container, styles.center]}>
         <Ionicons name="calendar-outline" size={48} color={palette.gray200} />
         <ThemedText style={styles.emptyText}>Session not found</ThemedText>
-        <TouchableOpacity style={styles.backLink} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backLink} onPress={goBack}>
           <ThemedText style={styles.backLinkText}>Go back</ThemedText>
         </TouchableOpacity>
       </SafeAreaView>
@@ -287,7 +293,7 @@ export default function SessionDetailsScreen() {
         />
       </View>
 
-      <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+      <TouchableOpacity style={styles.backBtn} onPress={goBack}>
         <Ionicons name="arrow-back" size={22} color={palette.white} />
       </TouchableOpacity>
 
@@ -583,6 +589,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.35)',
     justifyContent: 'center',
     alignItems: 'center',
+    // The ScrollView is a later sibling and fills the screen, so without an
+    // explicit stacking order it captures taps in this region — lift the
+    // overlay controls above it (elevation covers Android).
+    zIndex: 10,
+    elevation: 10,
   },
   shareBtn: {
     position: 'absolute',
@@ -594,6 +605,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.35)',
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 10,
+    elevation: 10,
   },
   categoryBadge: {
     alignSelf: 'flex-start',

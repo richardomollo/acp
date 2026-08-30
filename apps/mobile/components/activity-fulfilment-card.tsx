@@ -27,7 +27,7 @@ import type { StartingPlanActivity } from '@/lib/ai-assessment';
 import type { PlanActivityFulfilment } from '@/lib/fulfilment';
 import type { ActivityRecommendation } from '@/lib/activity-recommendation-types';
 import { getActivityRecommendation } from '@/services/activity-recommendation-service';
-import { normalizeActivity } from '@/lib/fulfilment';
+import { normalizeActivity, isGymAccessListing } from '@/lib/fulfilment';
 
 const LOADING_COPY: Record<string, string> = {
   gym: 'Preparing your workout…',
@@ -133,6 +133,23 @@ export function ActivityFulfilmentCard({
   // a sensible unit instead of silently dropping its real exerciseCount.
   const unit = recommendation?.selfGuided.sessionType === 'exercise_workout' ? (PRESCRIPTION_UNIT[key] ?? 'exercises') : undefined;
 
+  // Beta Feedback #005 — "what to do" (the workout) and "where to do it"
+  // (gym access) are complementary, not mutually exclusive. When ACP has
+  // prescribed a self-directed GYM workout, also surface any Open Gym / gym-
+  // access listings already present in fulfilment.marketplaceMatches (they
+  // were previously computed but never rendered in this branch). Deterministic:
+  // only gym-access listings (never a competing coached class), only for a
+  // 'gym' activity, and only where the access window is long enough for the
+  // planned workout (section 12). Reuses the existing marketplace-match row.
+  const gymAccessMatches = key === 'gym'
+    ? fulfilment.marketplaceMatches
+        .filter(m =>
+          isGymAccessListing(m.title, m.activityType)
+          && (m.durationMinutes == null || m.durationMinutes >= activity.duration_minutes),
+        )
+        .slice(0, 2)
+    : [];
+
   return (
     <>
       {loading && !recommendation ? (
@@ -153,6 +170,38 @@ export function ActivityFulfilmentCard({
               <ThemedText style={s.link}>{ctaVerb} →</ThemedText>
             </TouchableOpacity>
           </View>
+
+          {/* Beta Feedback #005 — gym access alongside the workout. Additive:
+              the workout above is the coaching recommendation; this is just
+              where to do it. Navigation only — viewing/booking never marks
+              the activity done (section 20). */}
+          {gymAccessMatches.length > 0 && (
+            <View style={s.block}>
+              <ThemedText style={s.header}>NEED A GYM?</ThemedText>
+              {gymAccessMatches.map(m => (
+                <TouchableOpacity key={m.id} style={s.matchRow} onPress={() => router.push(m.navigationTarget as any)} activeOpacity={0.7}>
+                  {m.imageUrl ? (
+                    <Image source={{ uri: m.imageUrl }} style={s.matchImage} />
+                  ) : (
+                    <View style={[s.matchImage, s.matchImageFallback]}>
+                      <Ionicons name="barbell-outline" size={20} color={palette.gray300} />
+                    </View>
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <ThemedText style={s.title}>{m.title}</ThemedText>
+                    <ThemedText style={s.meta}>
+                      {m.partnerName ? `${m.partnerName} · ` : ''}
+                      {m.isAlternateDay ? 'Available on ACP · ' : ''}
+                      {new Date(m.date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long' })}
+                      {m.startTime ? ` · ${m.startTime.slice(0, 5)}` : ''}
+                      {m.priceKes != null ? ` · KES ${m.priceKes.toLocaleString()}` : ''}
+                    </ThemedText>
+                  </View>
+                  <ThemedText style={s.link}>View →</ThemedText>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </>
       ) : (
         <>
@@ -245,7 +294,7 @@ const s = StyleSheet.create({
   body: { fontSize: fontSize.sm, color: palette.ink600, marginTop: 6, lineHeight: 20 },
   providerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderTopWidth: 1, borderTopColor: palette.hairline },
   matchRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
-  matchImage: { width: 56, height: 56, borderRadius: radii.lg, flexShrink: 0 },
+  matchImage: { width: 90, height: 90, borderRadius: radii.lg, flexShrink: 0 },
   matchImageFallback: { backgroundColor: palette.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
   trainerImage: { width: 90, height: 90, borderRadius: radii.lg, flexShrink: 0 },
   trainerImageFallback: { backgroundColor: palette.surfaceMuted, alignItems: 'center', justifyContent: 'center' },

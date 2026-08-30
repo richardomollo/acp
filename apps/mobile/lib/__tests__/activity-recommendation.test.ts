@@ -2,7 +2,8 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildProfessionalSupport, isSupportedActivity, matchesExistingSession, findReusableSuggestedSession,
-  classifyActivityStrategy, isValidSuggestedSession, SUPPORTED_ACTIVITY_KEYS, type HumanSupportInsightLike,
+  classifyActivityStrategy, isValidSuggestedSession, SUPPORTED_ACTIVITY_KEYS, classifyRunSlot, needsExperienceHeal,
+  type HumanSupportInsightLike,
 } from '../activity-recommendation.ts';
 import type { HumanSupportSignal } from '../human-support-types.ts';
 import type { NormalizedActivityKey } from '../fulfilment.ts';
@@ -201,5 +202,62 @@ describe('isValidSuggestedSession', () => {
 
   test('walking (activity_block) is valid even with exerciseCount undefined (never computed for activity blocks)', () => {
     assert.equal(isValidSuggestedSession({ isActivityBlock: true, exerciseCount: undefined }), true);
+  });
+});
+
+// ── Beta Feedback #006 — run-type fidelity ────────────────────────────────
+describe('classifyRunSlot (Beta #006)', () => {
+  test('a prescribed interval / speed session maps to run_intervals', () => {
+    for (const a of [
+      { activity: 'Run intervals', title: 'Run intervals', description: '5–6 × 1–2 minute faster efforts with easy jog recoveries.' },
+      { activity: 'Interval run', title: 'Interval run', description: '' },
+      { activity: 'Tempo run', title: 'Tempo run', description: '' },
+      { activity: 'Fartlek session', title: '', description: '' },
+      { activity: 'Run', title: 'Speed work', description: 'hill repeats' },
+      { activity: 'Threshold run', title: '', description: '' },
+    ]) {
+      assert.equal(classifyRunSlot(a), 'run_intervals', JSON.stringify(a));
+    }
+  });
+
+  test('easy / steady / long / recovery / run-walk all read as continuous (run_easy)', () => {
+    for (const a of [
+      { activity: 'Easy run', title: 'Easy run', description: 'Conversational pace for 25 minutes.' },
+      { activity: 'Steady run', title: 'Steady run', description: '' },
+      { activity: 'Long run', title: 'Long run', description: '45–60 minutes at an easy effort.' },
+      { activity: 'Recovery jog', title: '', description: '' },
+      { activity: 'Run/walk', title: 'Run/walk', description: 'Alternate 2 min jog, 1 min walk.' },
+      { activity: 'Run', title: 'Your run', description: '' },
+    ]) {
+      assert.equal(classifyRunSlot(a), 'run_easy', JSON.stringify(a));
+    }
+  });
+
+  test('the keyword can appear in any of activity / title / description', () => {
+    assert.equal(classifyRunSlot({ description: 'interval session' }), 'run_intervals');
+    assert.equal(classifyRunSlot({ title: 'Intervals' }), 'run_intervals');
+    assert.equal(classifyRunSlot({ activity: null, title: null, description: null }), 'run_easy');
+  });
+});
+
+// ── Beta Feedback #007 — experience-label fidelity ────────────────────────
+describe('needsExperienceHeal (Beta #007)', () => {
+  test('A/C — a persisted row difficulty that disagrees with the canonical profile experience is healed', () => {
+    assert.equal(needsExperienceHeal('beginner', 'advanced'), true);   // the reported bug
+    assert.equal(needsExperienceHeal('advanced', 'beginner'), true);
+    assert.equal(needsExperienceHeal('intermediate', 'advanced'), true);
+  });
+
+  test('B — a row that already matches the canonical experience is left untouched', () => {
+    assert.equal(needsExperienceHeal('advanced', 'advanced'), false);
+    assert.equal(needsExperienceHeal('beginner', 'beginner'), false);
+  });
+
+  test('D — never heals from a missing/blank row difficulty or a missing canonical experience (no silent "beginner" flip)', () => {
+    assert.equal(needsExperienceHeal(null, 'advanced'), false);
+    assert.equal(needsExperienceHeal(undefined, 'advanced'), false);
+    assert.equal(needsExperienceHeal('', 'advanced'), false);
+    assert.equal(needsExperienceHeal('beginner', null), false);
+    assert.equal(needsExperienceHeal('beginner', undefined), false);
   });
 });

@@ -2,7 +2,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normalizeActivity, getSelfDirectedSource, nextDateForWeekday,
-  matchPlanActivityToInventory, getFulfilmentForActivity,
+  matchPlanActivityToInventory, getFulfilmentForActivity, isGymAccessListing,
   type MarketplaceInventoryItem,
 } from '../fulfilment.ts';
 
@@ -224,6 +224,100 @@ describe('commercial neutrality (Scenario I)', () => {
     assert.equal(matches[0].score, matches[1].score);
     // MarketplaceInventoryItem's type has no commission/revenue/sponsorship
     // field at all — there is nothing for the scorer to read even if it wanted to.
+  });
+});
+
+// ── Beta Feedback #005 — Open Gym / gym-access fulfilment ──────────────────
+
+describe('isGymAccessListing (Beta #005)', () => {
+  test('recognises the live "Open Gym" listing (name or name+category)', () => {
+    assert.equal(isGymAccessListing('Open Gym'), true);
+    assert.equal(isGymAccessListing('Open Gym', 'strength'), true);
+    assert.equal(isGymAccessListing('Evening Open Gym'), true);
+    assert.equal(isGymAccessListing('Gym Access — Day Pass'), true);
+    assert.equal(isGymAccessListing('Gym Day Pass'), true);
+  });
+
+  test('a coached class is NOT gym access, even with "gym" or "strength" in the name (§25 C — no over-match)', () => {
+    for (const n of ['Gym Strength Class', 'Strength Bootcamp', 'CrossFit WOD', 'Powerlifting Club', 'HIIT & Strength', 'Yoga Flow', 'Morning Run', 'Spin Class']) {
+      assert.equal(isGymAccessListing(n), false, n);
+    }
+  });
+
+  test('null / empty is not gym access', () => {
+    assert.equal(isGymAccessListing(null), false);
+    assert.equal(isGymAccessListing(undefined, null), false);
+    assert.equal(isGymAccessListing('', ''), false);
+  });
+});
+
+describe('matchPlanActivityToInventory — Open Gym for a strength activity (Beta #005)', () => {
+  // Mirrors the live data: sessions.name = "Open Gym", category = "strength",
+  // duration 120 min, KES 1188 drop-in.
+  const openGym = (o: Partial<MarketplaceInventoryItem> = {}) => makeItem({
+    id: 'open-gym-1', name: 'Open Gym', category: 'strength',
+    durationMinutes: 120, priceKes: 1188, spotsLeft: 20, ...o,
+  });
+  const anchor = new Date('2026-08-30T09:00:00'); // Sunday
+
+  test('A/B — a strength activity surfaces Open Gym, same-day preferred, price carried through', () => {
+    const inv = [
+      openGym({ id: 'mon', date: '2026-08-31' }),  // the planned day
+      openGym({ id: 'wed', date: '2026-09-02' }),  // alternate day
+    ];
+    const matches = matchPlanActivityToInventory(
+      { day: 'Monday', duration_minutes: 35, planned_date: '2026-08-31' }, 'gym', inv, anchor,
+    );
+    assert.ok(matches.length >= 1);
+    assert.equal(matches[0].id, 'mon');
+    assert.ok(matches[0].matchReasons.includes('same_day'));
+    assert.equal(matches[0].priceKes, 1188);
+  });
+
+  test('§26 — a 120-min Open Gym is NOT rejected for a 35-min workout (longer access window is fine)', () => {
+    const matches = matchPlanActivityToInventory(
+      { day: 'Monday', duration_minutes: 35, planned_date: '2026-08-31' }, 'gym',
+      [openGym({ date: '2026-08-31', durationMinutes: 120 })], anchor,
+    );
+    assert.equal(matches.length, 1);
+  });
+
+  test('§25 D — a RUNNING activity never surfaces Open Gym (keyword gate, not experience)', () => {
+    const matches = matchPlanActivityToInventory(
+      { day: 'Monday', duration_minutes: 35, planned_date: '2026-08-31' }, 'running',
+      [openGym({ date: '2026-08-31' })], anchor,
+    );
+    assert.deepEqual(matches, []);
+  });
+
+  test('§25 E — no Open Gym supply: strength match list is simply empty, never a forced result', () => {
+    const matches = matchPlanActivityToInventory(
+      { day: 'Monday', duration_minutes: 35, planned_date: '2026-08-31' }, 'gym', [], anchor,
+    );
+    assert.deepEqual(matches, []);
+  });
+
+  test('§27 — a future planned_date resolves to Open Gym on THAT date, not this week', () => {
+    const inv = [
+      openGym({ id: 'this-wed', date: '2026-09-02' }),
+      openGym({ id: 'next-wed', date: '2026-09-09' }),
+    ];
+    const matches = matchPlanActivityToInventory(
+      { day: 'Wednesday', duration_minutes: 40, planned_date: '2026-09-09' }, 'gym', inv, anchor,
+    );
+    assert.equal(matches[0].id, 'next-wed');
+    assert.ok(matches[0].matchReasons.includes('same_day'));
+  });
+
+  test('§25 F/G — eligibility is experience-agnostic: matchPlanActivityToInventory takes no experience_level at all', () => {
+    // The function signature has no user/experience parameter — an advanced
+    // and an intermediate self-directed strength user get the identical
+    // result for identical inventory. (The card gate is also experience-free.)
+    const inv = [openGym({ date: '2026-08-31' })];
+    const a = matchPlanActivityToInventory({ day: 'Monday', duration_minutes: 35, planned_date: '2026-08-31' }, 'gym', inv, anchor);
+    const b = matchPlanActivityToInventory({ day: 'Monday', duration_minutes: 35, planned_date: '2026-08-31' }, 'gym', inv, anchor);
+    assert.deepEqual(a, b);
+    assert.equal(a.length, 1);
   });
 });
 

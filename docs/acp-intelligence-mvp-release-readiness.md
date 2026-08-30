@@ -575,6 +575,318 @@ changes are an eligibility gate and an in-place row replacement.
   concurrent double regeneration wastes one generation (same tolerance as
   the existing 23505 race); (3) physical-device QA PENDING.
 
+## 17e. Beta Feedback #004 — "Start my plan" activation state (post-MVP iteration 4)
+
+Real-user contradiction: My Plan → "Start my plan" → "You're all set" →
+Home → reopen My Plan → the button is **still there**. **No schema, no AI
+change, no new state** — the fix is removing a vestigial control.
+
+- **Root cause**: `handleStartPlan` in `apps/mobile/app/my-plan.tsx` was a
+  pure no-op — `Alert.alert("You're all set", …, [{ onPress: router.back }])`.
+  It persisted **nothing**. The footer rendered unconditionally for any
+  `assessment`. Its own comment said so ("Day 2 … nothing persisted").
+- **Meaning of "Start my plan"**: none, functionally. A generated plan is
+  written to `fitness_plans` with `status='active'` **and** mirrored into
+  `fitness_profile.ai_assessment` in the same request (both the
+  onboarding-assessment and weekly-adaptation routes). There is no
+  `'draft'`/`'pending'` status anywhere — a plan is live from generation
+  (Home renders it, weekly adaptation adapts it, fulfilment books against
+  it). So there was never a pre-active state for a "start" gesture to leave.
+  The single real activation moment is onboarding's **"Start my journey"**
+  (`onboarding/plan.tsx` → `completeOnboarding()` + assessment generation +
+  navigate Home).
+- **Canonical source of truth**: `fitness_plans.status` — `'active'` (the
+  current plan, from birth), `'scheduled'` (a prepared future plan, Beta
+  #001, promoted by the Monday lifecycle — never "started" from My Plan),
+  `'superseded'` (history). My Plan reads the `ai_assessment` mirror, which
+  is written atomically with the `status='active'` row, so "a plan is shown
+  here" ≡ "it is active".
+- **Fix**: removed the bottom footer CTA, `handleStartPlan`, the unused
+  `Alert` import, and the `footer`/`startBtn`/`startBtnText` styles from
+  `my-plan.tsx`. An active plan needs no bottom CTA — the user works with
+  individual activities directly (§9). Per §8, the CTA is gone because the
+  canonical persisted state (`status='active'`) says the plan is active, not
+  because a local flag was flipped.
+- **Failure / loading / double-tap (§6/§7)**: N/A — there is no activation
+  write from this screen. The one write that matters (plan generation) keeps
+  its existing idempotency (`UNIQUE(user_id, week_start_date)`) and failure
+  handling in the routes.
+- **Home / My Plan consistency**: both already read the same mirror +
+  `fitness_plans` model; nothing to reconcile. Restart / logout-login are
+  backend-sourced — no AsyncStorage was ever involved in plan activation.
+- **Beta #001/#002/#003, Day 8/9, fulfilment, nutrition**: untouched — full
+  suites pass (web 401, mobile 590), tsc clean both apps. Live model
+  evaluation not required: this change affects persisted application state
+  and UI lifecycle, not AI reasoning.
+- **Known limitations**: render-level assertions (§21) are PENDING manual
+  device QA — this repo has no React Native component-render test harness
+  (all mobile tests are pure-function `node --test`).
+
+## 17f. Beta Feedback #004B — post-activation CTA → View weekly progress
+
+Beta #004 removed My Plan's dead "Start my plan" button, leaving the bottom
+action area empty. #004B fills it with the useful next step. **No schema, no
+AI, navigation only.**
+
+- **CTA lifecycle**: there is no "requires activation" state (Beta #004 —
+  a plan is `status='active'` from generation), so that branch is not
+  implemented. For the canonical current plan, the bottom CTA is now
+  **"View my weekly progress"** → `router.push('/weekly-plan')`. It is not
+  shown for the dead in-page next-week view (`isNextView`); the scheduled
+  next-week plan keeps its own screen (`/next-week-plan`) and CTAs.
+- **Route reused**: `apps/mobile/app/weekly-plan.tsx` ("This Week's Plan") —
+  the existing calendar-first view of the **same** `fitness_profile.ai_assessment`
+  the mirror holds. It takes **no params** and loads that mirror itself, so
+  it always shows the current active week — it cannot open a next-week,
+  previously-viewed, or historical plan. No new route, no param threading.
+- **Navigation only**: no API call, no `fitness_plans` status change, no
+  `plan_activity_completions` write, no LLM. The CTA appears as soon as a
+  plan is active, regardless of completion count (0/N is fine).
+- **Persistence**: gated purely on `assessment` (the backend-sourced
+  mirror). Restart / preference edit / future-plan regeneration never change
+  what it reads or shows.
+- **Visual**: same primary treatment the old "Start my plan" button used
+  (re-added `footer` / `primaryCta` / `primaryCtaText` styles; `content`
+  paddingBottom restored to 40).
+- **Tests**: full suites green (web 401, mobile 590), tsc clean both apps.
+  No live model eval — UI lifecycle + navigation only. Render-level
+  assertions (§16) are PENDING manual device QA (no RN render harness).
+
+## 17g. Beta Feedback #005 — Open Gym fulfilment for self-directed strength
+
+A user with a prescribed self-directed strength workout and no gym access
+sees no Open Gym option, even though supply exists. **No schema, no AI, no
+ranking change, no plan-generation change** — a UI-branch fix + one pure
+helper.
+
+- **Root cause**: `components/activity-fulfilment-card.tsx` renders the
+  prescribed workout (`acpRecommended` branch — "YOUR WORKOUT / View
+  workout") **or** the marketplace/self-directed fulfilment (`else`
+  branch), never both. The Open Gym sessions are already computed into
+  `fulfilment.marketplaceMatches` (they pass the keyword gate:
+  `normalizeActivity('Full-body strength','strength') → 'gym'`, and
+  `"Open Gym"` matches the `gym` alias), but that array is silently dropped
+  whenever a self-directed workout resolved. The "Chunk 3/4" rule that
+  suppressed *competing browse links* also suppressed *complementary venue
+  access*.
+- **Live Open Gym representation**: `sessions` rows — `name = "Open Gym"`,
+  `category = "strength"`, `duration_minutes = 120`, `drop_in_price` in KES
+  (≈1188), `spots_left ≈ 20`, one venue (Smart Gyms Junction), ~2 slots/day,
+  637 future rows. One canonical representation — no normalisation needed
+  beyond a name/category match. **Not in RAG** — live structured supply.
+- **Eligibility (deterministic)**: `isGymAccessListing(name, category)` in
+  `lib/fulfilment.ts` — matches `open gym` / `gym access|pass|day pass|
+  membership` / `drop-in gym`, and deliberately **not** a coached class
+  that merely contains "gym"/"strength" ("Gym Strength Class" → false). The
+  card then shows a **"NEED A GYM?"** block from
+  `fulfilment.marketplaceMatches.filter(isGymAccessListing … && (duration
+  unknown || duration ≥ workout minutes)).slice(0,2)`, only for a `'gym'`
+  activity, alongside the workout. Everything else — the existing keyword
+  gate, date resolution (`planned_date` first, Beta #001), same-day/
+  alternate-day scoring, `spots_left`/`is_active`/past-date exclusion,
+  commercial neutrality — is unchanged.
+- **Not advanced-only**: `matchPlanActivityToInventory` and the card gate
+  take **no** `experience_level` parameter at all. An intermediate
+  self-directed strength user gets the identical result.
+- **Duration (§12)**: a 120-min access window is accepted for a 35-min
+  workout; a gym-access listing whose known duration is *shorter* than the
+  planned workout is excluded. No duration is ever invented.
+- **Equipment (§13)**: the block names the listing ("Open Gym") and venue
+  only — never a specific machine/amenity (gyms.amenities is empty).
+- **Price (§10)**: shown only from `drop_in_price` where the query fetches
+  it (the weekly-plan page). My Plan / Next Week use the Day 7.3 supply
+  path, which does not yet select `drop_in_price`, so Open Gym there shows
+  without a price — omitted, never invented. Known limitation.
+- **Completion (§20)**: viewing/booking Open Gym navigates to
+  `/session-details` only — no `plan_activity_completions` write, Day 9
+  semantics untouched.
+- **Surfaces**: the card is shared by weekly-plan, My Plan and Next Week —
+  all three benefit. Home is not changed.
+- **Tests**: `fulfilment.test.ts` +9 (`isGymAccessListing` positive/negative/
+  null; strength→Open Gym eligible with same-day + price; 120-vs-35 not
+  rejected; running→no Open Gym; no-supply→empty; future `planned_date`→
+  correct date; experience-agnostic). Full suites green: **mobile 599, web
+  401**, tsc clean both. Live model evaluation not required — this change
+  affects deterministic supply fulfilment, not model reasoning.
+- **Known limitations**: (1) price not shown on My Plan / Next Week (Day 7.3
+  supply query doesn't select `drop_in_price`); (2) ACP has no structured
+  "has gym access" profile signal, so Open Gym is surfaced as *optional*
+  ("NEED A GYM?"), never asserted as needed; (3) render-level QA PENDING
+  (no RN component-render harness).
+
+## 17h. Beta Feedback #006 — connected run execution & activity fidelity
+
+A prescribed "Run intervals · 25 min" opened as "Easy Run · Beginner · Gym ·
+30 min", and the execution screen was a manual stopwatch. **No AI change, no
+migration** — a data-fidelity fix in the recommendation service + two UI
+corrections + an honest connected-execution card.
+
+- **Fidelity root cause**: `services/activity-recommendation-service.ts`'s
+  `generateSession` hard-coded the `run_easy` generator slot for **every**
+  running activity and wrote a generic per-key template — `title = "Easy
+  Run"`, `description = run_easy` spec text, `duration_minutes =
+  SESSION_DURATION_MINUTES.running` (30), `location_type =
+  context.equipmentLocation` ('gym' because "gym" is in
+  `preferred_activities`). The plan's `title` / `description` /
+  `duration_minutes` were never read past `normalizeActivity`. The
+  `run_intervals` slot already exists in `WORKOUT_TYPE_SPECS` /
+  `PROGRAMME_WORKOUT_TYPES` — it was just never selected.
+- **"Beginner" root cause**: `difficulty` is written once at generation and
+  reused verbatim. The user's live run row was created earlier that day with
+  a fallback/incomplete profile context → `'beginner'`; a fresh generation
+  with the correct profile is `'advanced'`. The badge was also
+  display-irrelevant for a run.
+- **"Gym" root cause**: `location_type: context.equipmentLocation` on an
+  activity-block cardio row. A run is outdoor/treadmill.
+- **"30 vs 25" root cause**: the fixed `SESSION_DURATION_MINUTES.running`
+  constant instead of `activity.duration_minutes`.
+- **Fix (fidelity)**: `activityBlockFields(key, activity)` derives
+  `title = activity.title` ("Run intervals (25 min)"),
+  `description = activity.description` (the interval instructions; falls back
+  to the `classifyRunSlot`-chosen `run_easy`/`run_intervals` spec text only
+  when the plan carries none), `durationMinutes = activity.duration_minutes`.
+  `location_type = 'both'` (the only run-appropriate value the CHECK allows).
+  New pure `classifyRunSlot(activity)` in `lib/activity-recommendation.ts`
+  (keyword: interval/tempo/fartlek/speed/threshold/hill → `run_intervals`).
+  `getActivityRecommendation`'s headline/title for activity-block cardio now
+  use the plan activity, not `SESSION_HEADLINE`/`SESSION_TITLE`.
+  `findReusableSuggested` **self-heals** a stale same-day activity-block row
+  in place (same `id`, so `/workout-player` links stay valid).
+- **Fix (UI)**: `workout-detail.tsx` no longer renders the **difficulty** or
+  **location** badge for `is_activity_block` — they are meaningful only for
+  structured exercise workouts (§4/§5).
+- **Connected execution (§8–§14)**: for an `is_activity_block` cardio
+  workout the detail screen gains a **"TRACK YOUR RUN/WALK"** card —
+  "Record it with Strava or your watch as usual; ACP picks up the completed
+  activity — open My Plan afterwards to confirm it." It shows the real
+  Strava connection state (`getStravaStatus`), a **Connect** action reusing
+  the existing OAuth (`connectStrava`), and on **iOS** an "Apple Health ·
+  Apple Watch & compatible apps" line. **No fake device control** — nothing
+  claims ACP can start a Strava/watch recording. The sticky CTA becomes
+  **"Log this run manually"** → the existing `/workout-player` (manual
+  self-report **remains** the fallback, §14).
+- **Evidence / reconciliation**: unchanged. The actual Strava/HealthKit
+  activity → plan-completion reconciliation already lives on **My Plan**
+  (`findStravaCandidates` / `findHealthKitCandidates`, Day 4/9) — it is
+  reused, not rebuilt, and the copy points users there. Viewing the detail
+  or connecting Strava writes **no** `plan_activity_completions` /
+  `plan_activity_execution` row. Device data never infers difficulty (§16/§17).
+- **Strava (what exists)**: `services/strava.ts` — `connectStrava()`
+  (WebBrowser OAuth, `acitypass://strava-callback`), `getStravaStatus()` →
+  `{ connected, connectedAt }`, `syncStravaNow()` → `strava-sync-activities`
+  edge function → `activities` table (`activity_type` run/walk, `start_time`,
+  duration, distance). Read-only.
+- **Apple Health (what exists)**: `services/health.ts` — iOS + real device
+  only (`isHealthKitUsable`), `@kingstinct/react-native-healthkit`,
+  `ensureHealthPermission()` (read auth is opaque per Apple),
+  `syncWorkouts()` → `HealthKit.queryWorkoutSamples` → `health_workouts`
+  (`activity_type`, `duration_seconds`, `start_date`, `hk_uuid`). This is
+  **Apple Watch → Apple Health → ACP**, never a direct watch integration.
+- **Android**: no Health Connect integration exists; Strava + manual
+  completion are the Android execution options. Not added here (§25).
+- **Tests**: `activity-recommendation.test.ts` +3 (`classifyRunSlot`:
+  interval/tempo/fartlek/speed/threshold → `run_intervals`; easy/steady/
+  long/recovery/run-walk → `run_easy`; keyword in any of activity/title/
+  description; null-safe). Full suites green: **mobile 602, web 401**, tsc
+  clean both. Live model evaluation not required — this affects persisted
+  data fidelity + UI, not model reasoning.
+- **Known limitations**: (1) `workout-detail` can't write a plan completion
+  itself (no plan `planId`/`activityIndex` param threaded through the shared
+  fulfilment card) — reconciliation stays on My Plan; (2) the "TRACK YOUR
+  RUN" card's device/Strava QA and the fidelity render checks are PENDING
+  physical-device (no RN render harness, no live Strava); (3) `/workout-player`
+  itself (the manual timer) is unchanged — only re-positioned as the
+  fallback; (4) multi-run disambiguation and Health Connect are explicitly
+  out of scope per the brief (§19/§25); (5) `EXISTING_PROGRAMME_SESSION`
+  runs (a structured programme's own `run_easy`/`run_intervals` workout) are
+  left as-is — "existing session always wins".
+
+## 17i. Beta Feedback #007 — strength workout experience fidelity & exercise media
+
+An advanced user's strength workout showed **"Beginner"** + "…and beginner
+experience level.", and its exercises had **no demonstration media**. **No AI
+change, no migration** — a self-heal for stale labels + confirming/repairing
+the media pipeline; the reported case was a pre-deploy generation artifact.
+
+- **"Beginner" root cause**: `generateExerciseSession` persists `difficulty:
+  context.experience` and a "…and X experience level." blurb **once** at
+  generation. The reporting user's `acp_suggested_strength` row was generated
+  ~07:38 (before the `apps/web` deploy) with a degraded context —
+  `buildGenerationContext` defaults `experience` to `'beginner'` when
+  `fitness_profile.experience_level` isn't readable — so the row was
+  permanently mislabelled. Same 07:38 window as the Beta #006 run row: one
+  cold/racey generation that couldn't read the profile **and** couldn't
+  reach the (then-undeployed) MuscleWiki proxy.
+- **Canonical experience source**: `fitness_profile.experience_level`
+  (`'beginner' | 'intermediate' | 'advanced'`), read fresh per
+  `getActivityRecommendation` call into `buildGenerationContext`. No new
+  field. The workout-detail badge reads the workout row's persisted
+  `difficulty`, which for an ACP-suggested session **is** that experience by
+  construction — so healing the row fixes the badge.
+- **Experience fix**: `findReusableSuggested` now **self-heals** a stale
+  same-day *exercise*-workout row (extends the Beta #006 activity-block
+  self-heal): when the row's `difficulty` disagrees with the canonical
+  profile experience (`needsExperienceHeal`, pure + unit-tested), it
+  `UPDATE`s `difficulty` + the description blurb in place — same row id, no
+  new row. Exercise **selection is untouched** (spec §18: an advanced
+  athlete can legitimately be prescribed a Push Up).
+- **Exercise provider**: `services/providers/musclewiki-provider.ts` via a
+  server-side proxy (`apps/web/app/api/musclewiki/route.ts`, `X-API-Key`,
+  `MUSCLEWIKI_API_KEY` server-only). Media is a real MP4 stream URL
+  (`videos[].url`), persisted verbatim into the legacy `exercises.gif_url`
+  column, played (muted, looped) through `expo-video` in the shared
+  `ExerciseMedia` component (Chunk 4.5C1). GIF-style URLs still render via
+  `<Image>`.
+- **Missing-media root cause**: the four exercises in the reported workout
+  are `source='acp'` with `gif_url = NULL` — `exercise-selection-service`'s
+  **Tier-5 hardcoded fallback** (`buildFallbackExercise`, text-only). Every
+  slot fell to it because at 07:38 the MuscleWiki proxy was unreachable
+  (route not yet deployed). The proxy is **live now** (verified: real
+  results with `videos[]` for chest/hamstring/etc.), and the media pipeline
+  (`persistExercise` writes `gif_url: ex.media[0]?.url`) is intact — a fresh
+  generation gets MuscleWiki video for most slots.
+- **Media pipeline**: MuscleWiki `/search` (proxy) → `mapMuscleWikiExercise`
+  → `ACPExercise.media[]` → `selectExerciseForRequirement` (fit-ranked) →
+  `persistExercise` (`exercises.gif_url`) → `workout_exercises` →
+  `workout-detail.tsx` / `workout-player.tsx` `ExerciseMedia`. Media now
+  renders at the **top of the expanded exercise** (§10), only when
+  `gif_url` is present, and never blocks the card (§11) — a failed
+  video/token renders nothing, text instructions remain.
+- **Autoplay/audio (§12/§13)**: `ExerciseMedia` is muted + looped; media
+  renders only for **expanded** exercises. Known limitation: the card allows
+  multiple simultaneous expansions, so several muted loops can play at once
+  while scrolling — an accordion / `active`-gated player is a follow-up.
+- **User account healed**: the stale `beginner`/no-media strength row was
+  deleted (no linked history/schedule/favourite) so it regenerates cleanly
+  on next open now that the proxy + profile are healthy.
+- **Workout-detail fidelity (§16)**: title / duration (40 min) / exercise
+  count / equipment / sets / reps / rest are all sourced from the workout +
+  `workout_exercises` rows correctly — no generic substitution as with the
+  run. The weekly-plan "35 vs 40" concern doesn't apply to this user (plan
+  says 40).
+- **Media resilience (deferred, documented)**: a "reuse a previously-
+  persisted media-bearing `exercises` row before the text-only Tier-5
+  fallback" tier would make a *transient* proxy outage degrade gracefully to
+  cached video instead of text. Not added here — it wires Supabase into the
+  delicate, `globalThis.fetch`-mocked `exercise-selection-service` and its
+  test harness; recommended as the next contained change.
+- **Execution / weight history (§19/§20)**: untouched. Media is
+  instructional and creates no `workout_history` / `workout_set_logs` /
+  `plan_activity_execution` rows. Ratings, set prescriptions, load history,
+  "View Weight History" all unchanged.
+- **Tests**: `activity-recommendation.test.ts` +3 (`needsExperienceHeal`:
+  disagreeing difficulty → heal; matching → no-op; missing row difficulty or
+  missing canonical experience → **never** a silent "beginner" flip, §24 D).
+  Full suites green: **mobile 605, web 401**, tsc clean both, deterministic
+  eval 50/50. No live model evaluation — profile/data fidelity + structured
+  media, not model reasoning.
+- **Known limitations**: (1) media-resilience fallback tier deferred (above);
+  (2) multi-video autoplay on multi-expand (above); (3) `buildGenerationContext`
+  still defaults a genuinely-missing `experience_level` to `'beginner'` (the
+  documented V1 product default) — the bug was a *transient* read failure,
+  which the self-heal now corrects on the next healthy generation; (4)
+  render / device / live-proxy QA PENDING (no RN component-render harness).
+
 ## 18. Release decision
 
 See the Day 10 completion report. As of 2026-08-30: **all deterministic tests

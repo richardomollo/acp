@@ -21,36 +21,6 @@ import { computeWeightProgress } from '@/lib/weight-progress';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-interface FitnessGoal {
-  key: 'lose_weight' | 'build_muscle' | 'improve_mobility' | 'general_fitness' | 'maintain_weight' | 'eat_healthier';
-  label: string;
-  desc: string;
-  icon: string;
-  color: string;
-}
-
-interface ExperienceLevel {
-  key: 'beginner' | 'intermediate' | 'advanced';
-  label: string;
-  desc: string;
-  icon: string;
-}
-
-const EXPERIENCE_LEVELS: ExperienceLevel[] = [
-  { key: 'beginner',     label: 'Beginner',     desc: 'New to working out',      icon: 'leaf-outline'    },
-  { key: 'intermediate', label: 'Intermediate', desc: 'Training 6+ months',      icon: 'barbell-outline' },
-  { key: 'advanced',     label: 'Advanced',     desc: 'Serious athlete',          icon: 'trophy-outline'  },
-];
-
-const GOALS: FitnessGoal[] = [
-  { key: 'build_muscle',     label: 'Build Muscle',    desc: 'Strength & hypertrophy',  icon: 'barbell-outline',  color: '#1d4ed8' },
-  { key: 'lose_weight',      label: 'Lose Weight',     desc: 'Burn fat & get lean',      icon: 'flame-outline',    color: '#ef4444' },
-  { key: 'general_fitness',  label: 'General Fitness', desc: 'Overall health & energy',  icon: 'heart-outline',    color: '#16a34a' },
-  { key: 'improve_mobility', label: 'Mobility',        desc: 'Flexibility & recovery',   icon: 'leaf-outline',     color: '#7c3aed' },
-  { key: 'maintain_weight',  label: 'Maintain Weight', desc: 'Stay where you are',       icon: 'trending-up-outline', color: '#0891b2' },
-  { key: 'eat_healthier',    label: 'Eat Healthier',   desc: 'Better food, fewer processed meals', icon: 'nutrition-outline', color: '#f59e0b' },
-];
-
 interface HistoryRow {
   completed_at: string;
   duration_minutes: number | null;
@@ -241,8 +211,6 @@ export default function FitnessJourneyScreen() {
   const [stats, setStats]           = useState<Stats>({ totalWorkouts: 0, totalMinutes: 0, streakDays: 0, longestStreak: 0 });
   const [userId, setUserId]         = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [goals, setGoals]           = useState<string[]>([]);
-  const [level, setLevel]           = useState<string | null>(null);
   const [startingWeight, setStartingWeight] = useState<number | null>(null);
   const [goalWeight, setGoalWeight] = useState<number | null>(null);
   const [initialWeightKg, setInitialWeightKg] = useState<number | null>(null);
@@ -259,12 +227,12 @@ export default function FitnessJourneyScreen() {
     let active = true;
     (async () => {
       setLoading(true);
+      try {
       const session = await authService.getSession();
       if (!active) return;
 
       if (!session?.user.id) {
         setIsLoggedIn(false);
-        setLoading(false);
         return;
       }
 
@@ -275,14 +243,14 @@ export default function FitnessJourneyScreen() {
         if (!active || !snapshot) return;
         setProgressSnapshot(snapshot);
         setProgressInsight(interpretProgress(snapshot));
-      });
+      }).catch(() => { /* insight is enhancement-only — never blocks the page */ });
 
       // Day 6 — human-support detection. Context-driven only: this card
       // renders nothing at all unless a real signal fires (never a generic
       // "book a trainer" promotion).
       getHumanSupportInsight(session.user.id).then(insight => {
         if (active) setHumanSupport(insight);
-      });
+      }).catch(() => { /* enhancement-only */ });
 
       setIsLoggedIn(true);
       setUserId(session.user.id);
@@ -299,7 +267,7 @@ export default function FitnessJourneyScreen() {
           .limit(500),
         supabase
           .from('fitness_profile')
-          .select('goals, experience_level, starting_weight_kg, goal_weight_kg, initial_weight_kg, goal_target_date')
+          .select('starting_weight_kg, goal_weight_kg, initial_weight_kg, goal_target_date')
           .eq('user_id', session.user.id)
           .maybeSingle(),
         supabase
@@ -337,8 +305,6 @@ export default function FitnessJourneyScreen() {
           .limit(10),
       ]);
 
-      if (active) setGoals(profileData?.goals ?? []);
-      if (active && profileData?.experience_level) setLevel(profileData.experience_level);
       if (active) setStartingWeight(profileData?.starting_weight_kg ?? null);
       if (active) setGoalWeight(profileData?.goal_weight_kg ?? null);
       if (active) setInitialWeightKg(profileData?.initial_weight_kg ?? null);
@@ -378,8 +344,13 @@ export default function FitnessJourneyScreen() {
         streakDays:    current,
         longestStreak: longest,
       });
-
-      setLoading(false);
+      } catch (err) {
+        // Never strand the screen on an endless spinner — show whatever
+        // loaded (stats/goals/measurements default to empty state).
+        console.warn('[fitness-journey] load failed', err);
+      } finally {
+        if (active) setLoading(false);
+      }
     })();
     return () => { active = false; };
   }, []));
@@ -637,35 +608,6 @@ export default function FitnessJourneyScreen() {
                 ))}
               </>
             )}
-
-            {/* ── Goals ── */}
-            <ThemedText style={s.sectionTitle}>Goals</ThemedText>
-            <TouchableOpacity
-              style={s.goalTeaserCard}
-              onPress={() => router.push('/fitness-goals' as any)}
-              activeOpacity={0.85}
-            >
-              <View style={s.goalTeaserIcon}>
-                <Ionicons name={(GOALS.find(g => g.key === goals[0])?.icon ?? 'flag-outline') as any} size={20} color={palette.blue500} />
-              </View>
-              <View style={{ flex: 1 }}>
-                {goals.length > 0 ? (
-                  <View style={s.goalChipsRow}>
-                    {goals.map(g => (
-                      <View key={g} style={s.goalChip}>
-                        <ThemedText style={s.goalChipText}>{GOALS.find(x => x.key === g)?.label ?? g}</ThemedText>
-                      </View>
-                    ))}
-                  </View>
-                ) : (
-                  <ThemedText style={s.goalTeaserTitle}>Set your goal</ThemedText>
-                )}
-                <ThemedText style={s.goalTeaserSub}>
-                  {EXPERIENCE_LEVELS.find(lv => lv.key === level)?.label ?? 'Set your level'}
-                </ThemedText>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={palette.gray300} />
-            </TouchableOpacity>
 
             <View style={{ height: 100 }} />
           </ScrollView>

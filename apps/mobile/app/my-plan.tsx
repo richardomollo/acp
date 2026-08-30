@@ -5,7 +5,7 @@
 // Reachable any time via the "My Plan" CTA on the My Goals page, and via
 // "See my detailed plan" at the end of onboarding.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { View, ScrollView, TouchableOpacity, ActivityIndicator, Modal, Alert, StyleSheet } from 'react-native';
+import { View, ScrollView, TouchableOpacity, ActivityIndicator, Modal, StyleSheet } from 'react-native';
 import { useRouter, useFocusEffect, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -679,17 +679,14 @@ export default function MyPlanScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assessment, nextWeekPlan, userId, planId]);
 
-  // "Start my plan" — Day 2 deliberately does not introduce a programme-
-  // tracking system. This is the minimal handling: a lightweight
-  // acknowledgement and navigation back, nothing persisted. See the Day 2
-  // report for why (no existing destination for "an active plan" to live).
-  const handleStartPlan = () => {
-    Alert.alert(
-      "You're all set",
-      'Come back to My Plan anytime to check your progress.',
-      [{ text: 'OK', onPress: () => router.back() }],
-    );
-  };
+  // Beta Feedback #004 — there is no "Start my plan" gesture any more. The
+  // canonical current plan is persisted status='active' the moment it is
+  // generated (both the onboarding-assessment and weekly-adaptation routes
+  // insert with status='active', alongside the fitness_profile.ai_assessment
+  // mirror this screen reads). So a plan shown here is, by definition,
+  // already active — there is no pre-active/draft state to leave, and the
+  // old footer button persisted nothing (it was an Alert + router.back()).
+  // The one activation moment lives in onboarding ("Start my journey").
 
   const categoryCounts = shownAssessment ? deriveCategoryCounts(shownAssessment.starting_plan.activities) : [];
   // Day 6 — "Your Progress". Purely derived from the already-fetched
@@ -1584,10 +1581,26 @@ export default function MyPlanScreen() {
         </ScrollView>
       )}
 
-      {assessment && (
+      {/* Beta Feedback #004 — there is no activation CTA (the plan shown here
+          is persisted status='active' from generation; nothing to "start").
+          Beta Feedback #004B — once a plan is active the useful next step is
+          reviewing how the week is going, so the bottom CTA evolves into
+          "View my weekly progress", navigating to the existing /weekly-plan
+          page. Navigation only: no write, no status change, no completions,
+          no AI. Gated on the canonical current plan (`assessment`, the
+          fitness_profile.ai_assessment mirror) — never shown for the dead
+          next-week in-page view (`isNextView`), whose planning/review
+          semantics live on the separate /next-week-plan screen. */}
+      {assessment && !isNextView && (
         <SafeAreaView edges={['bottom']} style={styles.footer}>
-          <TouchableOpacity style={styles.startBtn} onPress={handleStartPlan} activeOpacity={0.85}>
-            <ThemedText style={styles.startBtnText}>Start my plan</ThemedText>
+          <TouchableOpacity
+            style={styles.primaryCta}
+            onPress={() => router.push('/weekly-plan' as any)}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="View my weekly progress"
+          >
+            <ThemedText style={styles.primaryCtaText}>View my weekly progress</ThemedText>
           </TouchableOpacity>
         </SafeAreaView>
       )}
@@ -2074,19 +2087,21 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
+  // Beta Feedback #004B — bottom "View my weekly progress" CTA. Same primary
+  // treatment the old "Start my plan" button used.
   footer: {
     paddingHorizontal: 20,
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: palette.hairline,
   },
-  startBtn: {
+  primaryCta: {
     backgroundColor: palette.ink900,
     paddingVertical: 16,
     borderRadius: radii.pill,
     alignItems: 'center',
   },
-  startBtnText: {
+  primaryCtaText: {
     color: palette.white,
     fontSize: fontSize.lg,
     fontWeight: '700',

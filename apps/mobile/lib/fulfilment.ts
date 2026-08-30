@@ -108,6 +108,27 @@ export function textMatchesActivityKeyword(text: string, key: NormalizedActivity
   return aliases.some(a => lower.includes(a));
 }
 
+// ── Gym-access fulfilment (Beta Feedback #005) ─────────────────────────────
+// A marketplace listing that is gym ACCESS — a place + equipment to perform
+// a self-directed strength workout — as opposed to a coached class that
+// would compete with the prescribed workout. Live supply uses exactly
+// "Open Gym" (sessions.name, category 'strength'); the other phrases are
+// defensive and match nothing in current data (reported, not fabricated).
+// Deliberately narrow: a plain "gym" in a class name (e.g. "Gym Strength
+// Class") is NOT access — only these explicit access phrasings are.
+const GYM_ACCESS_PATTERNS: RegExp[] = [
+  /\bopen gym\b/,
+  /\bgym (access|pass|day ?pass|membership)\b/,
+  /\b(day|gym) pass\b/,
+  /\bdrop[- ]?in gym\b/,
+];
+
+/** True when a marketplace listing is gym access (a venue to train), not a coached class. */
+export function isGymAccessListing(name: string | null | undefined, category?: string | null): boolean {
+  const text = `${name ?? ''} ${category ?? ''}`.toLowerCase();
+  return GYM_ACCESS_PATTERNS.some(re => re.test(text));
+}
+
 /**
  * Interprets the AI-generated free-text `activity` (e.g. "Gym — full-body
  * strength", "Football session") into one canonical key. Picks whichever

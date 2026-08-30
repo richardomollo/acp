@@ -204,3 +204,33 @@ export const SESSION_REASON: Record<SupportedActivityKey, string> = {
 export const SESSION_DURATION_MINUTES: Record<SupportedActivityKey, number> = {
   gym: 40, mobility: 20, running: 30, walking: 30,
 };
+
+// ── Run-type fidelity (Beta Feedback #006) ────────────────────────────────
+// ACP's weekly plan already prescribes a run TYPE ("Run intervals", "Easy
+// run", "Tempo run", …). The standalone-session generator used to hard-code
+// the 'run_easy' slot, silently turning every prescribed run into an easy
+// run. This maps the plan activity's own text onto the run slots that
+// already exist in lib/programme-generator.ts's WORKOUT_TYPE_SPECS
+// ('run_easy' | 'run_intervals') — used ONLY to pick a sensible fallback
+// description when the plan activity carries none. Never a new running
+// engine, never fabricated pace/HR structure.
+const RUN_INTERVAL_KEYWORDS = ['interval', 'intervals', 'tempo', 'fartlek', 'speed', 'sprint', 'threshold', 'hill repeat', 'hills'];
+
+/** 'run_intervals' when the plan clearly prescribes structured faster efforts; 'run_easy' otherwise (easy / steady / long / recovery / run-walk all read as continuous). */
+export function classifyRunSlot(activity: { activity?: string | null; title?: string | null; description?: string | null }): 'run_easy' | 'run_intervals' {
+  const text = `${activity.activity ?? ''} ${activity.title ?? ''} ${activity.description ?? ''}`.toLowerCase();
+  return RUN_INTERVAL_KEYWORDS.some(k => text.includes(k)) ? 'run_intervals' : 'run_easy';
+}
+
+// ── Experience-label fidelity (Beta Feedback #007) ────────────────────────
+// A suggested exercise-workout row persists `difficulty` + its "…and X
+// experience level." blurb ONCE, from the generation context. A degraded
+// generation (profile momentarily unreadable → buildGenerationContext
+// defaults to 'beginner') then mislabels an advanced user's session on
+// every later open. This is the "does the reused row disagree with the
+// canonical profile experience, and should be corrected in place" decision
+// — never a re-selection of exercises (spec §18: an advanced athlete can
+// legitimately be given a Push Up).
+export function needsExperienceHeal(rowDifficulty: string | null | undefined, canonicalExperience: string | null | undefined): boolean {
+  return !!rowDifficulty && !!canonicalExperience && rowDifficulty !== canonicalExperience;
+}

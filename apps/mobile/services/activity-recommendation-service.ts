@@ -27,8 +27,32 @@ import type { ActivityRecommendation, ProfessionalSupportRecommendation, Session
 import {
   buildProfessionalSupport, isSupportedActivity, matchesExistingSession, findReusableSuggestedSession, toLocalDateKey,
   isValidSuggestedSession, SUGGESTED_WORKOUT_TYPE, SESSION_HEADLINE, SESSION_TITLE, SESSION_REASON, SESSION_DURATION_MINUTES,
-  type SupportedActivityKey,
+  classifyRunSlot, needsExperienceHeal, type SupportedActivityKey,
 } from '@/lib/activity-recommendation';
+
+// Beta Feedback #006 — activity-block cardio (running/walking) is done
+// outdoors or on a treadmill; the workouts.location_type CHECK is
+// ('home','gym','both'), so 'both' ("anywhere") is the least-wrong value,
+// and workout-detail hides the location badge for activity blocks anyway.
+const ACTIVITY_BLOCK_LOCATION = 'both';
+
+/** Beta Feedback #007 — one definition of the auto-suggested exercise-workout blurb, kept in sync between generation and the stale-row self-heal. */
+const exerciseWorkoutDescription = (experience: string) =>
+  `Recommended for your goal and ${experience} experience level.`;
+
+/** Beta Feedback #006 — the run/walk EXECUTION prescription must stay faithful to the planned activity (title, duration, instructions), not a generic per-key template. */
+function activityBlockFields(key: SupportedActivityKey, activity: StartingPlanActivity) {
+  const fallbackDescription = key === 'running'
+    ? workoutTypeSpec(classifyRunSlot(activity)).activityDescription
+    : workoutTypeSpec('walk_easy').activityDescription;
+  return {
+    title: (activity.title || activity.activity || SESSION_HEADLINE[key]).trim(),
+    description: (activity.description || fallbackDescription || '').trim(),
+    durationMinutes: Number.isFinite(activity.duration_minutes) && activity.duration_minutes > 0
+      ? activity.duration_minutes
+      : SESSION_DURATION_MINUTES[key],
+  };
+}
 
 async function assertOwnSession(userId: string): Promise<boolean> {
   const session = await authService.getSession();
@@ -133,22 +157,59 @@ async function populateExerciseWorkout(
  */
 async function findReusableSuggested(
   userId: string, key: SupportedActivityKey, requirements: ExerciseRequirement[] | null, context: GenerationContext,
+  activity?: StartingPlanActivity,
 ): Promise<{ id: string; title: string; durationMinutes: number; exerciseCount?: number } | null> {
   const { data } = await supabase
     .from('workouts')
-    .select('id, title, created_at, duration_minutes')
+    .select('id, title, description, difficulty, created_at, duration_minutes')
     .eq('user_id', userId)
     .eq('workout_type', SUGGESTED_WORKOUT_TYPE[key])
     .is('program_week_id', null)
     .order('created_at', { ascending: false })
     .limit(5);
-  const rows = ((data as any[]) ?? []).map(r => ({ id: r.id, title: r.title, createdAt: r.created_at, durationMinutes: r.duration_minutes }));
+  const rows = ((data as any[]) ?? []).map(r => ({ id: r.id, title: r.title, description: r.description ?? '', difficulty: r.difficulty ?? null, createdAt: r.created_at, durationMinutes: r.duration_minutes }));
   const reused = findReusableSuggestedSession(rows, new Date());
   if (!reused) return null;
-  const durationMinutes = (rows.find(r => r.id === reused.id) as any)?.durationMinutes ?? SESSION_DURATION_MINUTES[key];
+  const reusedRow = rows.find(r => r.id === reused.id);
+  const durationMinutes = reusedRow?.durationMinutes ?? SESSION_DURATION_MINUTES[key];
 
   const isActivityBlock = requirements === null;
-  if (isActivityBlock) return { id: reused.id, title: reused.title, durationMinutes };
+  if (isActivityBlock) {
+    // Beta Feedback #006 — self-heal a stale same-day activity-block row.
+    // An earlier generation (or a pre-fix build) may have written the
+    // generic template ("Easy Run · 30 min · gym"); bring it in line with
+    // the CURRENTLY planned activity, keeping the same row id so any
+    // /workout-player deep link stays valid. No new row, no migration.
+    if (activity) {
+      const f = activityBlockFields(key, activity);
+      const stale = reused.title !== f.title
+        || durationMinutes !== f.durationMinutes
+        || (reusedRow?.description ?? '') !== f.description;
+      if (stale) {
+        await supabase.from('workouts').update({
+          title: f.title, description: f.description, duration_minutes: f.durationMinutes,
+          location_type: ACTIVITY_BLOCK_LOCATION, difficulty: context.experience,
+        }).eq('id', reused.id).eq('user_id', userId);
+        return { id: reused.id, title: f.title, durationMinutes: f.durationMinutes };
+      }
+    }
+    return { id: reused.id, title: reused.title, durationMinutes };
+  }
+
+  // Beta Feedback #007 — self-heal a stale same-day EXERCISE-workout row.
+  // The row's `difficulty` and the "…and X experience level." description
+  // are written once at generation from context.experience; a degraded
+  // generation (profile not readable → buildGenerationContext defaults to
+  // 'beginner') mislabels an advanced user's session forever. Correct the
+  // labels in place to the canonical profile experience — the exercise
+  // SELECTION is untouched (an advanced athlete can legitimately have a
+  // Push Up, spec §18). Same row id, no new row, no migration.
+  if (reusedRow && needsExperienceHeal(reusedRow.difficulty, context.experience)) {
+    await supabase.from('workouts').update({
+      difficulty: context.experience,
+      description: exerciseWorkoutDescription(context.experience),
+    }).eq('id', reused.id).eq('user_id', userId);
+  }
 
   let exerciseCount = await countWorkoutExercises(reused.id);
   if (!isValidSuggestedSession({ isActivityBlock: false, exerciseCount })) {
@@ -218,7 +279,7 @@ async function generateExerciseSession(
 ): Promise<{ id: string; title: string; durationMinutes: number; exerciseCount: number } | null> {
   const claim = await claimStandaloneWorkoutSlot(userId, key, {
     title,
-    description: `Recommended for your goal and ${context.experience} experience level.`,
+    description: exerciseWorkoutDescription(context.experience),
     category,
     location_type: context.equipmentLocation,
     difficulty: context.experience,
@@ -239,18 +300,24 @@ async function generateExerciseSession(
   return { id: claim.id, title: claim.title, durationMinutes: claim.durationMinutes, exerciseCount };
 }
 
-/** RUNNING and WALKING reuse the existing activity-block representation (lib/programme-generator.ts's WORKOUT_TYPE_SPECS) — no MuscleWiki, no fabricated pace/HR data, only the same free-text guidance a structured programme would already generate (section 7/17). */
+/**
+ * RUNNING and WALKING reuse the existing activity-block representation
+ * (lib/programme-generator.ts's WORKOUT_TYPE_SPECS) — no MuscleWiki, no
+ * fabricated pace/HR data. Beta Feedback #006: the row's title/description/
+ * duration are taken from the PLANNED activity so "Run intervals · 25 min"
+ * stays "Run intervals · 25 min", not a generic "Easy Run · 30 min".
+ */
 async function generateActivityBlockSession(
-  userId: string, key: SupportedActivityKey, generatorSlotKey: string, context: GenerationContext,
+  userId: string, key: SupportedActivityKey, activity: StartingPlanActivity, context: GenerationContext,
 ): Promise<{ id: string; title: string; durationMinutes: number } | null> {
-  const spec = workoutTypeSpec(generatorSlotKey);
+  const f = activityBlockFields(key, activity);
   const claim = await claimStandaloneWorkoutSlot(userId, key, {
-    title: spec.title,
-    description: spec.activityDescription,
+    title: f.title,
+    description: f.description,
     category: 'cardio',
-    location_type: context.equipmentLocation,
+    location_type: ACTIVITY_BLOCK_LOCATION,
     difficulty: context.experience,
-    duration_minutes: SESSION_DURATION_MINUTES[key],
+    duration_minutes: f.durationMinutes,
     is_active: true,
     is_activity_block: true,
   });
@@ -259,7 +326,7 @@ async function generateActivityBlockSession(
 }
 
 async function generateSession(
-  userId: string, key: SupportedActivityKey, context: GenerationContext,
+  userId: string, key: SupportedActivityKey, context: GenerationContext, activity: StartingPlanActivity,
 ): Promise<{ id: string; title: string; durationMinutes: number; sessionType: SessionType; exerciseCount?: number } | null> {
   switch (key) {
     case 'gym': {
@@ -279,11 +346,11 @@ async function generateSession(
       return w ? { ...w, sessionType: 'exercise_workout' } : null;
     }
     case 'running': {
-      const w = await generateActivityBlockSession(userId, 'running', 'run_easy', context);
+      const w = await generateActivityBlockSession(userId, 'running', activity, context);
       return w ? { ...w, sessionType: 'activity_block' } : null;
     }
     case 'walking': {
-      const w = await generateActivityBlockSession(userId, 'walking', 'walk_easy', context);
+      const w = await generateActivityBlockSession(userId, 'walking', activity, context);
       return w ? { ...w, sessionType: 'activity_block' } : null;
     }
   }
@@ -359,40 +426,43 @@ export async function getActivityRecommendation(userId: string, activity: Starti
     key === 'gym' ? buildStrengthRequirements(FULL_BODY_A_REQUIREMENTS, context.experience)
     : key === 'mobility' ? MOBILITY_REQUIREMENTS : null;
 
-  const reusable = await findReusableSuggested(userId, key, requirementsForKey, context);
+  const reusable = await findReusableSuggested(userId, key, requirementsForKey, context, activity);
   const sessionType: SessionType = key === 'running' || key === 'walking' ? 'activity_block' : 'exercise_workout';
+
+  // Beta Feedback #006 — for activity-block cardio the headline/title must
+  // stay faithful to what ACP prescribed ("Run intervals"), not the generic
+  // per-key constant ("Easy run" / "Your run").
+  const isActivityBlockCardio = key === 'running' || key === 'walking';
+  const headline = isActivityBlockCardio
+    ? (activity.title || activity.activity || SESSION_HEADLINE[key]).trim()
+    : SESSION_HEADLINE[key];
+  const selfTitle = isActivityBlockCardio ? headline : SESSION_TITLE[key];
 
   if (reusable) {
     return {
       activityType: key,
-      title: SESSION_HEADLINE[key],
+      title: headline,
       reason: SESSION_REASON[key],
-      // Chunk 4.5C2 (section 10): the actual persisted value, never the
-      // static per-key constant — for gym this now genuinely varies by
-      // experience; for mobility/running/walking it's numerically identical
-      // to the constant (those generation paths still persist that exact
-      // value, untouched), so this is a strict correctness improvement with
-      // zero behaviour change for the activity types this chunk excludes.
       durationMinutes: reusable.durationMinutes,
       selfGuided: {
         mode: 'GENERATED_PERSONALISED_SESSION', sessionId: reusable.id, sessionType,
-        title: SESSION_TITLE[key], reason: SESSION_REASON[key], exerciseCount: reusable.exerciseCount,
+        title: selfTitle, reason: SESSION_REASON[key], exerciseCount: reusable.exerciseCount,
       },
       professionalSupport,
     };
   }
 
-  const generated = await generateSession(userId, key, context);
+  const generated = await generateSession(userId, key, context, activity);
   if (!generated) return fallback(professionalSupport);
 
   return {
     activityType: key,
-    title: SESSION_HEADLINE[key],
+    title: headline,
     reason: SESSION_REASON[key],
     durationMinutes: generated.durationMinutes,
     selfGuided: {
       mode: 'GENERATED_PERSONALISED_SESSION', sessionId: generated.id, sessionType: generated.sessionType,
-      title: SESSION_TITLE[key], reason: SESSION_REASON[key], exerciseCount: generated.exerciseCount,
+      title: selfTitle, reason: SESSION_REASON[key], exerciseCount: generated.exerciseCount,
     },
     professionalSupport,
   };
