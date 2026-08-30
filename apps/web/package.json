@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test app/api/**/__tests__/*.test.ts"
+    "test": "node --test app/api/**/__tests__/*.test.ts lib/__tests__/*.test.ts lib/**/__tests__/*.test.ts",
+    "eval:weekly-adaptation": "node --experimental-strip-types scripts/evaluate-weekly-adaptation.ts",
+    "eval:weekly-adaptation:live": "ACP_RUN_LIVE_AI_EVAL=1 node --experimental-strip-types scripts/evaluate-weekly-adaptation.ts"
   },
   "dependencies": {
     "@supabase/auth-helpers-nextjs": "^0.15.0",

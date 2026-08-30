@@ -26,11 +26,23 @@ import { supabase } from '@/lib/supabase';
 import { authService } from '@/services/auth';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { BARRIER_OPTIONS, ACTIVITY_OPTIONS, MAX_BARRIERS, type OnboardingAnswers } from '@/lib/onboarding';
+import {
+  BARRIER_OPTIONS, ACTIVITY_OPTIONS, MAX_BARRIERS,
+  TRAINING_DAY_OPTIONS, MIN_TRAINING_DAYS, MAX_TRAINING_DAYS,
+  sanitizeTrainingDays, formatTrainingDaysLabel, describeTrainingFrequency,
+  type OnboardingAnswers, type CanonicalWeekday,
+} from '@/lib/onboarding';
 import { fetchOnboardingAssessment, type AIAssessment } from '@/lib/ai-assessment';
+import { getScheduledNextPlan, scheduledPlanNeedsScheduleUpdate, type ScheduledNextPlan } from '@/lib/weekly-review';
 import { getCompletionProgress, type PlanActivityCompletion } from '@/lib/completion';
 import { pickHomeInsight, pickOutcomeInsight, type CoachingMemoryRow, type HomeCoachingInsight } from '@/lib/coaching-memory';
 import { computeWeightProgress } from '@/lib/weight-progress';
+import { CANONICAL_CUISINES, CUISINE_LABEL, type CanonicalCuisine } from '@/lib/nutrition-cuisine';
+
+const CUISINE_PICKER_OPTIONS: { key: CanonicalCuisine | 'mixed'; label: string }[] = [
+  ...CANONICAL_CUISINES.map(key => ({ key, label: CUISINE_LABEL[key] })),
+  { key: 'mixed', label: 'No preference / Mixed' },
+];
 
 interface FitnessGoal {
   key: 'lose_weight' | 'build_muscle' | 'maintain_weight' | 'reduce_stress';
@@ -177,6 +189,9 @@ export default function FitnessGoalsScreen() {
   const [goalWeight, setGoalWeight] = useState('');
   const [barriers, setBarriers] = useState<string[]>([]);
   const [preferredActivities, setPreferredActivities] = useState<string[]>([]);
+  const [trainingDays, setTrainingDays] = useState<CanonicalWeekday[]>([]);
+  const [scheduledNext, setScheduledNext] = useState<ScheduledNextPlan | null>(null);
+  const [cuisinePreferences, setCuisinePreferences] = useState<string[]>([]);
   const [goalTargetDate, setGoalTargetDate] = useState<string | null>(null);
   const [goalDetails, setGoalDetails] = useState<Record<string, unknown>>({});
   const [activityLevel, setActivityLevel] = useState<string | null>(null);
@@ -206,15 +221,17 @@ export default function FitnessGoalsScreen() {
     const uid = session.user.id;
     setUserId(uid);
 
-    const [{ data: profile }, { data: healthProfile }, { data: measurements }, { data: memoryRows }] = await Promise.all([
+    const [{ data: profile }, { data: healthProfile }, { data: measurements }, { data: memoryRows }, scheduled] = await Promise.all([
       supabase.from('fitness_profile')
-        .select('goal, experience_level, starting_weight_kg, goal_weight_kg, initial_weight_kg, barriers, preferred_activities, goal_target_date, goal_details, activity_level, ai_assessment, ai_assessment_generated_at')
+        .select('goal, experience_level, starting_weight_kg, goal_weight_kg, initial_weight_kg, barriers, preferred_activities, preferred_training_days, cuisine_preferences, goal_target_date, goal_details, activity_level, ai_assessment, ai_assessment_generated_at')
         .eq('user_id', uid)
         .maybeSingle(),
       supabase.from('health_profile').select('hours_exercising_per_week').eq('user_id', uid).maybeSingle(),
       supabase.from('client_measurements').select('weight_kg, logged_at').eq('user_id', uid).order('logged_at', { ascending: false }).limit(8),
       supabase.from('coaching_memory').select('memory_type, subject, confidence, evidence, user_message').eq('user_id', uid).eq('active', true),
+      getScheduledNextPlan(supabase as any, uid),
     ]);
+    setScheduledNext(scheduled);
 
     setGoalState(profile?.goal ?? null);
     setLevel(profile?.experience_level ?? null);
@@ -223,6 +240,8 @@ export default function FitnessGoalsScreen() {
     setInitialWeightKg(profile?.initial_weight_kg ?? null);
     setBarriers(profile?.barriers ?? []);
     setPreferredActivities(profile?.preferred_activities ?? []);
+    setTrainingDays(sanitizeTrainingDays(profile?.preferred_training_days));
+    setCuisinePreferences(profile?.cuisine_preferences ?? []);
     setGoalTargetDate(profile?.goal_target_date ?? null);
     setGoalDetails((profile?.goal_details ?? {}) as Record<string, unknown>);
     setActivityLevel(profile?.activity_level ?? null);
@@ -278,7 +297,11 @@ export default function FitnessGoalsScreen() {
     );
 
     if (error) {
-      Alert.alert('Error', 'Failed to save your preference. Please try again.');
+      // Surface the real Postgres/PostgREST message — a bare "try again" hides
+      // actionable causes (e.g. a migration not yet applied, or a CHECK
+      // rejecting the value).
+      console.warn('fitness_profile save failed', { patch: Object.keys(patch), error });
+      Alert.alert('Couldn’t save', error.message || 'Please try again.');
     }
     setSaving(false);
   };
@@ -299,6 +322,33 @@ export default function FitnessGoalsScreen() {
       : [...preferredActivities, key];
     setPreferredActivities(next);
     saveProfile({ preferred_activities: next });
+  };
+
+  // Beta Feedback #002 — training schedule preference. Autosaves (like every
+  // other chip here), but §11/§28: it does NOT regenerate anything now —
+  // the current plan stays put; the next plan ACP prepares uses the new
+  // preference. Persist NULL below the valid range so it means "no
+  // preference" rather than an empty structure.
+  const toggleTrainingDay = (key: CanonicalWeekday) => {
+    const next = trainingDays.includes(key)
+      ? trainingDays.filter(d => d !== key)
+      : trainingDays.length >= MAX_TRAINING_DAYS
+        ? trainingDays
+        : sanitizeTrainingDays([...trainingDays, key]);
+    setTrainingDays(next);
+    saveProfile({ preferred_training_days: next.length >= MIN_TRAINING_DAYS ? next : null });
+  };
+
+  // Day 7.2 — cuisine preference is a soft ranking signal for meal
+  // suggestions (never a hard filter — see lib/nutrition-cuisine.ts), so
+  // toggling it here never needs a confirmation modal the way changing the
+  // primary goal does.
+  const toggleCuisine = (key: string) => {
+    const next = cuisinePreferences.includes(key)
+      ? cuisinePreferences.filter(c => c !== key)
+      : [...cuisinePreferences, key];
+    setCuisinePreferences(next);
+    saveProfile({ cuisine_preferences: next });
   };
 
   // Selecting a different primary goal never writes anything by itself —
@@ -344,6 +394,7 @@ export default function FitnessGoalsScreen() {
           goalDetails,
           barriers: barriers as OnboardingAnswers['barriers'],
           preferredActivities: preferredActivities as OnboardingAnswers['preferredActivities'],
+          preferredTrainingDays: trainingDays,
         };
         await fetchOnboardingAssessment({
           userId, onboardingAnswers, accessToken,
@@ -508,19 +559,29 @@ export default function FitnessGoalsScreen() {
             </TouchableOpacity>
           )}
 
-          {coachingInsight && (
-            <View style={s.progressCard}>
-              <ThemedText style={s.insightEyebrow}>ACP Intelligence™</ThemedText>
-              <ThemedText style={s.weekLabel}>{coachingInsight.headline}</ThemedText>
-              <ThemedText style={s.weekCaption}>{coachingInsight.body}</ThemedText>
-            </View>
-          )}
-
+          {/* Day 8.4 — progress hierarchy (section 25): goal-relevant outcome
+              evidence first, then the behavioural "ACP noticed" pattern. */}
           {outcomeInsight && (
             <View style={s.progressCard}>
               <ThemedText style={s.insightEyebrow}>ACP Intelligence™</ThemedText>
               <ThemedText style={s.weekLabel}>{outcomeInsight.headline}</ThemedText>
               <ThemedText style={s.weekCaption}>{outcomeInsight.body}</ThemedText>
+            </View>
+          )}
+
+          {coachingInsight && (
+            <View style={s.progressCard}>
+              <ThemedText style={s.insightEyebrow}>ACP noticed</ThemedText>
+              <ThemedText style={s.weekLabel}>{coachingInsight.headline}</ThemedText>
+              <ThemedText style={s.weekCaption}>{coachingInsight.body}</ThemedText>
+            </View>
+          )}
+
+          {!outcomeInsight && !coachingInsight && !!weeklyProgress && (
+            <View style={s.progressCard}>
+              <ThemedText style={s.insightEyebrow}>ACP Intelligence™</ThemedText>
+              <ThemedText style={s.weekLabel}>Building your picture</ThemedText>
+              <ThemedText style={s.weekCaption}>Keep logging your progress and completing sessions — ACP needs a little more data before identifying a clear trend.</ThemedText>
             </View>
           )}
 
@@ -584,6 +645,80 @@ export default function FitnessGoalsScreen() {
               </View>
             </>
           )}
+
+          {/* Beta Feedback #002 — Training Schedule. Always shown (the answer
+              to "can I change my preference?" is a visible yes). Editing it
+              never touches the current plan — it applies to the next plan
+              ACP prepares (§11/§28). */}
+          <ThemedText style={[s.sectionTitle, { marginTop: 28 }]}>Training Schedule</ThemedText>
+          <ThemedText style={s.sectionSub}>
+            {trainingDays.length >= MIN_TRAINING_DAYS
+              ? `${describeTrainingFrequency(trainingDays.length)} · ${formatTrainingDaysLabel(trainingDays)}`
+              : 'Tell ACP which weekdays you prefer to train, and it builds your week around them.'}
+          </ThemedText>
+          <View style={s.dayRow}>
+            {TRAINING_DAY_OPTIONS.map(d => {
+              const selected = trainingDays.includes(d.key);
+              const atCap = !selected && trainingDays.length >= MAX_TRAINING_DAYS;
+              return (
+                <TouchableOpacity
+                  key={d.key}
+                  onPress={() => toggleTrainingDay(d.key)}
+                  activeOpacity={0.8}
+                  disabled={saving || atCap}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  accessibilityLabel={d.short}
+                  style={[s.dayPill, selected && s.dayPillOn, atCap && { opacity: 0.4 }]}
+                >
+                  <ThemedText style={[s.dayPillText, selected && s.dayPillTextOn]}>{d.letter}</ThemedText>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <ThemedText style={s.scheduleNote}>
+            {trainingDays.length === 1
+              ? `Pick at least ${MIN_TRAINING_DAYS} days, or none to let ACP decide.`
+              : 'Changes apply the next time ACP prepares your plan — your current week stays as it is.'}
+          </ThemedText>
+
+          {/* Beta Feedback #003 — a future plan is already prepared and no
+              longer matches the (just-changed) preference. Explicit opt-in
+              only: the rebuild + confirmation live on the next-week screen. */}
+          {scheduledPlanNeedsScheduleUpdate(scheduledNext, trainingDays) && (
+            <TouchableOpacity
+              style={s.scheduleUpdateBanner}
+              onPress={() => router.push('/next-week-plan' as any)}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Review and update next week's plan"
+            >
+              <View style={{ flex: 1 }}>
+                <ThemedText style={s.scheduleUpdateTitle}>Your next-week plan was prepared before this change</ThemedText>
+                <ThemedText style={s.scheduleUpdateSub}>Review &amp; update →</ThemedText>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={palette.blue600} />
+            </TouchableOpacity>
+          )}
+
+          <ThemedText style={[s.sectionTitle, { marginTop: 28 }]}>Cuisine Preference</ThemedText>
+          <ThemedText style={s.sectionSub}>ACP uses this to rank meal suggestions — it never hides a meal just for being a different cuisine.</ThemedText>
+          <View style={s.chipWrap}>
+            {CUISINE_PICKER_OPTIONS.map(c => {
+              const selected = cuisinePreferences.includes(c.key);
+              return (
+                <TouchableOpacity
+                  key={c.key}
+                  style={[s.chip, selected && s.chipActive]}
+                  onPress={() => toggleCuisine(c.key)}
+                  activeOpacity={0.7}
+                  disabled={saving}
+                >
+                  <ThemedText style={[s.chipText, selected && s.chipTextActive]}>{c.label}</ThemedText>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
 
           <View style={{ height: 60 }} />
         </ScrollView>
@@ -707,6 +842,28 @@ const s = StyleSheet.create({
     borderRadius: radii.pill, paddingHorizontal: 12, paddingVertical: 8,
   },
   chipText: { fontSize: 12.5, fontWeight: '700', color: palette.ink900 },
+  chipActive: { backgroundColor: palette.ink900, borderColor: palette.ink900 },
+  chipTextActive: { color: palette.white },
+
+  // Beta Feedback #002 — Training Schedule day pills.
+  dayRow: { flexDirection: 'row', gap: 6, marginBottom: 8 },
+  dayPill: {
+    flex: 1, aspectRatio: 1, maxWidth: 44,
+    borderRadius: radii.pill, borderWidth: 1, borderColor: palette.hairline,
+    backgroundColor: palette.white, alignItems: 'center', justifyContent: 'center',
+  },
+  dayPillOn: { backgroundColor: palette.ink900, borderColor: palette.ink900 },
+  dayPillText: { fontSize: 12.5, fontWeight: '700', color: palette.ink900 },
+  dayPillTextOn: { color: palette.white },
+  scheduleNote: { fontSize: 11.5, color: palette.gray300, marginBottom: 12 },
+  // Beta Feedback #003 — "prepared before this change" entry point.
+  scheduleUpdateBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: palette.blue50, borderRadius: radii.lg,
+    paddingHorizontal: 14, paddingVertical: 12, marginBottom: 28,
+  },
+  scheduleUpdateTitle: { fontSize: 12.5, fontWeight: '700', color: palette.ink900, lineHeight: 17 },
+  scheduleUpdateSub: { fontSize: 12, fontWeight: '700', color: palette.blue600, marginTop: 3 },
 
   // Goal-change confirmation — same ad-hoc modal pattern used elsewhere
   // (onboarding/plan.tsx's ACP Intelligence tooltip, Home's notifications

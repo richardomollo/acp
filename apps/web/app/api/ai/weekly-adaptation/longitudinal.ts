@@ -546,6 +546,11 @@ export interface MemoryIdentity { memory_type: string; subject: string }
 export function resolveMemorySync(
   summary: LongitudinalSummary,
   existingActive: MemoryIdentity[],
+  // Day 9 — additional already-resolved memory rows (execution patterns from
+  // execution.ts). Kept as a generic CoachingMemoryRow[] so this module has
+  // no dependency on the execution module. Folded into the same
+  // upsert-by-identity + deactivate-if-absent lifecycle as every other row.
+  extraMemoryRows: CoachingMemoryRow[] = [],
 ): { toUpsert: CoachingMemoryRow[]; toDeactivate: MemoryIdentity[] } {
   const toUpsert: CoachingMemoryRow[] = [];
 
@@ -576,6 +581,8 @@ export function resolveMemorySync(
       evidence: { ...p.evidence, direction: p.type }, user_message: p.user_message,
     });
   }
+
+  for (const row of extraMemoryRows) toUpsert.push(row);
 
   const freshKeys = new Set(toUpsert.map(r => `${r.memory_type}:${r.subject}`));
   const toDeactivate = existingActive.filter(e => !freshKeys.has(`${e.memory_type}:${e.subject}`));

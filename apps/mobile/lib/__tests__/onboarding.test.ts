@@ -5,6 +5,8 @@ import {
   describeWorkHours, describeSportHours, describeLeisureHours,
   isStep2Complete, resolveOnboardingResumeStep, buildFallbackWeekPlan,
   EMPTY_ANSWERS, type OnboardingAnswers,
+  normalizeWeekdayName, sanitizeTrainingDays, formatTrainingDaysLabel,
+  describeTrainingFrequency, CANONICAL_WEEKDAYS, MIN_TRAINING_DAYS, MAX_TRAINING_DAYS,
 } from '../onboarding.ts';
 
 describe('deriveActivityLevel', () => {
@@ -304,5 +306,53 @@ describe('buildFallbackWeekPlan (no-AI fallback: basic first-week structure)', (
     const a = buildFallbackWeekPlan(['Strength', 'Movement']);
     const b = buildFallbackWeekPlan(['Strength', 'Movement']);
     assert.deepEqual(a, b);
+  });
+});
+
+// ─── Beta Feedback #002 — training schedule preference ─────────────────────
+describe('training schedule preference (Beta Feedback #002)', () => {
+  test('canonical constants and range', () => {
+    assert.deepEqual(CANONICAL_WEEKDAYS, ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']);
+    assert.equal(MIN_TRAINING_DAYS, 2);
+    assert.equal(MAX_TRAINING_DAYS, 6);
+  });
+
+  test('EMPTY_ANSWERS starts with no preference (empty array, i.e. legacy behaviour)', () => {
+    assert.deepEqual(EMPTY_ANSWERS.preferredTrainingDays, []);
+  });
+
+  test('normalizeWeekdayName: full / short / upper / spaced / punctuated → canonical; junk → null', () => {
+    assert.equal(normalizeWeekdayName('Monday'), 'monday');
+    assert.equal(normalizeWeekdayName('mon'), 'monday');
+    assert.equal(normalizeWeekdayName(' TUE. '), 'tuesday');
+    assert.equal(normalizeWeekdayName('Tues'), 'tuesday');
+    assert.equal(normalizeWeekdayName('WEDNESDAY'), 'wednesday');
+    for (const v of ['someday', '', 'M', 7, null, undefined]) {
+      assert.equal(normalizeWeekdayName(v as unknown), null);
+    }
+  });
+
+  test('sanitizeTrainingDays: normalise + dedupe + drop invalid + sort Monday-first', () => {
+    assert.deepEqual(
+      sanitizeTrainingDays(['Fri', 'monday', 'MON', 'weds', 'wednesday', 'bogus']),
+      ['monday', 'wednesday', 'friday'],
+    );
+  });
+
+  test('sanitizeTrainingDays: non-array / all-invalid / empty → [] (treated as no preference)', () => {
+    assert.deepEqual(sanitizeTrainingDays(null), []);
+    assert.deepEqual(sanitizeTrainingDays('monday'), []);
+    assert.deepEqual(sanitizeTrainingDays(['x']), []);
+    assert.deepEqual(sanitizeTrainingDays([]), []);
+  });
+
+  test('formatTrainingDaysLabel: short names in weekday order regardless of input order', () => {
+    assert.equal(formatTrainingDaysLabel(['friday', 'monday', 'wednesday']), 'Mon · Wed · Fri');
+  });
+
+  test('describeTrainingFrequency: derived from the day count', () => {
+    assert.equal(describeTrainingFrequency(0), 'Not set');
+    assert.equal(describeTrainingFrequency(1), '1 day per week');
+    assert.equal(describeTrainingFrequency(5), '5 days per week');
   });
 });

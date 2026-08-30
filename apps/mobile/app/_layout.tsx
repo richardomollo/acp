@@ -10,17 +10,22 @@ import * as Sentry from '@sentry/react-native';
 Sentry.init({
   dsn: 'https://b9606caa5a1a649020ca77168019b9e2@o4511921771315200.ingest.de.sentry.io/4511921776033872',
 
-  // Adds more context data to events (IP address, cookies, user, etc.)
-  // For more information, visit: https://docs.sentry.io/platforms/react-native/data-management/data-collected/
-  sendDefaultPii: true,
+  // ACP Intelligence™ Day 10 — this app handles health data (body
+  // measurements, goals, training history), so PII is deliberately NOT sent
+  // to Sentry, and Session Replay masks all text/images/vectors so a replay
+  // can never capture a measurement, goal or coaching message.
+  sendDefaultPii: false,
 
   // Enable Logs
   enableLogs: true,
 
-  // Configure Session Replay
-  replaysSessionSampleRate: 0.1,
+  // Configure Session Replay — masked; error replays only (no ambient sampling).
+  replaysSessionSampleRate: 0,
   replaysOnErrorSampleRate: 1,
-  integrations: [Sentry.mobileReplayIntegration(), Sentry.feedbackIntegration()],
+  integrations: [
+    Sentry.mobileReplayIntegration({ maskAllText: true, maskAllImages: true, maskAllVectors: true }),
+    Sentry.feedbackIntegration(),
+  ],
 
   // uncomment the line below to enable Spotlight (https://spotlightjs.com)
   // spotlight: __DEV__,

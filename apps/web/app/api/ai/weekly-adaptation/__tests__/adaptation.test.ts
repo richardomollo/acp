@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   validateWeeklyAdaptation, enforceAdaptationMagnitude, buildWeeklyAdaptationUserPrompt,
   preserveMeaningfulActivityContinuity, buildDeterministicFallbackPlan,
+  enforceAdaptationSupportLogic, isSupportOpportunityEligible, isFutureRegenerationEligible,
   WEEKLY_ADAPTATION_SYSTEM_PROMPT, AI_REQUEST_CONFIG,
   type StartingPlanActivity, type BehaviourSummary, type AIAssessment,
 } from '../adaptation.ts';
@@ -12,6 +13,7 @@ function activity(overrides: Partial<StartingPlanActivity> = {}): StartingPlanAc
 }
 
 const VALID_RAW = {
+  decision: 'keep',
   review: { headline: 'Solid week.', summary: 'You completed most of your plan.', wins: ['Consistent strength sessions'], focus_next_week: 'Keep the same structure.' },
   recommendation: { approach: 'self_directed', title: 'Stay the course', reason: 'Adherence was strong.' },
   starting_plan: {
@@ -67,6 +69,22 @@ describe('validateWeeklyAdaptation', () => {
   test('rejects an empty activities array', () => {
     const bad = { ...VALID_RAW, starting_plan: { ...VALID_RAW.starting_plan, activities: [] } };
     assert.equal(validateWeeklyAdaptation(bad), false);
+  });
+
+  test('Day 7.4 — rejects a missing decision field', () => {
+    const { decision, ...rest } = VALID_RAW;
+    assert.equal(validateWeeklyAdaptation(rest), false);
+  });
+
+  test('Day 7.4 — rejects an invalid decision value', () => {
+    const bad = { ...VALID_RAW, decision: 'overhaul' };
+    assert.equal(validateWeeklyAdaptation(bad), false);
+  });
+
+  test('Day 7.4 — accepts every valid decision value', () => {
+    for (const decision of ['keep', 'progress', 'simplify', 'rebalance', 'adjust']) {
+      assert.equal(validateWeeklyAdaptation({ ...VALID_RAW, decision }), true, decision);
+    }
   });
 });
 
@@ -142,6 +160,110 @@ describe('buildWeeklyAdaptationUserPrompt', () => {
     });
     assert.ok(prompt.includes('180 minutes'));
   });
+
+  test('Day 7.4 — includes the knowledge context as its own section when provided', () => {
+    const prompt = buildWeeklyAdaptationUserPrompt({
+      goal: 'build_muscle', experience: 'beginner', barriers: [], preferredActivities: [],
+      weeklyMinutesBudget: 180, previousWeeklyFocus: null, previousSupportOpportunities: [], behaviourSummary,
+      knowledgeContext: 'RELEVANT ACP KNOWLEDGE\n\nTraining:\n[K1] Beginners should progress load gradually.',
+    });
+    assert.ok(prompt.includes('RELEVANT ACP KNOWLEDGE'));
+    assert.ok(prompt.includes('[K1] Beginners should progress load gradually.'));
+  });
+
+  test('Day 7.4 — omits the knowledge section entirely when nothing was retrieved', () => {
+    const prompt = buildWeeklyAdaptationUserPrompt({
+      goal: 'build_muscle', experience: 'beginner', barriers: [], preferredActivities: [],
+      weeklyMinutesBudget: 180, previousWeeklyFocus: null, previousSupportOpportunities: [], behaviourSummary,
+      knowledgeContext: '',
+    });
+    assert.ok(!prompt.includes('RELEVANT ACP KNOWLEDGE'));
+  });
+
+  test('Day 9 — includes the execution context as its own section when provided', () => {
+    const prompt = buildWeeklyAdaptationUserPrompt({
+      goal: 'build_muscle', experience: 'beginner', barriers: [], preferredActivities: [],
+      weeklyMinutesBudget: 180, previousWeeklyFocus: null, previousSupportOpportunities: [], behaviourSummary,
+      executionContext: 'EXECUTION EVIDENCE (already computed from this week — interpret, do not recompute)\nPlanned: 4 | Completed: 2 | Partial: 1 | Skipped: 1\nDifficulty feedback: too_hard 2',
+    });
+    assert.ok(prompt.includes('EXECUTION EVIDENCE'));
+    assert.ok(prompt.includes('Completed: 2 | Partial: 1 | Skipped: 1'));
+  });
+
+  test('Day 9 — omits the execution section entirely for a legacy binary-only week', () => {
+    const prompt = buildWeeklyAdaptationUserPrompt({
+      goal: 'build_muscle', experience: 'beginner', barriers: [], preferredActivities: [],
+      weeklyMinutesBudget: 180, previousWeeklyFocus: null, previousSupportOpportunities: [], behaviourSummary,
+      executionContext: '',
+    });
+    assert.ok(!prompt.includes('EXECUTION EVIDENCE'));
+  });
+
+  test('Day 9 — execution section is placed before the longitudinal / knowledge sections (evidence precedence)', () => {
+    const prompt = buildWeeklyAdaptationUserPrompt({
+      goal: 'build_muscle', experience: 'beginner', barriers: [], preferredActivities: [],
+      weeklyMinutesBudget: 180, previousWeeklyFocus: null, previousSupportOpportunities: [], behaviourSummary,
+      longitudinalContext: { weeks_observed: 3, patterns: [{ type: 'category_success', subject: 'strength', confidence: 'strong', evidence: 'x' }] },
+      executionContext: 'EXECUTION EVIDENCE (already computed from this week — interpret, do not recompute)\nPlanned: 4 | Completed: 4 | Partial: 0 | Skipped: 0',
+      knowledgeContext: 'RELEVANT ACP KNOWLEDGE\n\nTraining:\n[K1] x.',
+    });
+    assert.ok(prompt.indexOf('EXECUTION EVIDENCE') < prompt.indexOf('Longitudinal coaching evidence'));
+    assert.ok(prompt.indexOf('EXECUTION EVIDENCE') < prompt.indexOf('RELEVANT ACP KNOWLEDGE'));
+  });
+
+  // Beta Feedback #002 — training schedule preference
+  test('emits a preferred-training-days section (with day count and strong-but-bounded framing) when 2+ days are given', () => {
+    const prompt = buildWeeklyAdaptationUserPrompt({
+      goal: 'build_muscle', experience: 'advanced', barriers: [], preferredActivities: ['gym'],
+      preferredTrainingDays: ['Mon', 'tuesday', 'WEDNESDAY', 'thu', 'friday'],
+      weeklyMinutesBudget: 300, previousWeeklyFocus: null, previousSupportOpportunities: [], behaviourSummary,
+    });
+    assert.ok(prompt.includes('Preferred training days (user-stated, 5 days/week): Monday, Tuesday, Wednesday, Thursday, Friday'));
+    assert.ok(prompt.toLowerCase().includes('keep the others free'));
+    assert.ok(prompt.toLowerCase().includes('do not add total minutes'));
+    assert.ok(prompt.toLowerCase().includes('do not narrow this preference'));
+  });
+
+  test('omits the schedule section for null / empty / single-day / all-invalid input', () => {
+    for (const v of [undefined, null, [], ['friday'], ['nonsense', 'x']]) {
+      const prompt = buildWeeklyAdaptationUserPrompt({
+        goal: 'build_muscle', experience: 'advanced', barriers: [], preferredActivities: [],
+        preferredTrainingDays: v as unknown,
+        weeklyMinutesBudget: 300, previousWeeklyFocus: null, previousSupportOpportunities: [], behaviourSummary,
+      });
+      assert.ok(!prompt.includes('Preferred training days (user-stated'), `absent for ${JSON.stringify(v)}`);
+    }
+  });
+});
+
+// ── Beta Feedback #003 — explicit future-plan regeneration eligibility ──────
+
+describe('isFutureRegenerationEligible (Beta Feedback #003)', () => {
+  const base = { regenerateFuturePlan: true, isAdvanceGeneration: true, existingStatus: 'scheduled', shouldPromote: false };
+
+  test('accepts only when: flag true + future week + existing scheduled plan + not promoting', () => {
+    assert.equal(isFutureRegenerationEligible(base), true);
+  });
+
+  test('rejects a normal call (no flag) — normal idempotency is unaffected (test 14)', () => {
+    assert.equal(isFutureRegenerationEligible({ ...base, regenerateFuturePlan: undefined }), false);
+    assert.equal(isFutureRegenerationEligible({ ...base, regenerateFuturePlan: false }), false);
+    assert.equal(isFutureRegenerationEligible({ ...base, regenerateFuturePlan: 'true' }), false); // must be strict boolean true
+  });
+
+  test('rejects when the target week has already started — current week is never replaced (test 6 / §D)', () => {
+    assert.equal(isFutureRegenerationEligible({ ...base, isAdvanceGeneration: false }), false);
+  });
+
+  test('rejects when there is no already-scheduled plan for the target week', () => {
+    assert.equal(isFutureRegenerationEligible({ ...base, existingStatus: undefined }), false);
+    assert.equal(isFutureRegenerationEligible({ ...base, existingStatus: 'active' }), false);
+    assert.equal(isFutureRegenerationEligible({ ...base, existingStatus: 'superseded' }), false);
+  });
+
+  test('rejects when this same call is promoting the scheduled plan (week has begun)', () => {
+    assert.equal(isFutureRegenerationEligible({ ...base, shouldPromote: true }), false);
+  });
 });
 
 describe('WEEKLY_ADAPTATION_SYSTEM_PROMPT guardrails', () => {
@@ -169,6 +291,44 @@ describe('WEEKLY_ADAPTATION_SYSTEM_PROMPT guardrails', () => {
   test('preserves the personal_training-preference-alone guardrail', () => {
     const lower = WEEKLY_ADAPTATION_SYSTEM_PROMPT.toLowerCase();
     assert.ok(lower.includes('personal_training') && lower.includes('not by itself enough'));
+  });
+
+  test('Day 7.4 — defines all five decision values and the KEEP stability bias', () => {
+    const lower = WEEKLY_ADAPTATION_SYSTEM_PROMPT.toLowerCase();
+    for (const decision of ['keep', 'progress', 'simplify', 'rebalance', 'adjust']) {
+      assert.ok(lower.includes(decision), `missing decision definition: ${decision}`);
+    }
+    assert.ok(lower.includes('if the evidence does not clearly justify a change, choose keep'));
+  });
+
+  test('Day 7.4 — explicitly subordinates ACP knowledge to user evidence', () => {
+    const lower = WEEKLY_ADAPTATION_SYSTEM_PROMPT.toLowerCase();
+    assert.ok(lower.includes('relevant acp knowledge'));
+    assert.ok(lower.includes('never overrides') || lower.includes('the evidence above wins'));
+  });
+
+  test('Day 7.4 — never mentions retrieval/vector/embedding implementation details (section 32/91)', () => {
+    const lower = WEEKLY_ADAPTATION_SYSTEM_PROMPT.toLowerCase();
+    for (const leaky of ['embedding', 'vector', 'similarity', '\\brag\\b', 'chunk']) {
+      assert.ok(!new RegExp(leaky).test(lower), `system prompt leaks implementation term: ${leaky}`);
+    }
+  });
+
+  // Beta Feedback #002 — training schedule preference
+  test('has a TRAINING SCHEDULE PREFERENCE block: strong-but-bounded, and never rewrites the stated preference', () => {
+    assert.ok(WEEKLY_ADAPTATION_SYSTEM_PROMPT.includes('TRAINING SCHEDULE PREFERENCE'));
+    const lower = WEEKLY_ADAPTATION_SYSTEM_PROMPT.toLowerCase();
+    assert.ok(lower.includes('strongly respect'));
+    assert.ok(lower.includes('time budget') && lower.includes('magnitude') && lower.includes('continuity'));
+    assert.ok(lower.includes('not a reason to increase session count'));
+    // §14 — adapt the plan, not the user's stated preference.
+    assert.ok(lower.includes('never rewrite or narrow it'));
+    assert.ok(lower.includes('adapt the plan') && lower.includes('not the stated preference'));
+  });
+
+  test('does not turn "preferred days" into "demanding session every day"', () => {
+    const lower = WEEKLY_ADAPTATION_SYSTEM_PROMPT.toLowerCase();
+    assert.ok(lower.includes('do not assume every preferred day needs a demanding session'));
   });
 });
 
@@ -398,5 +558,210 @@ describe('buildDeterministicFallbackPlan (Day 5.5 Problem B)', () => {
     assert.equal(fallback.generation_source, 'deterministic_fallback');
     assert.equal(fallback.review?.wins.length, 0);
     assert.ok(!fallback.headline.toLowerCase().includes('acp intelligence'));
+  });
+
+  // Beta Feedback #002 §19/§33/§38 — fallback respects a training schedule preference
+  test('with NO preference, activity days are carried forward unchanged (legacy behaviour)', () => {
+    const fallback = buildDeterministicFallbackPlan(currentAssessment(), '2026-09-07', 999);
+    assert.deepEqual(fallback.starting_plan.activities.map(a => a.day), ['Monday', 'Thursday']);
+  });
+
+  test('with a preference, carried-forward activities are moved onto the preferred weekdays', () => {
+    const current = currentAssessment({
+      starting_plan: {
+        title: 'x', rationale: 'x',
+        activities: [
+          activity({ day: 'Monday' }), activity({ day: 'Tuesday' }),
+          activity({ day: 'Wednesday' }), activity({ day: 'Saturday' }),
+        ],
+      },
+    });
+    const fallback = buildDeterministicFallbackPlan(current, '2026-09-07', 999, ['monday', 'tuesday', 'wednesday', 'thursday', 'friday']);
+    assert.deepEqual(fallback.starting_plan.activities.map(a => a.day), ['Monday', 'Tuesday', 'Wednesday', 'Thursday']);
+    // Same count, same activities, same durations — only `day` reassigned.
+    assert.equal(fallback.starting_plan.activities.length, 4);
+    assert.ok(fallback.starting_plan.activities.every(a => a.activity === 'Gym'));
+  });
+
+  test('a preference never expands the plan or the weekly minutes', () => {
+    const current = currentAssessment(); // 2 activities, 60+60=120 min
+    const before = current.starting_plan.activities.length;
+    const beforeMin = current.starting_plan.activities.reduce((s, a) => s + a.duration_minutes, 0);
+    const fallback = buildDeterministicFallbackPlan(current, '2026-09-07', 999, ['monday', 'tuesday', 'wednesday', 'thursday', 'friday']);
+    assert.equal(fallback.starting_plan.activities.length, before);
+    assert.equal(fallback.starting_plan.activities.reduce((s, a) => s + a.duration_minutes, 0), beforeMin);
+  });
+
+  test('mixed-form / out-of-range preference input is ignored safely (no preference applied)', () => {
+    const fallbackSingle = buildDeterministicFallbackPlan(currentAssessment(), '2026-09-07', 999, ['monday']);
+    assert.deepEqual(fallbackSingle.starting_plan.activities.map(a => a.day), ['Monday', 'Thursday']);
+    const fallbackJunk = buildDeterministicFallbackPlan(currentAssessment(), '2026-09-07', 999, 'monday' as unknown as string[]);
+    assert.deepEqual(fallbackJunk.starting_plan.activities.map(a => a.day), ['Monday', 'Thursday']);
+  });
+});
+
+// ── Day 7.5C Correction A — deterministic support suppression ────────────────
+
+describe('enforceAdaptationSupportLogic (Day 7.5C — support-opportunity eligibility gate)', () => {
+  function assessmentWithSupport(support: AIAssessment['support_opportunities']): AIAssessment {
+    return {
+      headline: 'x', summary: 'x',
+      starting_point: { experience: 'beginner', available_time: 'x', main_barriers: [] },
+      recommendation: { approach: 'self_directed', title: 'x', reason: 'x' },
+      support_opportunities: support,
+      starting_plan: { title: 'x', rationale: 'x', activities: [activity()] },
+      weekly_focus: { title: 'x', description: 'x' },
+      next_steps: ['x'],
+      nutrition_focus: null,
+      review: null,
+    };
+  }
+
+  test('A1 exact regression — no-barrier, high-adherence beginner: model-emitted PT + nutrition support are both removed', () => {
+    const draft = assessmentWithSupport([
+      { type: 'personal_trainer', relevance: 'high', reason: 'A beginner could benefit from guidance.' },
+      { type: 'nutrition', relevance: 'medium', reason: 'Nutrition could support the goal.' },
+    ]);
+    const result = enforceAdaptationSupportLogic(draft, { strengthExperience: 'beginner', barriers: [] });
+    assert.deepEqual(result.support_opportunities, []);
+  });
+
+  test('personal_training as a mere preference is never promoted to a support opportunity', () => {
+    const draft = assessmentWithSupport([
+      { type: 'personal_trainer', relevance: 'medium', reason: 'The user listed personal training as a preferred activity.' },
+    ]);
+    const result = enforceAdaptationSupportLogic(draft, { strengthExperience: 'beginner', barriers: ['personal_training'] as unknown as string[] });
+    assert.equal(result.support_opportunities.length, 0);
+  });
+
+  test('a real confidence/knowledge barrier keeps an eligible personal_trainer opportunity', () => {
+    const draft = assessmentWithSupport([
+      { type: 'personal_trainer', relevance: 'high', reason: 'Beginner with confidence and knowledge barriers.' },
+    ]);
+    const result = enforceAdaptationSupportLogic(draft, { strengthExperience: 'beginner', barriers: ['confidence', 'knowledge'] });
+    const pt = result.support_opportunities.find(o => o.type === 'personal_trainer');
+    assert.equal(pt?.relevance, 'high');
+  });
+
+  test('a lose_weight goal alone does not keep an automatic nutritionist opportunity (no nutrition barrier)', () => {
+    const draft = assessmentWithSupport([
+      { type: 'nutrition', relevance: 'high', reason: 'Weight-loss goals benefit from nutrition support.' },
+    ]);
+    const result = enforceAdaptationSupportLogic(draft, { strengthExperience: 'intermediate', barriers: [] });
+    assert.equal(result.support_opportunities.find(o => o.type === 'nutrition'), undefined);
+  });
+
+  test('a stated nutrition barrier keeps a real nutrition support opportunity', () => {
+    const draft = assessmentWithSupport([
+      { type: 'nutrition', relevance: 'medium', reason: 'Nutrition is a stated barrier.' },
+    ]);
+    const result = enforceAdaptationSupportLogic(draft, { strengthExperience: 'intermediate', barriers: ['nutrition'] });
+    assert.equal(result.support_opportunities.find(o => o.type === 'nutrition')?.relevance, 'medium');
+  });
+
+  test('after filtering everything out, the approach/recommendation is left untouched (never forced to guided)', () => {
+    const draft = assessmentWithSupport([
+      { type: 'personal_trainer', relevance: 'high', reason: 'x' },
+      { type: 'nutrition', relevance: 'high', reason: 'x' },
+    ]);
+    const result = enforceAdaptationSupportLogic(draft, { strengthExperience: 'intermediate', barriers: [] });
+    assert.deepEqual(result.support_opportunities, []);
+    assert.equal(result.recommendation.approach, 'self_directed');
+  });
+
+  test('the shared additive backstop still adds a warranted personal_trainer:high the model omitted', () => {
+    const draft = assessmentWithSupport([]);
+    const result = enforceAdaptationSupportLogic(draft, { strengthExperience: 'beginner', barriers: ['confidence', 'knowledge'] });
+    assert.equal(result.support_opportunities.find(o => o.type === 'personal_trainer')?.relevance, 'high');
+  });
+
+  test('isSupportOpportunityEligible — PT needs the deterministic experience/barrier rule, not beginner experience alone', () => {
+    assert.equal(
+      isSupportOpportunityEligible({ type: 'personal_trainer', relevance: 'high', reason: 'x' }, { strengthExperience: 'beginner', barriers: [] }),
+      false,
+    );
+    assert.equal(
+      isSupportOpportunityEligible({ type: 'personal_trainer', relevance: 'high', reason: 'x' }, { strengthExperience: 'beginner', barriers: ['confidence'] }),
+      true,
+    );
+    assert.equal(
+      isSupportOpportunityEligible({ type: 'nutrition', relevance: 'high', reason: 'x' }, { strengthExperience: 'intermediate', barriers: ['nutrition'] }),
+      true,
+    );
+    assert.equal(
+      isSupportOpportunityEligible({ type: 'nutrition', relevance: 'high', reason: 'x' }, { strengthExperience: 'intermediate', barriers: [] }),
+      false,
+    );
+  });
+});
+
+// ── Day 7.5C Corrections B & C — decision-precedence prompt language ─────────
+
+describe('WEEKLY_ADAPTATION_SYSTEM_PROMPT — Day 9 execution evidence semantics', () => {
+  const lower = WEEKLY_ADAPTATION_SYSTEM_PROMPT.toLowerCase();
+
+  test('defines an EXECUTION EVIDENCE section', () => {
+    assert.ok(lower.includes('execution evidence (if provided)'));
+  });
+  test('completion alone does not prove appropriate difficulty', () => {
+    assert.ok(lower.includes('completion alone does not prove'));
+  });
+  test('partial completion is not the same as a skip', () => {
+    assert.ok(lower.includes('partial completion is useful positive evidence, not the same as a skip'));
+  });
+  test('repeated too_hard favours executability before progression; one isolated event is not a pattern', () => {
+    assert.ok(lower.includes('repeated "too_hard" feedback favours improving executability before any progression'));
+    assert.ok(lower.includes('one isolated feedback event is not a pattern'));
+  });
+  test('repeated time-related skips favour fitting the plan to available time, not removing an activity', () => {
+    assert.ok(lower.includes('repeated time-related skips favour fitting the plan'));
+    assert.ok(lower.includes('not removing an activity type outright'));
+  });
+  test('execution evidence stays observational and never licenses a medical inference', () => {
+    assert.ok(lower.includes('does not license a medical inference'));
+  });
+});
+
+describe('WEEKLY_ADAPTATION_SYSTEM_PROMPT — Day 7.5C precedence rules', () => {
+  const lower = WEEKLY_ADAPTATION_SYSTEM_PROMPT.toLowerCase();
+
+  test('B — a positive outcome trend does not by itself justify a plan change', () => {
+    assert.ok(lower.includes('adherence / executability precedence'));
+    assert.ok(lower.includes('positive outcome trend never, on its own, justifies changing the plan'));
+  });
+
+  test('B — low adherence + positive outcome must not be treated as permission to progress or restructure', () => {
+    assert.ok(lower.includes('low adherence with a positive outcome'));
+    assert.ok(lower.includes('do not progress'));
+    assert.ok(lower.includes('do not restructure (rebalance)'));
+  });
+
+  test('B — outcome evidence is framed as observational, not causal', () => {
+    assert.ok(lower.includes('outcome evidence is observational'));
+  });
+
+  test('C — recovery precedence: high adherence alone is not evidence for progression', () => {
+    assert.ok(lower.includes('recovery precedence'));
+    assert.ok(lower.includes('high adherence is not, by itself, evidence for progression'));
+  });
+
+  test('C — closely scheduled demanding sessions call for redistribution before added workload', () => {
+    assert.ok(lower.includes('do not add workload just because the sessions were completed'));
+    assert.ok(lower.includes('redistributed'));
+    assert.ok(lower.includes('choose progress only when session spacing is already appropriate'));
+  });
+
+  test('C — recovery language makes no medical claims', () => {
+    assert.ok(lower.includes('make no medical claims'));
+  });
+
+  test('still keeps the existing KEEP stability bias line intact', () => {
+    assert.ok(lower.includes('if the evidence does not clearly justify a change, choose keep'));
+  });
+
+  test('never leaks retrieval implementation terms', () => {
+    for (const leaky of ['embedding', 'vector', 'similarity', '\\brag\\b', 'chunk']) {
+      assert.ok(!new RegExp(leaky).test(lower), `system prompt leaks implementation term: ${leaky}`);
+    }
   });
 });

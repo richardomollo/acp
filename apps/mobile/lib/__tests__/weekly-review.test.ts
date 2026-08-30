@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { isPlanReadyForReview, buildWeeklyBehaviourSummary, fetchWeeklyAdaptation, fetchPlanDateUpgrade } from '../weekly-review.ts';
+import { isPlanReadyForReview, isSundayPlanningWindow, getScheduledNextPlan, buildWeeklyBehaviourSummary, fetchWeeklyAdaptation, fetchPlanDateUpgrade, scheduledPlanNeedsScheduleUpdate } from '../weekly-review.ts';
 import type { StartingPlanActivity, AIAssessment } from '../ai-assessment.ts';
 import type { PlanActivityCompletion } from '../completion.ts';
 
@@ -112,13 +112,131 @@ describe('buildWeeklyBehaviourSummary (Part 7/8/9 — code calculates facts, nev
   });
 });
 
+describe('Beta #001 — isSundayPlanningWindow (local-date Sunday of the current week)', () => {
+  const plan = { starting_plan: { week_start_date: '2026-08-24', week_end_date: '2026-08-30' } } as any; // Sun 30 Aug
+  test('true on the plan\'s last day (Sunday), local date', () => {
+    assert.equal(isSundayPlanningWindow(plan, new Date('2026-08-30T09:00:00')), true);
+    assert.equal(isSundayPlanningWindow(plan, new Date('2026-08-30T23:30:00')), true);
+  });
+  test('false on Saturday and on Monday (Monday+ is the normal review flow)', () => {
+    assert.equal(isSundayPlanningWindow(plan, new Date('2026-08-29T23:59:00')), false);
+    assert.equal(isSundayPlanningWindow(plan, new Date('2026-08-31T00:01:00')), false);
+  });
+  test('false with no week_end_date', () => {
+    assert.equal(isSundayPlanningWindow({ starting_plan: {} } as any, new Date('2026-08-30T12:00:00')), false);
+    assert.equal(isSundayPlanningWindow(null, new Date()), false);
+  });
+  test('month boundary: Sun 31 Jan', () => {
+    const janPlan = { starting_plan: { week_start_date: '2027-01-25', week_end_date: '2027-01-31' } } as any;
+    assert.equal(isSundayPlanningWindow(janPlan, new Date('2027-01-31T10:00:00')), true);
+    assert.equal(isSundayPlanningWindow(janPlan, new Date('2027-02-01T10:00:00')), false);
+  });
+});
+
+describe('Beta #001 — getScheduledNextPlan', () => {
+  const chain = (rows: any[]) => ({
+    from: () => ({ select: () => ({ eq: () => ({ eq: () => ({ order: () => ({ limit: async () => ({ data: rows, error: null }) }) }) }) }) }),
+  });
+  test('returns the scheduled plan when one exists', async () => {
+    const row = { plan_id: 'p2', week_start_date: '2026-08-31', week_end_date: '2026-09-06', assessment: { starting_plan: { activities: [{ day: 'Monday' }] } } };
+    const r = await getScheduledNextPlan(chain([row]) as any, 'u1');
+    assert.equal(r?.planId, 'p2');
+    assert.equal(r?.weekStartDate, '2026-08-31');
+  });
+  test('returns null when there is no scheduled row', async () => {
+    assert.equal(await getScheduledNextPlan(chain([]) as any, 'u1'), null);
+  });
+  test('returns null on a malformed/empty assessment', async () => {
+    assert.equal(await getScheduledNextPlan(chain([{ plan_id: 'p', week_start_date: 'x', week_end_date: 'y', assessment: { starting_plan: { activities: [] } } }]) as any, 'u1'), null);
+  });
+  test('never throws — a rejecting client resolves to null', async () => {
+    const bad = { from: () => ({ select: () => ({ eq: () => ({ eq: () => ({ order: () => ({ limit: async () => { throw new Error('db down'); } }) }) }) }) }) };
+    assert.equal(await getScheduledNextPlan(bad as any, 'u1'), null);
+  });
+});
+
+describe('Beta #003 — scheduledPlanNeedsScheduleUpdate (dirty-state, structural not "visited editor")', () => {
+  const FAR_FUTURE = '2099-01-05'; // a Monday-ish far-future week start
+  const mkScheduled = (days: string[]) => ({
+    weekStartDate: FAR_FUTURE,
+    assessment: { starting_plan: { activities: days.map(d => ({ day: d })) } } as any,
+  });
+
+  test('false when there is no scheduled plan', () => {
+    assert.equal(scheduledPlanNeedsScheduleUpdate(null, ['monday', 'tuesday', 'wednesday', 'thursday', 'friday']), false);
+  });
+
+  test('false when the user has no explicit preference (< 2 canonical days)', () => {
+    assert.equal(scheduledPlanNeedsScheduleUpdate(mkScheduled(['Monday', 'Wednesday']), null), false);
+    assert.equal(scheduledPlanNeedsScheduleUpdate(mkScheduled(['Monday', 'Wednesday']), ['monday']), false);
+  });
+
+  test('false when the prepared plan already sits within the preferred days', () => {
+    assert.equal(
+      scheduledPlanNeedsScheduleUpdate(mkScheduled(['Monday', 'Wednesday', 'Friday']), ['monday', 'tuesday', 'wednesday', 'thursday', 'friday']),
+      false,
+    );
+  });
+
+  test('true when a prepared-plan day falls outside the (changed) preference', () => {
+    assert.equal(
+      scheduledPlanNeedsScheduleUpdate(mkScheduled(['Monday', 'Wednesday', 'Saturday']), ['monday', 'tuesday', 'wednesday', 'thursday', 'friday']),
+      true,
+    );
+    // Mon–Fri plan, user narrows to Mon/Wed/Fri → Tue/Thu now outside
+    assert.equal(
+      scheduledPlanNeedsScheduleUpdate(mkScheduled(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']), ['monday', 'wednesday', 'friday']),
+      true,
+    );
+  });
+
+  test('false once the target week has started (regeneration would be rejected server-side)', () => {
+    const started = { weekStartDate: '2020-01-06', assessment: { starting_plan: { activities: [{ day: 'Saturday' }] } } as any };
+    assert.equal(
+      scheduledPlanNeedsScheduleUpdate(started, ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'], new Date('2020-01-08T12:00:00Z')),
+      false,
+    );
+  });
+
+  test('mixed-form day input is normalised before comparison', () => {
+    assert.equal(
+      scheduledPlanNeedsScheduleUpdate(mkScheduled(['Mon', 'weds']), ['monday', 'wednesday', 'friday']),
+      false, // both plan days are within the preference after normalisation
+    );
+  });
+});
+
 describe('fetchWeeklyAdaptation (never throws, races a UX timeout)', () => {
   const baseParams = { userId: 'u1', accessToken: 't1', behaviourSummary: buildWeeklyBehaviourSummary([], [], {}) };
 
   test('returns the assessment + generatedAt on a valid response', async () => {
     const mockFetch = async () => ({ ok: true, json: async () => ({ assessment: { headline: 'x' }, generatedAt: '2026-09-08T00:00:00Z' }) }) as any;
     const result = await fetchWeeklyAdaptation(baseParams, mockFetch, 200);
-    assert.deepEqual(result, { assessment: { headline: 'x' }, generatedAt: '2026-09-08T00:00:00Z' });
+    assert.deepEqual(result, { assessment: { headline: 'x' }, generatedAt: '2026-09-08T00:00:00Z', scheduled: false, promoted: false, regenerated: false });
+  });
+
+  test('Beta #001 — passes through the scheduled flag for a Sunday advance generation', async () => {
+    const mockFetch = async () => ({ ok: true, json: async () => ({ assessment: { headline: 'x' }, generatedAt: 'g', scheduled: true }) }) as any;
+    const result = await fetchWeeklyAdaptation(baseParams, mockFetch, 200);
+    assert.equal(result?.scheduled, true);
+    assert.equal(result?.promoted, false);
+  });
+
+  test('Beta #003 — sends regenerateFuturePlan in the body and passes back the regenerated flag', async () => {
+    let sentBody: any = null;
+    const mockFetch = async (_url: string, init: any) => {
+      sentBody = JSON.parse(init.body);
+      return { ok: true, json: async () => ({ assessment: { headline: 'x' }, generatedAt: 'g2', scheduled: true, regenerated: true }) } as any;
+    };
+    const result = await fetchWeeklyAdaptation({ ...baseParams, regenerateFuturePlan: true }, mockFetch as any, 200);
+    assert.equal(sentBody.regenerateFuturePlan, true);
+    assert.equal(result?.regenerated, true);
+    assert.equal(result?.scheduled, true);
+  });
+
+  test('Beta #003 — a failed regeneration (non-2xx) resolves to null so the caller keeps the old plan', async () => {
+    const mockFetch = async () => ({ ok: false, status: 502, json: async () => ({ error: 'regeneration_failed', assessment: { headline: 'old' }, generatedAt: 'old' }) }) as any;
+    assert.equal(await fetchWeeklyAdaptation({ ...baseParams, regenerateFuturePlan: true }, mockFetch, 200), null);
   });
 
   test('returns null (never throws) when the network call rejects', async () => {

@@ -5,6 +5,7 @@ import {
   deriveCategoryCounts, sumDurationMinutes, enforceTimeBudget, getWeeklyMinutesBudget,
   enforceSupportLogic, getWeekBounds, dateForWeekdayInWeek, attachPlanDates, upgradeLegacyPlanDates,
   AI_REQUEST_CONFIG, SYSTEM_PROMPT,
+  normalizeWeekdayName, sanitizeTrainingDays, formatTrainingDaysForPrompt, CANONICAL_WEEKDAYS,
 } from '../assessment.ts';
 
 const VALID_ASSESSMENT = {
@@ -260,6 +261,72 @@ describe('buildUserPrompt', () => {
     assert.ok(prompt.includes('300 minutes')); // 5 hrs * 60, not the "inactive" 90-min proxy
     assert.ok(prompt.includes("user's own stated 5 training hours/week"));
   });
+
+  // Beta Feedback #002 — training schedule preference
+  test('emits a preferred-training-days line when 2+ canonical days are given', () => {
+    const prompt = buildUserPrompt({
+      goal: 'build_muscle', activityLevel: 'serious',
+      preferredTrainingDays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
+    }, 5);
+    assert.ok(prompt.includes('Preferred training days (user-stated): Monday, Tuesday, Wednesday, Thursday, Friday'));
+    assert.ok(prompt.includes('5 days/week'));
+    assert.ok(prompt.toLowerCase().includes('keep the others free'));
+    assert.ok(prompt.toLowerCase().includes('do not add total minutes'));
+  });
+
+  test('normalises mixed-form day input before putting it in the prompt', () => {
+    const prompt = buildUserPrompt({
+      goal: 'build_muscle',
+      preferredTrainingDays: ['Mon', 'WEDNESDAY', ' friday '],
+    }, 4);
+    assert.ok(prompt.includes('Monday, Wednesday, Friday'));
+    assert.ok(prompt.includes('3 days/week'));
+  });
+
+  test('omits the schedule line entirely when no preference (null / empty / single day)', () => {
+    for (const v of [undefined, null, [], ['monday'], ['garbage']]) {
+      const prompt = buildUserPrompt({ goal: 'lose_weight', preferredTrainingDays: v as unknown });
+      assert.ok(!prompt.includes('Preferred training days (user-stated)'), `should be absent for ${JSON.stringify(v)}`);
+    }
+  });
+});
+
+describe('training schedule weekday helpers (Beta Feedback #002)', () => {
+  test('CANONICAL_WEEKDAYS is Monday-first, lowercase, 7 entries', () => {
+    assert.deepEqual([...CANONICAL_WEEKDAYS], ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']);
+  });
+
+  test('normalizeWeekdayName accepts full/short/upper/spaced/punctuated forms', () => {
+    assert.equal(normalizeWeekdayName('Monday'), 'monday');
+    assert.equal(normalizeWeekdayName('mon'), 'monday');
+    assert.equal(normalizeWeekdayName(' TUE. '), 'tuesday');
+    assert.equal(normalizeWeekdayName('Tues'), 'tuesday');
+    assert.equal(normalizeWeekdayName('WEDNESDAY'), 'wednesday');
+  });
+
+  test('normalizeWeekdayName rejects non-weekdays and non-strings', () => {
+    for (const v of ['someday', '', '   ', 'M', 42, null, undefined, {}]) {
+      assert.equal(normalizeWeekdayName(v as unknown), null);
+    }
+  });
+
+  test('sanitizeTrainingDays dedupes, normalises, drops invalid, sorts Monday-first', () => {
+    assert.deepEqual(
+      sanitizeTrainingDays(['friday', 'Mon', 'monday', 'weds', 'WEDNESDAY', 'nope']),
+      ['monday', 'wednesday', 'friday'],
+    );
+  });
+
+  test('sanitizeTrainingDays returns [] for non-arrays and all-invalid input (treated as "no preference")', () => {
+    assert.deepEqual(sanitizeTrainingDays(null), []);
+    assert.deepEqual(sanitizeTrainingDays('monday'), []);
+    assert.deepEqual(sanitizeTrainingDays(['x', 'y']), []);
+    assert.deepEqual(sanitizeTrainingDays([]), []);
+  });
+
+  test('formatTrainingDaysForPrompt title-cases in order', () => {
+    assert.equal(formatTrainingDaysForPrompt(['monday', 'wednesday', 'friday']), 'Monday, Wednesday, Friday');
+  });
 });
 
 describe('SYSTEM_PROMPT guardrails (regression coverage — not testing exact AI prose)', () => {
@@ -303,6 +370,19 @@ describe('SYSTEM_PROMPT guardrails (regression coverage — not testing exact AI
     const lower = SYSTEM_PROMPT.toLowerCase();
     assert.ok(lower.includes('nutrition: judge independently'));
     assert.ok(lower.includes('never prescribe calories/macros/diets'));
+  });
+
+  // Beta Feedback #002 — training schedule preference
+  test('has a TRAINING SCHEDULE section that treats preferred days as a strong, bounded preference', () => {
+    assert.ok(SYSTEM_PROMPT.includes('TRAINING SCHEDULE'));
+    const lower = SYSTEM_PROMPT.toLowerCase();
+    assert.ok(lower.includes('strong preference'));
+    assert.ok(lower.includes('not an instruction to make every preferred day a demanding session'));
+    assert.ok(lower.includes('more preferred days does not mean more total time'));
+  });
+
+  test('scopes "prefer fewer sessions" to the no-preferred-days case', () => {
+    assert.ok(SYSTEM_PROMPT.includes('When no preferred training days are given, prefer fewer/shorter sessions over more.'));
   });
 });
 

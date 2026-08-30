@@ -14,6 +14,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { isValidAssessment, sortSupportOpportunities, type AIAssessment } from '@/lib/ai-assessment';
 import { matchProfessionalProviders, type ProviderMatch } from '@/lib/professional-support';
+import { selectDailyMeals } from '@/lib/nutrition-matching';
+import { getMealCandidates } from '@/lib/meal-ranking';
 
 interface TodayMealItem {
   id: string;
@@ -104,13 +106,15 @@ export default function TodayNutritionScreen() {
       // whether today's meals loaded successfully.
       const { data: profileData } = await supabase
         .from('fitness_profile')
-        .select('ai_assessment')
+        .select('ai_assessment, goal, cuisine_preferences')
         .eq('user_id', session.user.id)
         .maybeSingle();
       const validAssessment = profileData?.ai_assessment && isValidAssessment(profileData.ai_assessment)
         ? profileData.ai_assessment
         : null;
       if (active) setAssessment(validAssessment);
+      const goal = profileData?.goal ?? null;
+      const cuisinePreferences = profileData?.cuisine_preferences ?? [];
 
       const { data: planData } = await supabase
         .from('meal_plans')
@@ -146,12 +150,13 @@ export default function TodayNutritionScreen() {
           }));
       }
 
+      const todayStr = new Date().toISOString().slice(0, 10);
+
       if (planItems.length > 0) {
         if (!active) return;
         setItems(planItems);
         setIsSuggested(false);
 
-        const todayStr = new Date().toISOString().slice(0, 10);
         const { data: logsData } = await supabase
           .from('meal_logs')
           .select('meal_plan_item_id, status')
@@ -160,33 +165,56 @@ export default function TodayNutritionScreen() {
           .in('meal_plan_item_id', planItems.map(i => i.id));
         if (active) setLoggedIds(new Set((logsData ?? []).filter(l => l.status === 'eaten').map(l => l.meal_plan_item_id)));
       } else {
-        // No active plan — same suggested-meals fallback as the home page,
-        // one random pick per category so there's always something to show.
+        // No active plan — suggest one meal per category. Ranking (which
+        // candidates are actually good picks) is deterministic goal/cuisine
+        // fit via getMealCandidates (Day 7.2 — never a hard filter, so
+        // international meals are always eligible, just ranked); which
+        // equally-good candidate is shown today is a stable per-day pick via
+        // selectDailyMeals (same user + date + pool always resolves the same
+        // way — never Math.random()), applied only among the top-ranked ties
+        // so a stronger candidate can never lose to a weaker one.
+        const categories = ['breakfast', 'lunch', 'dinner'] as const;
         const categoryResults = await Promise.all(
-          (['breakfast', 'lunch', 'dinner'] as const).map(category =>
+          categories.map(category =>
             supabase.from('meals')
-              .select('id, name, image_url, calories, protein_g, carbs_g, fat_g, prep_time_minutes, category')
+              .select('id, name, image_url, calories, protein_g, carbs_g, fat_g, fibre_g, prep_time_minutes, category, cuisine, tags')
               .eq('is_active', true)
               .eq('category', category)
-              .limit(5),
+              .limit(20),
           ),
         );
-        const suggested: TodayMealItem[] = categoryResults
-          .map(({ data }) => data ?? [])
-          .filter(rows => rows.length > 0)
-          .map(rows => rows[Math.floor(Math.random() * rows.length)])
-          .map(meal => ({
-            id: meal.id,
-            mealId: meal.id,
-            slot: meal.category,
-            name: meal.name,
-            image_url: meal.image_url,
-            calories: meal.calories ?? 0,
-            protein_g: meal.protein_g ?? 0,
-            carbs_g: meal.carbs_g ?? 0,
-            fat_g: meal.fat_g ?? 0,
-            prep_time_minutes: meal.prep_time_minutes,
-          }));
+        interface SuggestedMealRow {
+          id: string; name: string; image_url: string | null; category: string;
+          calories: number | null; protein_g: number | null; carbs_g: number | null; fat_g: number | null;
+          fibre_g: number | null; prep_time_minutes: number | null; cuisine: string; tags: string[] | null;
+        }
+        const mealsBySlot = categories.map((category, i) => {
+          const rows = (categoryResults[i].data ?? []) as SuggestedMealRow[];
+          const candidates = getMealCandidates({
+            meals: rows.map(r => ({
+              id: r.id, name: r.name, category: r.category, cuisine: r.cuisine, tags: r.tags ?? [],
+              calories: r.calories ?? 0, protein_g: r.protein_g ?? 0, carbs_g: r.carbs_g ?? 0,
+              fat_g: r.fat_g ?? 0, fibre_g: r.fibre_g, is_active: true,
+            })),
+            goal, cuisinePreferences,
+          });
+          const topScore = candidates[0]?.scoring.overall;
+          const tiedTopIds = new Set(candidates.filter(c => c.scoring.overall === topScore).map(c => c.mealId));
+          return { category, foods: rows.filter(r => tiedTopIds.has(r.id)) };
+        });
+        const dailySelections = selectDailyMeals(session.user.id, todayStr, mealsBySlot);
+        const suggested: TodayMealItem[] = dailySelections.map(({ category, food: meal }) => ({
+          id: meal.id,
+          mealId: meal.id,
+          slot: category as TodayMealItem['slot'],
+          name: meal.name,
+          image_url: meal.image_url,
+          calories: meal.calories ?? 0,
+          protein_g: meal.protein_g ?? 0,
+          carbs_g: meal.carbs_g ?? 0,
+          fat_g: meal.fat_g ?? 0,
+          prep_time_minutes: meal.prep_time_minutes,
+        }));
         if (!active) return;
         setItems(suggested);
         setIsSuggested(true);

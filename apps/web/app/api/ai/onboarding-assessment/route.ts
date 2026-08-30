@@ -4,8 +4,11 @@ import {
   AI_ASSESSMENT_MODEL, AI_REQUEST_CONFIG, ASSESSMENT_JSON_SCHEMA, SYSTEM_PROMPT,
   buildUserPrompt, validateAssessment, checkAuthorization,
   getWeeklyMinutesBudget, enforceTimeBudget, enforceSupportLogic,
-  getWeekBounds, attachPlanDates,
+  getWeekBounds, attachPlanDates, sanitizeTrainingDays,
 } from './assessment';
+import { logAcpEvent, classifyOpenAiFailure, fetchWithTimeout } from '../../../../lib/observability';
+
+const OPENAI_CHAT_TIMEOUT_MS = 45_000; // §8 — bounded single attempt, well under maxDuration
 
 const adminSupabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -42,42 +45,61 @@ export async function POST(req: NextRequest) {
     }
 
     if (!process.env.OPENAI_API_KEY) {
+      logAcpEvent('initial_assessment_failed', { failureCode: 'VALIDATION_ERROR', httpStatus: 503 });
       return NextResponse.json({ error: 'AI assessment is not configured' }, { status: 503 });
     }
 
-    const aiRes = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: AI_ASSESSMENT_MODEL,
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: buildUserPrompt(onboardingAnswers, sportHoursPerWeek) },
-        ],
-        response_format: {
-          type: 'json_schema',
-          json_schema: {
-            name: 'ai_assessment',
-            strict: true,
-            schema: ASSESSMENT_JSON_SCHEMA,
-          },
+    const startedAt = Date.now();
+    logAcpEvent('initial_assessment_started');
+
+    let aiRes: Response;
+    try {
+      aiRes = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
         },
-        ...AI_REQUEST_CONFIG,
-      }),
-    });
+        body: JSON.stringify({
+          model: AI_ASSESSMENT_MODEL,
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'user', content: buildUserPrompt(onboardingAnswers, sportHoursPerWeek) },
+          ],
+          response_format: {
+            type: 'json_schema',
+            json_schema: { name: 'ai_assessment', strict: true, schema: ASSESSMENT_JSON_SCHEMA },
+          },
+          ...AI_REQUEST_CONFIG,
+        }),
+      }, OPENAI_CHAT_TIMEOUT_MS);
+    } catch (fetchErr) {
+      logAcpEvent('initial_assessment_failed', {
+        durationMs: Date.now() - startedAt,
+        failureCode: classifyOpenAiFailure(null, fetchErr),
+        httpStatus: 502,
+      });
+      // The mobile client already races this route against a ~15s UX
+      // deadline and falls back to a deterministic rule-based plan
+      // (buildPlanSummary) — the user is never stuck (§9).
+      return NextResponse.json({ error: 'AI request failed' }, { status: 502 });
+    }
 
     if (!aiRes.ok) {
       const errText = await aiRes.text();
-      console.error('onboarding-assessment: OpenAI request failed', aiRes.status, errText);
+      console.error('onboarding-assessment: OpenAI request failed', aiRes.status, errText.slice(0, 200));
+      logAcpEvent('initial_assessment_failed', {
+        durationMs: Date.now() - startedAt,
+        failureCode: classifyOpenAiFailure(aiRes.status),
+        httpStatus: aiRes.status,
+      });
       return NextResponse.json({ error: 'AI request failed' }, { status: 502 });
     }
 
     const completion = await aiRes.json();
     const raw = completion.choices?.[0]?.message?.content;
     if (!raw) {
+      logAcpEvent('initial_assessment_failed', { failureCode: 'OPENAI_INVALID_RESPONSE', httpStatus: 502 });
       return NextResponse.json({ error: 'AI returned no content' }, { status: 502 });
     }
 
@@ -85,11 +107,13 @@ export async function POST(req: NextRequest) {
     try {
       assessment = JSON.parse(raw);
     } catch {
+      logAcpEvent('initial_assessment_failed', { failureCode: 'OPENAI_INVALID_RESPONSE', httpStatus: 502 });
       return NextResponse.json({ error: 'AI returned invalid JSON' }, { status: 502 });
     }
 
     if (!validateAssessment(assessment)) {
-      console.error('onboarding-assessment: response failed validation', raw);
+      console.error('onboarding-assessment: response failed validation');
+      logAcpEvent('initial_assessment_failed', { failureCode: 'OPENAI_INVALID_RESPONSE', httpStatus: 502 });
       return NextResponse.json({ error: 'AI response failed validation' }, { status: 502 });
     }
 
@@ -169,8 +193,19 @@ export async function POST(req: NextRequest) {
       status: 'active',
     });
 
+    logAcpEvent('initial_assessment_completed', {
+      durationMs: Date.now() - startedAt,
+      usedFallback: false,
+      model: AI_ASSESSMENT_MODEL,
+      promptTokens: completion.usage?.prompt_tokens,
+      completionTokens: completion.usage?.completion_tokens,
+      totalTokens: completion.usage?.total_tokens,
+      // Beta Feedback #002 — non-sensitive count only (§31).
+      scheduleDaysPerWeek: sanitizeTrainingDays((onboardingAnswers as Record<string, unknown>)?.preferredTrainingDays).length,
+    });
     return NextResponse.json({ assessment: finalAssessment, generatedAt });
   } catch (err: any) {
+    logAcpEvent('initial_assessment_failed', { failureCode: 'UNKNOWN_ERROR', httpStatus: 500 });
     return NextResponse.json({ error: err.message || 'Server error' }, { status: 500 });
   }
 }

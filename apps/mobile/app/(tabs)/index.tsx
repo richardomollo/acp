@@ -31,8 +31,9 @@ import {
   type PlanActivityCompletion, type CompletionCandidate, type StravaActivityRow, type WorkoutHistoryRow, type AcpCheckedInRow, type HealthKitWorkoutRow,
 } from '@/lib/completion';
 import { getHomeIntelligenceInsight, findTodayActivity } from '@/lib/home-intelligence';
-import { pickHomeInsight, type CoachingMemoryRow } from '@/lib/coaching-memory';
-import { isPlanReadyForReview, fetchPlanDateUpgrade } from '@/lib/weekly-review';
+import { pickHomeInsight, formatOverallProgress, type CoachingMemoryRow } from '@/lib/coaching-memory';
+import { buildWeeklyCoachingBrief } from '@/lib/coaching';
+import { isPlanReadyForReview, isSundayPlanningWindow, fetchPlanDateUpgrade } from '@/lib/weekly-review';
 
 const { width } = Dimensions.get('window');
 const RAIL_CARD_W = Math.round(width * 0.5);
@@ -678,6 +679,28 @@ export default function HomeScreen() {
   // duplicating any review/adaptation logic here — generating the review
   // itself only ever happens on My Plan, from an explicit tap.
   const homeReviewReady = homeIntelLoaded && isPlanReadyForReview(homeAssessment, new Date());
+  // Beta Feedback #001 — Sunday next-week planning window (local date).
+  const homeSundayPlanning = homeIntelLoaded && !homeReviewReady && isSundayPlanningWindow(homeAssessment, new Date());
+  // Day 8.1 — deterministic weekly coaching brief (no network, no LLM). Only
+  // ever occupies the existing "no activity today" insight slot below, and
+  // only when it has something more specific to say than the generic filler
+  // (never for its plain neutral/first-week fallback — pickHomeInsight stays
+  // the fallback there). Never blocks Home; a failure just means no brief.
+  const homeBriefInsight = (() => {
+    if (!homeIntelLoaded || !homeAssessment) return null;
+    try {
+      const brief = buildWeeklyCoachingBrief({
+        assessment: homeAssessment,
+        overall: formatOverallProgress(homeCoachingMemory),
+        coachingMemory: homeCoachingMemory,
+        isFirstWeek: homeCoachingMemory.length === 0 && homeWeeklyProgress.completed === 0,
+      });
+      if (brief.provenance.detail === 'neutral') return null;
+      return { headline: brief.headline, body: `${brief.observation} ${brief.guidance}`.trim() };
+    } catch {
+      return null;
+    }
+  })();
   const homeInsight = homeReviewReady
     ? {
         headline: 'Your weekly review is ready',
@@ -691,7 +714,7 @@ export default function HomeScreen() {
         todayActivity: homeTodayActivity,
         todayCompleted: homeTodayCompleted,
         weeklyProgress: homeWeeklyProgress,
-        longitudinalInsight: pickHomeInsight(homeCoachingMemory),
+        longitudinalInsight: homeBriefInsight ?? pickHomeInsight(homeCoachingMemory),
       })
     : null;
 
@@ -1421,16 +1444,28 @@ export default function HomeScreen() {
                 <ThemedText style={styles.headerName}>{user?.name?.split(' ')[0] || 'there'}</ThemedText>
               </View>
             </View>
-            <TouchableOpacity
-              onPress={() => setShowNotifications(true)}
-              hitSlop={10}
-              activeOpacity={0.7}
-              accessibilityRole="button"
-              accessibilityLabel="Notifications"
-            >
-              <Ionicons name="notifications-outline" size={24} color={palette.ink900} />
-              {homeNotifications.length > 0 && <View style={styles.headerBellDot} />}
-            </TouchableOpacity>
+            <View style={styles.headerRight}>
+              {/* Check in — moved here off the bottom tab bar. */}
+              <TouchableOpacity
+                onPress={() => router.push('/(tabs)/check-in' as any)}
+                hitSlop={10}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Check in"
+              >
+                <Ionicons name="scan-outline" size={24} color={palette.ink900} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setShowNotifications(true)}
+                hitSlop={10}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Notifications"
+              >
+                <Ionicons name="notifications-outline" size={24} color={palette.ink900} />
+                {homeNotifications.length > 0 && <View style={styles.headerBellDot} />}
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
@@ -1663,21 +1698,12 @@ export default function HomeScreen() {
 
               {/* Home Nutrition Integration — the WEEK's intent, independent
                   of which specific meals are listed below (plan-driven or
-                  ranked). A compact, editorial block, not a card — the
-                  "Your plan →" link sits below the reason, never beside the
-                  title (Part 2/4). */}
+                  ranked). A compact, editorial block, not a card. */}
               {!!homeAssessment?.nutrition_focus && (
                 <View style={{ marginTop: 10 }}>
                   <Eyebrow text="This week's nutrition focus" />
                   <ThemedText style={styles.sectionTitle}>{homeAssessment.nutrition_focus.title}</ThemedText>
                   <ThemedText style={styles.mealRowMeta}>{homeAssessment.nutrition_focus.reason}</ThemedText>
-                  <TouchableOpacity
-                    onPress={() => router.push('/my-plan' as any)}
-                    activeOpacity={0.7}
-                    style={{ alignSelf: 'flex-end', marginTop: 6 }}
-                  >
-                    <ThemedText style={styles.seeAllText}>Your plan →</ThemedText>
-                  </TouchableOpacity>
                 </View>
               )}
             </View>
@@ -1703,29 +1729,29 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* ─── Health Testing CTA ─── */}
-        {!isGuest && (
+        {/* ─── Beta Feedback #001 — Plan ahead for next week. Its own card,
+              placed under Today's Meals; only on the Sunday planning window.
+              Routes to the dedicated /next-week-plan screen. ─── */}
+        {!isGuest && homeSundayPlanning && (
           <View style={styles.section}>
             <TouchableOpacity
-              style={[styles.supportCard, { marginHorizontal: 20 }]}
-              onPress={() => router.push('/health-testing' as any)}
+              style={styles.nextWeekHomeCard}
+              onPress={() => router.push('/next-week-plan' as any)}
               activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Plan ahead for next week"
             >
-              <ThemedText style={styles.supportCardEyebrow}>Health Testing</ThemedText>
-              <ThemedText style={styles.supportRowValue}>
-                Comprehensive health insights through lab testing
-              </ThemedText>
-              <ThemedText style={styles.supportBody}>
-                Hormone Panel and Nutritional Deficiency Tests processed by certified laboratories with home collection
-                available in Nairobi, Mombasa, and Kisumu.
-              </ThemedText>
-              <View style={styles.exploreSupportBtn}>
-                <ThemedText style={styles.exploreSupportBtnText}>Learn more →</ThemedText>
+              <View style={{ flex: 1 }}>
+                <ThemedText style={styles.nextWeekHomeEyebrow}>YOUR NEXT WEEK</ThemedText>
+                <ThemedText style={styles.nextWeekHomeTitle}>Plan ahead for next week</ThemedText>
+                <ThemedText style={styles.nextWeekHomeBody}>
+                  Review your upcoming training so you can organise your week and book any sessions you need.
+                </ThemedText>
               </View>
+              <Ionicons name="chevron-forward" size={18} color={palette.gray450} />
             </TouchableOpacity>
           </View>
         )}
-
 
         {/* ─── Something for everyone ─── */}
         {/* <View style={styles.section}>
@@ -1979,6 +2005,7 @@ const styles = StyleSheet.create({
   // Header
   header: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 18 },
   headerBellDot: {
     position: 'absolute', top: 0, right: 0, width: 8, height: 8, borderRadius: 4,
     backgroundColor: palette.danger500, borderWidth: 1.5, borderColor: palette.white,
@@ -2061,6 +2088,19 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 8,
   },
+  nextWeekHomeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: palette.white,
+    borderRadius: radii['2xl'],
+    marginHorizontal: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  nextWeekHomeEyebrow: { fontSize: 10, fontWeight: '700', color: palette.blue600, letterSpacing: 0.5, marginBottom: 4 },
+  nextWeekHomeTitle: { fontSize: fontSize.base, fontWeight: '800', color: palette.ink900, marginBottom: 4 },
+  nextWeekHomeBody: { fontSize: fontSize.sm, color: palette.ink600, lineHeight: 19 },
   railPad: { paddingHorizontal: 20, gap: 14, paddingBottom: 4 },
   sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
   eyebrow: { fontSize: 11, fontWeight: '700', letterSpacing: 0.16 * 11, textTransform: 'uppercase', marginBottom: 5 },
@@ -2141,32 +2181,6 @@ const styles = StyleSheet.create({
   candidateConfirm: { fontSize: fontSize.xs, fontWeight: '700', color: palette.blue600 },
   candidateDismiss: { fontSize: fontSize.xs, fontWeight: '700', color: palette.gray450 },
   mealImageFallback: { backgroundColor: palette.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
-  // Health Testing CTA — same card language as My Plan's support section.
-  supportCard: {
-    backgroundColor: palette.surfaceMuted,
-    borderRadius: radii['2xl'],
-    padding: 20,
-  },
-  supportCardEyebrow: {
-    fontSize: fontSize.xs,
-    fontWeight: '700',
-    color: palette.gray300,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 16,
-  },
-  supportRowValue: { fontSize: fontSize.lg, fontWeight: '700', color: palette.ink700 },
-  supportBody: { fontSize: fontSize.sm, color: palette.ink600, marginTop: 6, lineHeight: 20 },
-  exploreSupportBtn: {
-    alignSelf: 'flex-start',
-    marginTop: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: radii.pill,
-    backgroundColor: palette.white,
-  },
-  exploreSupportBtnText: { fontSize: fontSize.sm, fontWeight: '700', color: palette.ink700 },
-
   // Stacked-style body (shared with OverlayCard)
   stackedBody: { padding: 15, gap: 4 },
   stackedName: { fontSize: 17, fontWeight: '700', color: palette.ink900, letterSpacing: -0.2 },

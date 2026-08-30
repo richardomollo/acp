@@ -1,9 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
-  EMPTY_ANSWERS, deriveSupportStyle, resolveOnboardingResumeStep,
+  EMPTY_ANSWERS, deriveSupportStyle, resolveOnboardingResumeStep, sanitizeTrainingDays,
+  MIN_TRAINING_DAYS, MAX_TRAINING_DAYS,
   type OnboardingAnswers, type PrimaryGoal, type ActivityLevel, type StrengthExperience,
   type Barrier, type PreferredActivity, type GoalDetails, type OnboardingStepRoute,
+  type CanonicalWeekday,
 } from '@/lib/onboarding';
 
 interface OnboardingCtx {
@@ -34,6 +36,9 @@ interface OnboardingCtx {
   setGoalTargetDate: (date: string | null) => void;
   toggleBarrier: (barrier: Barrier) => void;
   togglePreferredActivity: (activity: PreferredActivity) => void;
+  /** Beta Feedback #002 — toggle a preferred training weekday. Capped at
+   *  MAX_TRAINING_DAYS; removing is always allowed. */
+  togglePreferredTrainingDay: (day: CanonicalWeekday) => void;
   /** Best-effort save of whatever's been answered so far. Never throws —
    *  local state (and whatever was last saved to the DB) is the source of
    *  truth if the network call fails, so a step's Continue never blocks. */
@@ -73,7 +78,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
 
       const [{ data: fp }, { data: hp }] = await Promise.all([
         supabase.from('fitness_profile')
-          .select('goal, starting_weight_kg, goal_weight_kg, goal_target_date, activity_level, experience_level, goal_details, barriers, preferred_activities, onboarding_completed')
+          .select('goal, starting_weight_kg, goal_weight_kg, goal_target_date, activity_level, experience_level, goal_details, barriers, preferred_activities, preferred_training_days, onboarding_completed')
           .eq('user_id', userId).maybeSingle(),
         supabase.from('health_profile')
           .select('sleep_hours_per_night, hours_working_per_week, hours_exercising_per_week')
@@ -92,6 +97,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
           goalDetails: fp.goal_details ?? {},
           barriers: fp.barriers ?? [],
           preferredActivities: fp.preferred_activities ?? [],
+          preferredTrainingDays: sanitizeTrainingDays(fp.preferred_training_days),
         };
         const hasActivityHours = !!(hp?.sleep_hours_per_night && hp?.hours_working_per_week != null && hp?.hours_exercising_per_week != null);
         setAnswers(restored);
@@ -161,6 +167,16 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     }));
   }, []);
 
+  const togglePreferredTrainingDay = useCallback((day: CanonicalWeekday) => {
+    setAnswers(a => {
+      if (a.preferredTrainingDays.includes(day)) {
+        return { ...a, preferredTrainingDays: a.preferredTrainingDays.filter(d => d !== day) };
+      }
+      if (a.preferredTrainingDays.length >= MAX_TRAINING_DAYS) return a;
+      return { ...a, preferredTrainingDays: sanitizeTrainingDays([...a.preferredTrainingDays, day]) };
+    });
+  }, []);
+
   const buildRow = useCallback((userId: string, current: OnboardingAnswers) => ({
     user_id: userId,
     goal: current.goal,
@@ -173,6 +189,11 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     goal_details: current.goalDetails,
     barriers: current.barriers,
     preferred_activities: current.preferredActivities,
+    // Beta Feedback #002 — persist NULL (not []) below the valid range, so a
+    // legacy/undecided profile keeps its exact existing planning behaviour.
+    preferred_training_days: current.preferredTrainingDays.length >= MIN_TRAINING_DAYS
+      ? current.preferredTrainingDays
+      : null,
     updated_at: new Date().toISOString(),
   }), []);
 
@@ -223,7 +244,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   return (
     <OnboardingContext.Provider value={{
       answers, hydrated, resumeRoute, redirectTo, setRedirectTo, userName, setUserName, setGoal, setWeightGoal, setActivityLevel, setStrengthExperience,
-      setGoalDetails, setGoalTargetDate, toggleBarrier, togglePreferredActivity,
+      setGoalDetails, setGoalTargetDate, toggleBarrier, togglePreferredActivity, togglePreferredTrainingDay,
       saveProgress, completeOnboarding, reset,
     }}>
       {children}

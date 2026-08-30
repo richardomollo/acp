@@ -4,7 +4,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '@/lib/supabase';
-import { useAuthModal } from '@/contexts/auth-modal-context';
 import { palette } from '@/constants/theme';
 import { registerForPushNotifications } from '@/services/notifications';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
@@ -19,7 +18,7 @@ const TAB_DEFS = [
   // links keep working unchanged.
   { name: 'discover', label: 'Nutrition', icon: 'nutrition-outline', iconActive: 'nutrition' },
   { name: 'fitness',  label: 'Fitness',   icon: 'barbell-outline',   iconActive: 'barbell'   },
-  { name: 'check-in', label: 'Check In',  icon: 'scan-outline',      iconActive: 'scan'      },
+  { name: 'health-testing', label: 'Testing', icon: 'flask-outline',  iconActive: 'flask'     },
   { name: 'profile',  label: 'Profile',   icon: 'person-outline',    iconActive: 'person'    },
 ];
 
@@ -86,7 +85,6 @@ function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 
 export default function TabLayout() {
   const router = useRouter();
-  const { showAuthModal } = useAuthModal();
   const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -99,13 +97,6 @@ export default function TabLayout() {
   useEffect(() => {
     if (userId) registerForPushNotifications();
   }, [userId]);
-
-  const handleCheckInPress = (e: any) => {
-    if (!userId) {
-      e.preventDefault();
-      showAuthModal((uid) => setUserId(uid), { redirectTo: '/(tabs)/check-in' });
-    }
-  };
 
   const handleNutritionPress = (e: any) => {
     e.preventDefault();
@@ -124,13 +115,12 @@ export default function TabLayout() {
         listeners={{ tabPress: handleNutritionPress }}
       />
       <Tabs.Screen name="fitness" options={{ title: 'Fitness' }} />
-      <Tabs.Screen
-        name="check-in"
-        options={{ title: 'Check In' }}
-        listeners={{ tabPress: handleCheckInPress }}
-      />
+      <Tabs.Screen name="health-testing" options={{ title: 'Testing' }} />
       <Tabs.Screen name="profile" options={{ title: 'Profile', headerShown: false }} />
-      {/* Hidden routes — reached via in-app navigation, not tabs. */}
+      {/* Hidden routes — reached via in-app navigation, not tabs.
+          check-in moved off the tab bar to a header icon on Today (next to
+          the notifications bell); the route itself is unchanged. */}
+      <Tabs.Screen name="check-in"    options={{ href: null }} />
       <Tabs.Screen name="venues"      options={{ href: null }} />
       <Tabs.Screen name="classes"     options={{ href: null }} />
       <Tabs.Screen name="trainers"    options={{ href: null }} />

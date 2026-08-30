@@ -4,6 +4,7 @@
 // happened this week. See the Day 5 report for the full architecture.
 import type { AIAssessment, StartingPlanActivity } from './ai-assessment';
 import type { PlanActivityCompletion, CompletionSource } from './completion';
+import { sanitizeTrainingDays, normalizeWeekdayName, type CanonicalWeekday } from './onboarding.ts';
 
 // ── Review readiness (Part 6) ────────────────────────────────────────────────
 // Deliberately conservative: a plan only becomes reviewable once its week
@@ -18,6 +19,82 @@ export function isPlanReadyForReview(
   if (!weekEndDate) return false; // pre-Day-5 plan, or any other unexpected shape — not reviewable
   const today = now.toISOString().split('T')[0];
   return today > weekEndDate;
+}
+
+/** Local calendar date (YYYY-MM-DD) — the user's Sunday is what defines the
+ *  planning window, so this deliberately uses the device timezone, not UTC.
+ *  (See the Beta Feedback #001 completion report §D for the timezone note.) */
+export function localDateIso(now: Date = new Date()): string {
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Beta Feedback #001 — the Sunday "prepare next week" window. True only on
+ * the current plan's own last day (a Sunday by construction), in the user's
+ * local timezone. On Monday+ the normal review flow (isPlanReadyForReview)
+ * takes over instead.
+ */
+export function isSundayPlanningWindow(
+  assessment: Pick<AIAssessment, 'starting_plan'> | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  const weekEndDate = assessment?.starting_plan?.week_end_date;
+  if (!weekEndDate) return false;
+  return localDateIso(now) === weekEndDate;
+}
+
+export interface ScheduledNextPlan {
+  assessment: AIAssessment;
+  planId: string;
+  weekStartDate: string;
+  weekEndDate: string;
+}
+
+/** Minimal Supabase surface this helper needs — injectable for tests. */
+type NextPlanReader = {
+  from: (t: string) => {
+    select: (cols: string) => {
+      eq: (c: string, v: unknown) => {
+        eq: (c: string, v: unknown) => {
+          order: (c: string, o: { ascending: boolean }) => {
+            limit: (n: number) => Promise<{ data: any[] | null; error: unknown }>;
+          };
+        };
+      };
+    };
+  };
+};
+
+/**
+ * Reads the user's prepared-but-not-yet-current plan (fitness_plans row with
+ * status='scheduled'). Null when none exists. Never throws.
+ */
+export async function getScheduledNextPlan(
+  supabase: NextPlanReader,
+  userId: string,
+): Promise<ScheduledNextPlan | null> {
+  try {
+    const { data } = await supabase
+      .from('fitness_plans')
+      .select('plan_id, assessment, week_start_date, week_end_date')
+      .eq('user_id', userId)
+      .eq('status', 'scheduled')
+      .order('week_start_date', { ascending: false })
+      .limit(1);
+    const row = (data ?? [])[0];
+    if (!row?.assessment?.starting_plan?.activities?.length) return null;
+    return {
+      assessment: row.assessment as AIAssessment,
+      planId: row.plan_id as string,
+      weekStartDate: row.week_start_date as string,
+      weekEndDate: row.week_end_date as string,
+    };
+  } catch {
+    return null;
+  }
 }
 
 // ── Deterministic weekly behaviour summary (Part 7/8/9) ─────────────────────
@@ -98,11 +175,54 @@ export interface FetchWeeklyAdaptationParams {
   userId: string;
   accessToken: string;
   behaviourSummary: BehaviourSummary;
+  /** Beta Feedback #003 — explicit, user-initiated rebuild of an
+   *  already-prepared FUTURE plan after a planning-preference change. Never
+   *  set for a normal review/prepare call, which stays idempotent. */
+  regenerateFuturePlan?: boolean;
 }
 
 export interface FetchWeeklyAdaptationResult {
   assessment: AIAssessment;
   generatedAt: string;
+  /** Beta Feedback #001 — true when this plan was prepared ahead of its
+   *  week and is NOT yet the user's current plan (it lives in fitness_plans
+   *  as 'scheduled' until its week begins). */
+  scheduled?: boolean;
+  /** True when this call promoted a previously-scheduled plan to current. */
+  promoted?: boolean;
+  /** Beta Feedback #003 — true when this call replaced an existing scheduled
+   *  future plan (as opposed to preparing one for the first time). */
+  regenerated?: boolean;
+}
+
+/**
+ * Beta Feedback #003 — pure dirty-state check. Answers exactly one question:
+ * does the already-prepared future plan still reflect the user's CURRENT
+ * preferred training days? Returns true only when a rebuild is both
+ * meaningful and allowed:
+ *   - a scheduled future plan exists whose week has NOT started yet;
+ *   - the user has an explicit preference of >= 2 canonical days;
+ *   - at least one of the plan's activity weekdays falls outside that set.
+ * Visiting the preference editor without changing anything never trips this
+ * (the check is structural, not "did they open the screen").
+ */
+export function scheduledPlanNeedsScheduleUpdate(
+  scheduled: Pick<ScheduledNextPlan, 'assessment' | 'weekStartDate'> | null | undefined,
+  preferredTrainingDays: unknown,
+  now: Date = new Date(),
+): boolean {
+  if (!scheduled) return false;
+  const days = sanitizeTrainingDays(preferredTrainingDays);
+  if (days.length < 2) return false;
+  // Week already started (edge: not yet promoted) — regeneration would be
+  // rejected server-side, so never offer it.
+  if (scheduled.weekStartDate && localDateIso(now) >= scheduled.weekStartDate) return false;
+  const preferred = new Set<CanonicalWeekday>(days);
+  const planWeekdays = (scheduled.assessment?.starting_plan?.activities ?? [])
+    .map(a => normalizeWeekdayName(a.day))
+    .filter((d): d is CanonicalWeekday => !!d);
+  if (planWeekdays.length === 0) return false;
+  return !planWeekdays.every(d => preferred.has(d));
 }
 
 /**
@@ -124,10 +244,16 @@ export async function fetchWeeklyAdaptation(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(params),
       });
+      // A failed regeneration (Beta #003) returns 502/409 with the untouched
+      // existing plan — the caller treats null as "couldn't update, old plan
+      // still available", which is exactly the desired failure UX.
       if (!res.ok) return null;
       const json = await res.json();
       if (!json?.assessment || typeof json?.generatedAt !== 'string') return null;
-      return { assessment: json.assessment, generatedAt: json.generatedAt };
+      return {
+        assessment: json.assessment, generatedAt: json.generatedAt,
+        scheduled: !!json.scheduled, promoted: !!json.promoted, regenerated: !!json.regenerated,
+      };
     } catch {
       return null;
     }

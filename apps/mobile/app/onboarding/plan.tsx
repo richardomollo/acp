@@ -79,7 +79,7 @@ export default function OnboardingPlanScreen() {
       if (!userId) return;
       const { data } = await supabase
         .from('fitness_profile')
-        .select('goal, starting_weight_kg, goal_weight_kg, goal_target_date, activity_level, experience_level, goal_details, barriers, preferred_activities, ai_assessment, ai_assessment_generated_at')
+        .select('goal, starting_weight_kg, goal_weight_kg, goal_target_date, activity_level, experience_level, goal_details, barriers, preferred_activities, preferred_training_days, ai_assessment, ai_assessment_generated_at')
         .eq('user_id', userId)
         .maybeSingle();
       if (!data?.ai_assessment || !data.ai_assessment_generated_at || !isValidAssessment(data.ai_assessment)) return;
@@ -100,7 +100,8 @@ export default function OnboardingPlanScreen() {
         (data.experience_level ?? null) === (answers.strengthExperience ?? null) &&
         JSON.stringify(savedGoalDetails) === JSON.stringify(answers.goalDetails ?? {}) &&
         sameArray(data.barriers, answers.barriers) &&
-        sameArray(data.preferred_activities, answers.preferredActivities);
+        sameArray(data.preferred_activities, answers.preferredActivities) &&
+        sameArray(data.preferred_training_days, answers.preferredTrainingDays);
 
       if (unchanged) {
         reusableAssessmentRef.current = data.ai_assessment as AIAssessment;

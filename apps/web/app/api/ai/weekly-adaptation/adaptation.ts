@@ -13,6 +13,8 @@ import {
   type AIAssessment, type StartingPlan, type StartingPlanActivity, type ActivityCategory, type ActivityIntensity,
   type SupportOpportunity, type NutritionFocus, type NutritionFocusType, type WeeklyReview,
   sumDurationMinutes, dateForWeekdayInWeek, attachPlanDates, enforceTimeBudget,
+  enforceSupportLogic, isDeterministicPtWarranted,
+  sanitizeTrainingDays, formatTrainingDaysForPrompt,
 } from '../onboarding-assessment/assessment.ts';
 
 export const WEEKLY_ADAPTATION_MODEL = 'gpt-5-mini';
@@ -47,7 +49,17 @@ export interface BehaviourSummary {
   completion_sources: Record<string, number>;
 }
 
+// ACP Intelligence™ Day 7.4 — the adaptation decision the model must commit
+// to, per section 4's vocabulary. This is a required field on the model's
+// OWN structured output only (never persisted into AIAssessment, never sent
+// to mobile) — it exists purely so the change the model is making is
+// inspectable via logAdaptationStage, without asking the model to justify
+// itself in free text the server would have to trust.
+export type AdaptationDecision = 'keep' | 'progress' | 'simplify' | 'rebalance' | 'adjust';
+export const ADAPTATION_DECISION_VALUES = new Set<AdaptationDecision>(['keep', 'progress', 'simplify', 'rebalance', 'adjust']);
+
 export interface WeeklyAdaptationRaw {
+  decision: AdaptationDecision;
   review: WeeklyReview;
   recommendation: { approach: 'self_directed' | 'guided'; title: string; reason: string };
   starting_plan: { title: string; rationale: string; activities: StartingPlanActivity[] };
@@ -61,6 +73,7 @@ export const WEEKLY_ADAPTATION_JSON_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   properties: {
+    decision: { type: 'string', enum: ['keep', 'progress', 'simplify', 'rebalance', 'adjust'] },
     review: {
       type: 'object',
       additionalProperties: false,
@@ -145,7 +158,7 @@ export const WEEKLY_ADAPTATION_JSON_SCHEMA = {
       required: ['type', 'title', 'reason'],
     },
   },
-  required: ['review', 'recommendation', 'starting_plan', 'weekly_focus', 'next_steps', 'support_opportunities', 'nutrition_focus'],
+  required: ['decision', 'review', 'recommendation', 'starting_plan', 'weekly_focus', 'next_steps', 'support_opportunities', 'nutrition_focus'],
 } as const;
 
 // Compact by design, same discipline as onboarding's SYSTEM_PROMPT — every
@@ -156,6 +169,24 @@ REVIEW
 - Base "review" only on the given facts. State what went well and what was difficult, factually and encouragingly — never guilt-oriented, never implying failure.
 - "wins": genuine positives only, at most ${MAX_WINS}; an empty array is fine if there truly are none.
 - If completed_known_minutes/has_known_duration is false, do not claim an exact number of minutes were trained — refer to sessions completed instead.
+
+DECISION — "decision" must be exactly one of: keep, progress, simplify, rebalance, adjust
+- keep: the plan is broadly working; minor wording/scheduling differences do not count as a change.
+- progress: evidence supports a modest increase in challenge/volume/duration — still bound by the rules below.
+- simplify: adherence or fit evidence shows the plan is too difficult or burdensome to execute — shorten or reduce complexity, never as a punishment for missed sessions.
+- rebalance: overall workload can stay similar while day/category distribution changes (e.g. move a session to a day that works better, redistribute recovery).
+- adjust: a real, evidence-grounded change that doesn't cleanly fit the above — use sparingly.
+- If the evidence does not clearly justify a change, choose keep. ACP should not change a plan merely to appear active — continuity is itself a good outcome.
+
+ADHERENCE / EXECUTABILITY PRECEDENCE
+- A positive outcome trend never, on its own, justifies changing the plan. When adherence is low, first ask whether the current plan is actually executable.
+- Low adherence with a positive outcome: do not progress, and do not restructure (rebalance) merely because the outcome moved in the goal's direction. Prefer keep when the current structure should simply be stabilised; prefer simplify when the plan is clearly too difficult or burdensome to execute. Choose rebalance only when there is specific evidence that the schedule or category distribution itself is the problem.
+- Outcome evidence is observational: it can support keeping a plan, but it does not prove the workload should increase, the structure should change, or that any single activity caused the result.
+
+RECOVERY PRECEDENCE
+- High adherence is not, by itself, evidence for progression.
+- If demanding sessions are closely scheduled, or the recovery guidance in RELEVANT ACP KNOWLEDGE points to poor spacing: do not add workload just because the sessions were completed. First evaluate whether the existing workload should be redistributed — keep is valid when the overall programme should stay stable, rebalance is valid when session spacing should change. Choose progress only when session spacing is already appropriate.
+- This concerns scheduling and workload distribution, not injury or medical assessment — make no medical claims.
 
 ADAPTATION — prefer small changes over large ones, never overreact to one week
 - Completing most of the plan (e.g. 3 of 4) is a good week — do not restructure it.
@@ -176,6 +207,18 @@ OUTCOME EVIDENCE (if provided) — already-computed weight/body-composition tren
 - When adherence is low, prioritize improving plan fit and consistency before increasing difficulty, regardless of what the outcome trend shows.
 - When adherence is high and the outcome trend already moves in the goal's intended direction, prefer keeping the plan stable or making only small, conservative progression.
 
+EXECUTION EVIDENCE (if provided) — already-computed facts about how this user's week actually went, beyond a binary "completed"
+- Completion alone does not prove the difficulty was appropriate: a session completed at "too_hard", or only partially, is a different signal from one completed at "about_right".
+- Partial completion is useful positive evidence, not the same as a skip — never treat it as a missed session.
+- Repeated "too_hard" feedback favours improving executability before any progression; repeated "too_easy" can support a small, conservative progression only when the other evidence also supports it.
+- Repeated time-related skips favour fitting the plan to the user's available time (shorter or fewer sessions), not removing an activity type outright.
+- One isolated feedback event is not a pattern — do not drive a meaningful adaptation from a single "too_hard"/"too_easy"/skip.
+- This evidence is observational: it does not license a medical inference, and it does not override the user's goal or the deterministic rules in this prompt.
+
+RELEVANT ACP KNOWLEDGE (if provided) — general training/recovery/nutrition/coaching guidance, not specific to this user
+- This is contextual background, never a source of facts about this user. It never overrides the user's own goal, completion evidence, outcome evidence, or the deterministic rules in this prompt — if it ever seems to conflict with the evidence above, the evidence above wins.
+- Use it only to help choose a well-reasoned adaptation among the options the evidence already supports — never as a reason to invent a change the evidence itself doesn't call for.
+
 APPROACH & SUPPORT (independent of each other, never mutually exclusive — see onboarding rules)
 - Re-assess "approach" (self_directed/guided) and support_opportunities from the current facts; do not just copy last week's values unless they still apply.
 - personal_trainer HIGH: beginner/new experience and at least one of confidence/knowledge/accountability is a barrier; OR two or more of confidence/knowledge/accountability/consistency materially limit execution. MEDIUM: some experience but wants more structure, or motivation/consistency/accountability applies more lightly.
@@ -184,6 +227,13 @@ APPROACH & SUPPORT (independent of each other, never mutually exclusive — see 
 NUTRITION FOCUS
 - Choose exactly ONE of: protein_consistency, fibre, pre_training_energy, post_training_recovery — whichever single behaviour would help most this week given the goal and barriers.
 - This is intent only, not a nutrient value — never invent a specific gram/calorie amount; real foods and their real nutrient data come from ACP's own database afterward.
+
+TRAINING SCHEDULE PREFERENCE (only if "preferred training days" are given below)
+- These are weekdays the user themselves stated they prefer to train on. Strongly respect them: place next week's activities on those days and keep the other days free, and aim for roughly that many active days.
+- Do NOT assume every preferred day needs a demanding session — a sensible structure interleaves harder days with a lighter cardio / mobility / recovery day. Consecutive preferred days are fine when handled this way; use intensity and category, not omission of days, to manage load.
+- More preferred days is NOT a reason to increase session count beyond the schedule or to add total minutes — keep within the weekly time budget and the magnitude limits; distribute the budget across the preferred days as shorter sessions if needed.
+- All other rules still apply: time budget, adaptation magnitude, adherence/executability precedence, recovery precedence, and continuity are unchanged by this preference.
+- This is the user's stated preference, not a behavioural signal. Never rewrite or narrow it because adherence was low or sessions were skipped — when the evidence says the workload is too much, adapt the PLAN (shorter/lighter sessions on the same preferred days), not the stated preference.
 
 PLAN
 - Produce next week's activities using the same day/category/activity/duration_minutes/intensity/title/description fields as before. Respect the given weekly time budget and the user's preferred activities/existing categories — never invent an obscure activity type.
@@ -200,6 +250,9 @@ export function buildWeeklyAdaptationUserPrompt(input: {
   experience: unknown;
   barriers: unknown;
   preferredActivities: unknown;
+  // Beta Feedback #002 — user-stated preferred training weekdays (any form;
+  // sanitised here). Empty/absent ⇒ no schedule section, behaviour unchanged.
+  preferredTrainingDays?: unknown;
   weeklyMinutesBudget: number;
   previousWeeklyFocus: unknown;
   previousSupportOpportunities: unknown;
@@ -214,12 +267,31 @@ export function buildWeeklyAdaptationUserPrompt(input: {
     patterns: { type: string; subject: string; confidence: string; evidence: string }[];
     outcomes?: { type: string; metric: string; confidence: string; evidence: string }[];
   } | null;
+  // Day 7.4 — compact, pre-formatted "RELEVANT ACP KNOWLEDGE" block from
+  // knowledge.ts's buildCompactKnowledgeContext(). Already retrieved,
+  // filtered to approved-only, and diversified BEFORE this function ever
+  // runs (see knowledge.ts/route.ts) — this function only places it as its
+  // own clearly separated section, never merges it into user-evidence prose.
+  knowledgeContext?: string | null;
+  // Day 9 — compact, pre-formatted "EXECUTION EVIDENCE" block from
+  // execution.ts's buildCompactExecutionContext(). Bounded counts only
+  // (planned/completed/partial/skipped, difficulty tallies, skip-reason
+  // tallies) — never raw event rows, IDs or timestamps. Empty string for a
+  // legacy binary-only week, which then changes nothing about the prompt.
+  executionContext?: string | null;
 }): string {
   const longitudinalSection = input.longitudinalContext && input.longitudinalContext.patterns.length > 0
     ? `\n\nLongitudinal coaching evidence from your last ${input.longitudinalContext.weeks_observed} completed weeks (JSON) — patterns that have consistently held, not just this week:\n${JSON.stringify(input.longitudinalContext.patterns)}`
     : '';
   const outcomeSection = input.longitudinalContext?.outcomes && input.longitudinalContext.outcomes.length > 0
     ? `\n\nOutcome evidence from the user's own logged measurements (JSON) — already-computed trends, not raw readings:\n${JSON.stringify(input.longitudinalContext.outcomes)}`
+    : '';
+  const executionSection = input.executionContext ? `\n\n${input.executionContext}` : '';
+  const knowledgeSection = input.knowledgeContext ? `\n\n${input.knowledgeContext}` : '';
+
+  const trainingDays = sanitizeTrainingDays(input.preferredTrainingDays);
+  const trainingScheduleSection = trainingDays.length >= 2
+    ? `\n\nPreferred training days (user-stated, ${trainingDays.length} days/week): ${formatTrainingDaysForPrompt(trainingDays)}. Strongly respect this: put next week's activities on these days and keep the others free. Do not add total minutes or session count because of it, do not make every day demanding, and do not narrow this preference because of low adherence — adapt the plan, not the preference.`
     : '';
 
   return `User context (JSON): goal is their primary fitness goal; experience is their strength-training experience; barriers are what they said would make progress difficult; preferredActivities are activities they're open to.
@@ -228,13 +300,13 @@ ${JSON.stringify({
     goal: input.goal, experience: input.experience, barriers: input.barriers, preferredActivities: input.preferredActivities,
   })}
 
-Weekly available time budget: approximately ${input.weeklyMinutesBudget} minutes total. The sum of all "starting_plan.activities[].duration_minutes" must not exceed this.
+Weekly available time budget: approximately ${input.weeklyMinutesBudget} minutes total. The sum of all "starting_plan.activities[].duration_minutes" must not exceed this.${trainingScheduleSection}
 
 Previous week's focus (JSON): ${JSON.stringify(input.previousWeeklyFocus)}
 Previous support opportunities (JSON): ${JSON.stringify(input.previousSupportOpportunities)}
 
 Last week's actual behaviour, already computed in code (JSON) — interpret, do not recompute:
-${JSON.stringify(input.behaviourSummary)}${longitudinalSection}${outcomeSection}
+${JSON.stringify(input.behaviourSummary)}${executionSection}${longitudinalSection}${outcomeSection}${knowledgeSection}
 
 Produce the weekly review and next week's plan now.`;
 }
@@ -275,6 +347,8 @@ export function validateWeeklyAdaptation(x: unknown): x is WeeklyAdaptationRaw {
   if (!x || typeof x !== 'object') return false;
   const a = x as Record<string, unknown>;
 
+  if (typeof a.decision !== 'string' || !ADAPTATION_DECISION_VALUES.has(a.decision as AdaptationDecision)) return false;
+
   const review = a.review as Record<string, unknown> | undefined;
   if (!review || typeof review.headline !== 'string' || !review.headline.trim()) return false;
   if (typeof review.summary !== 'string' || !review.summary.trim()) return false;
@@ -307,6 +381,39 @@ export function validateWeeklyAdaptation(x: unknown): x is WeeklyAdaptationRaw {
   return true;
 }
 
+// ── Beta Feedback #003 — explicit future-plan regeneration eligibility ──────
+// A normal weekly-adaptation call stays strictly idempotent per target week.
+// This is the ONE additional, explicit intent that lets a user rebuild an
+// already-prepared FUTURE plan after they deliberately changed a planning
+// preference (e.g. preferred_training_days). Pure decision, unit-testable,
+// separate from the route's Supabase plumbing.
+export interface FutureRegenerationContext {
+  /** The `regenerateFuturePlan` flag from the (authenticated) request body. */
+  regenerateFuturePlan: unknown;
+  /** True when nextWeekStart > server's today — i.e. the target week has not started. */
+  isAdvanceGeneration: boolean;
+  /** status of the existing fitness_plans row for the target week, if any. */
+  existingStatus: string | null | undefined;
+  /** True when this same call is about to PROMOTE the scheduled plan (week has begun). */
+  shouldPromote: boolean;
+}
+
+/**
+ * Regeneration is accepted ONLY when every condition holds (spec §Idempotency):
+ *   1. the caller explicitly asked for it (`regenerateFuturePlan === true`);
+ *   2. the target week is still in the future (never replaces an active week — §Current week protection);
+ *   3. an already-prepared plan exists for that week AND it is still 'scheduled';
+ *   4. this call is not simultaneously a promotion.
+ * (Authentication is enforced earlier in the route, unconditionally.)
+ * Any normal call — no flag — is unaffected and remains idempotent.
+ */
+export function isFutureRegenerationEligible(ctx: FutureRegenerationContext): boolean {
+  return ctx.regenerateFuturePlan === true
+    && ctx.isAdvanceGeneration === true
+    && ctx.existingStatus === 'scheduled'
+    && ctx.shouldPromote === false;
+}
+
 // ── Adaptation magnitude guardrail (Part 38) ────────────────────────────────
 // The user's stated time budget (enforceTimeBudget) is already a hard
 // ceiling; this additionally prevents a big swing RELATIVE to what last
@@ -333,6 +440,74 @@ export function enforceAdaptationMagnitude(
     trimmed.pop();
   }
   return trimmed;
+}
+
+// ── Support-opportunity eligibility gate (Day 7.5C, Correction A) ───────────
+// The Day 7.5B live baseline showed A1: a no-barrier, high-adherence,
+// positive-outcome beginner where the model emitted two support_opportunities
+// (personal_trainer + nutrition) and nothing removed them — enforceSupportLogic
+// only ever ADDS a warranted personal_trainer:high, it never suppresses an
+// unwarranted one. This is a deterministic guardrail gap, not a prompt-wording
+// gap, so it is fixed deterministically here.
+export interface AdaptationSupportContext {
+  strengthExperience: unknown;
+  barriers: unknown;
+}
+
+const NUTRITION_SUPPORT_BARRIER = 'nutrition';
+
+/**
+ * Answers only one question: is this TYPE of support allowed to appear at
+ * all, given the user's deterministic context? Never ranks providers, never
+ * reads availability or commercial data (there is none in scope here), never
+ * duplicates the mobile Day 4 professional-support keyword scorer.
+ *
+ * - personal_trainer: survives only when the same experience+barrier rule
+ *   that would deterministically ADD a personal_trainer:high entry is met
+ *   (isDeterministicPtWarranted). Beginner experience on its own, a
+ *   build_muscle goal, high adherence, PT availability, or "personal_training"
+ *   as a mere preferred activity are all explicitly NOT sufficient.
+ * - nutrition: survives only when nutrition is a stated barrier. A goal
+ *   where nutrition classically matters (lose_weight / build_muscle), or the
+ *   model's own nutrition_focus intent, is NOT a professional-nutritionist
+ *   signal — a nutrition focus and a nutritionist recommendation are
+ *   separate concepts.
+ */
+export function isSupportOpportunityEligible(
+  opportunity: SupportOpportunity,
+  context: AdaptationSupportContext,
+): boolean {
+  const barriers = Array.isArray(context.barriers)
+    ? context.barriers.filter((b): b is string => typeof b === 'string')
+    : [];
+  if (opportunity.type === 'personal_trainer') {
+    return isDeterministicPtWarranted({ strengthExperience: context.strengthExperience, barriers });
+  }
+  if (opportunity.type === 'nutrition') {
+    return barriers.includes(NUTRITION_SUPPORT_BARRIER);
+  }
+  return false;
+}
+
+/**
+ * Weekly-adaptation support guardrail (Day 7.5C):
+ *   1. Drop every model-generated support_opportunity that fails the
+ *      deterministic eligibility gate above.
+ *   2. Then run the existing shared additive backstop (enforceSupportLogic),
+ *      so a genuinely warranted personal_trainer:high is still added when
+ *      the model omitted it.
+ * recommendation.approach is never read or written here — an empty support
+ * list does not force "guided".
+ */
+export function enforceAdaptationSupportLogic(
+  assessment: AIAssessment,
+  context: AdaptationSupportContext,
+): AIAssessment {
+  const eligible = (assessment.support_opportunities ?? []).filter(o => isSupportOpportunityEligible(o, context));
+  return enforceSupportLogic(
+    { ...assessment, support_opportunities: eligible },
+    { strengthExperience: context.strengthExperience, barriers: context.barriers },
+  );
 }
 
 // ── Continuity backstop (Day 5.5, Problem A) ────────────────────────────────
@@ -482,13 +657,30 @@ export function preserveMeaningfulActivityContinuity(params: {
 // exactly one week using the same dating helpers as every other plan
 // (never derived from "today"), and carries forward support_opportunities/
 // nutrition_focus rather than inventing anything new (Part 30/31).
-export function buildDeterministicFallbackPlan(current: AIAssessment, nextWeekStartDateIso: string, weeklyMinutesBudget: number): AIAssessment {
+export function buildDeterministicFallbackPlan(
+  current: AIAssessment,
+  nextWeekStartDateIso: string,
+  weeklyMinutesBudget: number,
+  // Beta Feedback #002 §19 — the fallback must not silently destroy a
+  // user's preferred weekly structure. When a preference is set, the
+  // carried-forward activities are moved onto the preferred weekdays
+  // (nothing else changes: same activities, durations, categories,
+  // intensities, count — no new coaching logic, still conservative).
+  preferredTrainingDays?: unknown,
+): AIAssessment {
   const carriedForwardReview: WeeklyReview = {
     headline: 'Your next week is ready.',
     summary: "We've carried your current structure forward so you can keep moving.",
     wins: [],
     focus_next_week: current.weekly_focus?.title ?? 'Keep showing up on your planned days.',
   };
+
+  const preferredDays = sanitizeTrainingDays(preferredTrainingDays);
+  const carriedActivities = current.starting_plan.activities.map((a, i) => ({
+    day: preferredDays.length >= 2 ? capitalize(preferredDays[i % preferredDays.length]) : a.day,
+    category: a.category, activity: a.activity, duration_minutes: a.duration_minutes,
+    intensity: a.intensity, title: a.title, description: a.description,
+  }));
 
   const draft: AIAssessment = {
     headline: carriedForwardReview.headline,
@@ -501,11 +693,9 @@ export function buildDeterministicFallbackPlan(current: AIAssessment, nextWeekSt
       rationale: current.starting_plan.rationale,
       // Validated against the CURRENT weekly time budget (Part 13's
       // "VALIDATE TIME BUDGET" step) — the user's stated available time may
-      // have changed since the previous plan was generated.
-      activities: enforceTimeBudget(current.starting_plan.activities.map(a => ({
-        day: a.day, category: a.category, activity: a.activity, duration_minutes: a.duration_minutes,
-        intensity: a.intensity, title: a.title, description: a.description,
-      })), weeklyMinutesBudget),
+      // have changed since the previous plan was generated. Never grows the
+      // plan: preferred-day redistribution only reassigns `day`.
+      activities: enforceTimeBudget(carriedActivities, weeklyMinutesBudget),
     },
     weekly_focus: current.weekly_focus,
     next_steps: current.next_steps,
@@ -515,6 +705,10 @@ export function buildDeterministicFallbackPlan(current: AIAssessment, nextWeekSt
   };
 
   return attachPlanDates(draft, nextWeekStartDateIso);
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 export type { AIAssessment, StartingPlan, StartingPlanActivity, ActivityCategory, ActivityIntensity };

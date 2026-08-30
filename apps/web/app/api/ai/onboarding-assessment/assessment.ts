@@ -345,6 +345,57 @@ const WEEKDAY_INDEX: Record<string, number> = {
   sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6,
 };
 
+// ── Training schedule preference (Beta Feedback #002) ───────────────────────
+// The ONE canonical weekday representation for the training-schedule
+// preference: lowercase full names, Monday-first order (the plan week is
+// Monday–Sunday everywhere else in ACP). Every write path normalises to this
+// before persisting; the DB CHECK on fitness_profile.preferred_training_days
+// is the backstop. Never introduce Mon / Monday / MONDAY as competing forms.
+export const CANONICAL_WEEKDAYS = [
+  'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
+] as const;
+export type CanonicalWeekday = (typeof CANONICAL_WEEKDAYS)[number];
+
+const WEEKDAY_ALIAS: Record<string, CanonicalWeekday> = (() => {
+  const map: Record<string, CanonicalWeekday> = {};
+  for (const d of CANONICAL_WEEKDAYS) {
+    map[d] = d;
+    map[d.slice(0, 3)] = d; // mon, tue, wed, ...
+  }
+  return map;
+})();
+
+/** "Monday" / "mon" / " MON. " / "Tues" → "monday" | "tuesday"; unknown → null. */
+export function normalizeWeekdayName(input: unknown): CanonicalWeekday | null {
+  if (typeof input !== 'string') return null;
+  const key = input.trim().toLowerCase().replace(/[^a-z]/g, '');
+  if (!key) return null;
+  return WEEKDAY_ALIAS[key] ?? WEEKDAY_ALIAS[key.slice(0, 3)] ?? null;
+}
+
+/**
+ * Cleans an arbitrary preferred-training-days input into the canonical form
+ * actually stored/sent: each entry normalised, unknown entries dropped,
+ * duplicates removed, sorted Monday-first. Does NOT clamp the count — the
+ * 2–6 range is enforced by the DB CHECK and the editing UI; an out-of-range
+ * or empty result here simply means "no usable preference", which callers
+ * treat exactly like NULL.
+ */
+export function sanitizeTrainingDays(input: unknown): CanonicalWeekday[] {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set<CanonicalWeekday>();
+  for (const raw of input) {
+    const day = normalizeWeekdayName(raw);
+    if (day) seen.add(day);
+  }
+  return CANONICAL_WEEKDAYS.filter(d => seen.has(d));
+}
+
+/** ["monday","wednesday"] → "Monday, Wednesday" for prompt prose. */
+export function formatTrainingDaysForPrompt(days: CanonicalWeekday[]): string {
+  return days.map(d => d.charAt(0).toUpperCase() + d.slice(1)).join(', ');
+}
+
 function toIsoDate(d: Date): string {
   return d.toISOString().split('T')[0];
 }
@@ -478,6 +529,25 @@ function buildDeterministicPtReason(barriers: string[]): string {
 }
 
 /**
+ * The single deterministic condition under which a personal_trainer:high
+ * opportunity is warranted from the user's own experience + barriers alone:
+ * beginner/new experience + at least one of confidence/knowledge/
+ * accountability, OR two-or-more of confidence/knowledge/accountability/
+ * consistency. Shared so both the onboarding backstop below and the Day 7.5C
+ * weekly-adaptation support-eligibility filter (adaptation.ts's
+ * enforceAdaptationSupportLogic) ask the exact same question — a stated
+ * "personal_training" preference, a build_muscle goal, high adherence, or
+ * provider availability are all deliberately NOT inputs here.
+ */
+export function isDeterministicPtWarranted(onboardingAnswers: unknown): boolean {
+  const answers = (onboardingAnswers && typeof onboardingAnswers === 'object') ? onboardingAnswers as Record<string, unknown> : {};
+  const barriers = presentExecutionBarriers(answers);
+  const beginner = isBeginnerExperience(answers);
+  return (beginner && barriers.some(b => (PT_BEGINNER_TRIGGER_BARRIERS as readonly string[]).includes(b)))
+    || barriers.length >= 2;
+}
+
+/**
  * At minimum: beginner/new experience + at least one of confidence/
  * knowledge/accountability, OR two-or-more of confidence/knowledge/
  * accountability/consistency — either case must yield personal_trainer at
@@ -488,11 +558,8 @@ function buildDeterministicPtReason(barriers: string[]): string {
 export function enforceSupportLogic(assessment: AIAssessment, onboardingAnswers: unknown): AIAssessment {
   const answers = (onboardingAnswers && typeof onboardingAnswers === 'object') ? onboardingAnswers as Record<string, unknown> : {};
   const barriers = presentExecutionBarriers(answers);
-  const beginner = isBeginnerExperience(answers);
 
-  const needsHighPt = (beginner && barriers.some(b => (PT_BEGINNER_TRIGGER_BARRIERS as readonly string[]).includes(b)))
-    || barriers.length >= 2;
-  if (!needsHighPt) return assessment;
+  if (!isDeterministicPtWarranted(onboardingAnswers)) return assessment;
 
   const existing = assessment.support_opportunities ?? [];
   const existingPt = existing.find(o => o.type === 'personal_trainer');
@@ -518,8 +585,14 @@ export const SYSTEM_PROMPT = `You are ACP Intelligence™, the ACP fitness plann
 USER FIT
 - Use only the given onboarding data; never invent facts.
 - Respect the stated goal, experience level, and barriers.
-- Available weekly time (given below as a maximum number of minutes) is a hard constraint — the sum of all activities' duration_minutes must not exceed it. Prefer fewer/shorter sessions over more.
+- Available weekly time (given below as a maximum number of minutes) is a hard constraint — the sum of all activities' duration_minutes must not exceed it. When no preferred training days are given, prefer fewer/shorter sessions over more.
 - Strongly prefer the user's stated preferred activities. Do not introduce one they didn't mention (e.g. swimming, boxing, yoga) unless their preferences genuinely cannot support the goal at all.
+
+TRAINING SCHEDULE (only if "preferred training days" are given below)
+- These are the weekdays the user prefers to train. Treat them as a STRONG preference: put the week's activities on those days and leave the other days free, and aim for roughly that many active days.
+- This is NOT an instruction to make every preferred day a demanding session. Build a sensible structure across them using activity type, intensity and category — e.g. harder strength/cardio days interleaved with a lighter cardio, mobility or recovery day.
+- More preferred days does NOT mean more total time. Distribute the SAME weekly time budget across the preferred days (shorter sessions), never exceed it, and never treat extra days as a reason to add volume.
+- It remains a preference, not an override: if the time budget, the user's experience, or safety make honouring every day infeasible, stay within those limits and get as close to the preferred structure as is sensible.
 
 BARRIERS (change the plan itself, not just the recommendation)
 - time → fewer/shorter sessions, simpler schedule.
@@ -565,16 +638,26 @@ OUTPUT
  * separate label-translation layer needs to be duplicated/maintained here.
  */
 export function buildUserPrompt(onboardingAnswers: unknown, sportHoursPerWeek?: unknown): string {
-  const activityLevel = (onboardingAnswers as Record<string, unknown> | null)?.activityLevel;
+  const answers = (onboardingAnswers as Record<string, unknown> | null) ?? {};
+  const activityLevel = answers.activityLevel;
   const budget = getWeeklyMinutesBudget(activityLevel, sportHoursPerWeek);
   const budgetSource = typeof sportHoursPerWeek === 'number' && Number.isFinite(sportHoursPerWeek)
     ? `(the user's own stated ${sportHoursPerWeek} training hours/week)`
     : '(estimated from their current activity level — no explicit availability was given)';
-  return `Onboarding data (JSON): goal is their primary fitness goal; startingWeightKg/goalWeightKg/goalTargetDate apply to weight-related goals; activityLevel describes current activity habits; strengthExperience describes strength-training experience; goalDetails.health_focus is what they most want to improve; barriers are what they expect to make progress difficult; preferredActivities are activities they're open to doing.
+
+  // Beta Feedback #002 — user-stated preferred training days, if any. Placed
+  // as its own clearly-labelled line so the model reads it as a structured
+  // preference, never merged into the free-form onboarding JSON above.
+  const trainingDays = sanitizeTrainingDays(answers.preferredTrainingDays);
+  const trainingScheduleLine = trainingDays.length >= 2
+    ? `\n\nPreferred training days (user-stated): ${formatTrainingDaysForPrompt(trainingDays)} — that is ${trainingDays.length} days/week. Organise the week's activities onto these days and keep the others free. Distribute the time budget above across them (shorter sessions if needed); do not add total minutes or make every day a demanding session. This is a strong preference, still bounded by the time budget, experience level and safety.`
+    : '';
+
+  return `Onboarding data (JSON): goal is their primary fitness goal; startingWeightKg/goalWeightKg/goalTargetDate apply to weight-related goals; activityLevel describes current activity habits; strengthExperience describes strength-training experience; goalDetails.health_focus is what they most want to improve; barriers are what they expect to make progress difficult; preferredActivities are activities they're open to doing; preferredTrainingDays (if present) are the weekdays they prefer to train on.
 
 ${JSON.stringify(onboardingAnswers)}
 
-Weekly available time budget: approximately ${budget} minutes total ${budgetSource}. The sum of all "starting_plan.activities[].duration_minutes" must not exceed this.
+Weekly available time budget: approximately ${budget} minutes total ${budgetSource}. The sum of all "starting_plan.activities[].duration_minutes" must not exceed this.${trainingScheduleLine}
 
 Produce the assessment now.`;
 }

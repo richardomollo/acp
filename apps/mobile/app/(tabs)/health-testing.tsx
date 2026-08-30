@@ -1,6 +1,6 @@
 import { StyleSheet, View, TouchableOpacity } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
-import { useRouter, Stack } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { palette, radii } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,28 +10,31 @@ export default function HealthTestingScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ headerShown: false }} />
       <View style={s.root}>
         <SafeAreaView edges={['top']} style={s.header}>
-          <TouchableOpacity style={s.backBtn} onPress={() => router.back()} hitSlop={12}>
-            <Ionicons name="arrow-back" size={22} color={palette.ink900} />
-          </TouchableOpacity>
+          {router.canGoBack() && (
+            <TouchableOpacity style={s.backBtn} onPress={() => router.back()} hitSlop={12}>
+              <Ionicons name="arrow-back" size={22} color={palette.ink900} />
+            </TouchableOpacity>
+          )}
           <View style={{ flex: 1 }}>
             <ThemedText style={s.headerTitle}>Health Testing</ThemedText>
           </View>
         </SafeAreaView>
 
         <View style={s.content}>
-          <View style={s.iconWrap}>
-            <Ionicons name="flask-outline" size={40} color={palette.blue600} />
+          {/* Moved here from the Home screen — the intro to Health Testing
+              now lives at the top of this page. */}
+          <View style={s.card}>
+            <ThemedText style={s.cardEyebrow}>Health Testing</ThemedText>
+            <ThemedText style={s.cardTitle}>
+              Comprehensive health insights through lab testing
+            </ThemedText>
+            <ThemedText style={s.cardBody}>
+              Hormone Panel and Nutritional Deficiency Tests processed by certified laboratories
+              with home collection available in Nairobi, Mombasa, and Kisumu.
+            </ThemedText>
           </View>
-          <ThemedText style={s.title}>
-            Comprehensive health insights through lab testing
-          </ThemedText>
-          <ThemedText style={s.desc}>
-            All tests are processed by certified laboratories, with home collection
-            available in Nairobi, Mombasa, and Kisumu.
-          </ThemedText>
 
           <View style={s.notice}>
             <Ionicons name="information-circle-outline" size={18} color={palette.gray450} />
@@ -59,13 +62,20 @@ const s = StyleSheet.create({
   },
   headerTitle: { fontSize: 20, fontWeight: '800', letterSpacing: -0.3, color: palette.ink900 },
 
-  content: { flex: 1, alignItems: 'center', paddingHorizontal: 32, paddingTop: 48 },
-  iconWrap: {
-    width: 84, height: 84, borderRadius: 42, backgroundColor: palette.blue50,
-    alignItems: 'center', justifyContent: 'center', marginBottom: 20,
+  content: { flex: 1, paddingHorizontal: 20, paddingTop: 20 },
+
+  card: {
+    backgroundColor: palette.surfaceMuted,
+    borderRadius: radii['2xl'],
+    padding: 20,
+    marginBottom: 16,
   },
-  title: { fontSize: 22, fontWeight: '800', color: palette.ink900, textAlign: 'center', marginBottom: 10 },
-  desc: { fontSize: 14, color: palette.gray450, textAlign: 'center', lineHeight: 20, marginBottom: 32 },
+  cardEyebrow: {
+    fontSize: 12, fontWeight: '700', color: palette.gray300,
+    textTransform: 'uppercase', letterSpacing: 1, marginBottom: 16,
+  },
+  cardTitle: { fontSize: 18, fontWeight: '700', color: palette.ink700 },
+  cardBody: { fontSize: 14, color: palette.ink600, marginTop: 6, lineHeight: 20 },
 
   notice: {
     flexDirection: 'row', alignItems: 'center', gap: 8,

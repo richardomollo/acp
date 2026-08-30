@@ -13,19 +13,35 @@ import { ThemedText } from '@/components/themed-text';
 import { supabase } from '@/lib/supabase';
 import { authService } from '@/services/auth';
 import { getStravaStatus } from '@/services/strava';
-import { buildPlanSummary, buildFallbackWeekPlan, EMPTY_ANSWERS, type OnboardingAnswers, type PlanSummary } from '@/lib/onboarding';
+import { buildPlanSummary, buildFallbackWeekPlan, sanitizeTrainingDays, EMPTY_ANSWERS, type OnboardingAnswers, type PlanSummary } from '@/lib/onboarding';
 import {
   fetchOnboardingAssessment, deriveCategoryCounts, isValidAssessment, sortSupportOpportunities,
-  CATEGORY_LABEL, type AIAssessment,
+  CATEGORY_LABEL, type AIAssessment, type StartingPlanActivity,
 } from '@/lib/ai-assessment';
-import { getFulfilmentForActivity, nextDateForWeekday, type PlanActivityFulfilment, type MarketplaceInventoryItem } from '@/lib/fulfilment';
+import { buildPlanExplanation, compareWeeklyPlans, describePlanChanges } from '@/lib/coaching';
+import {
+  isFeedbackEligible, recordActivityFeedback, recordActivitySkip, clearActivityExecution,
+  DIFFICULTY_OPTIONS, SKIP_REASON_OPTIONS,
+  type PlanActivityExecutionRow, type DifficultyFeedback, type SkipReason,
+} from '@/lib/execution';
+import { isExecutionFeedbackEnabled } from '@/lib/flags';
+
+const EXECUTION_FEEDBACK_ON = isExecutionFeedbackEnabled();
+import { getSelfDirectedSource, normalizeActivity, nextDateForWeekday, type PlanActivityFulfilment } from '@/lib/fulfilment';
 import {
   getCompletionProgress, findStravaCandidates, findExerciseDbCandidates, findAcpBookingCandidates, findHealthKitCandidates,
   type PlanActivityCompletion, type CompletionCandidate, type StravaActivityRow, type WorkoutHistoryRow, type AcpCheckedInRow, type HealthKitWorkoutRow,
 } from '@/lib/completion';
 import { matchProfessionalProviders, type ProviderMatch } from '@/lib/professional-support';
+import { getSupplyCandidates } from '@/lib/supply/orchestration';
+import type { SessionCandidateRow } from '@/lib/supply/session-candidates';
+import type { ProviderCandidateRow } from '@/lib/supply/provider-candidates';
+import type { SupplyUserContext } from '@/lib/supply/types';
 import { ActivityFulfilmentCard } from '@/components/activity-fulfilment-card';
-import { isPlanReadyForReview, buildWeeklyBehaviourSummary, fetchWeeklyAdaptation, fetchPlanDateUpgrade } from '@/lib/weekly-review';
+import {
+  isSundayPlanningWindow, localDateIso, getScheduledNextPlan, buildWeeklyBehaviourSummary,
+  fetchWeeklyAdaptation, fetchPlanDateUpgrade, type ScheduledNextPlan,
+} from '@/lib/weekly-review';
 import { findFoodsForNutritionFocus, type FoodCandidate, type FoodSuggestion } from '@/lib/nutrition-matching';
 import { formatOverallProgress, selectTopInsights, formatEvidenceLine, selectOutcomeInsights, formatOutcomeEvidenceLine, type CoachingMemoryRow } from '@/lib/coaching-memory';
 import { palette, radii, fontSize } from '@/constants/theme';
@@ -50,6 +66,7 @@ export default function MyPlanScreen() {
   // card (approach chips etc.) only shows when there's no AI assessment.
   const [planSummary, setPlanSummary] = useState<PlanSummary | null>(null);
   const [showIntelligenceInfo, setShowIntelligenceInfo] = useState(false);
+  const [showWeekInfo, setShowWeekInfo] = useState(false);
   // Day 3 fulfilment layer — populated AFTER the canonical plan is already
   // rendered (see the effect below), never blocking it. Empty by default;
   // per-activity entries are added only once genuinely available, and any
@@ -102,10 +119,33 @@ export default function MyPlanScreen() {
   const [generatingReview, setGeneratingReview] = useState(false);
   const [foodSuggestions, setFoodSuggestions] = useState<FoodSuggestion[]>([]);
   const [cuisinePreference, setCuisinePreference] = useState<string | null>(null);
+  const [preferredLocation, setPreferredLocation] = useState<string | null>(null);
   // Day 6 — already-computed longitudinal coaching evidence (see
   // lib/coaching-memory.ts). A plain read of the coaching_memory table;
   // this screen never aggregates history itself.
   const [coachingMemory, setCoachingMemory] = useState<CoachingMemoryRow[]>([]);
+  // Day 8 — explainability inputs (previous plan + its completion). Loaded
+  // non-blocking alongside coaching memory; absent = no "What changed?" card.
+  const [previousActivities, setPreviousActivities] = useState<StartingPlanActivity[] | null>(null);
+  const [lastWeekCompletion, setLastWeekCompletion] = useState<{ completed: number; planned: number } | null>(null);
+  const [showWhyPlan, setShowWhyPlan] = useState(false);
+  const [showWhatChanged, setShowWhatChanged] = useState(false);
+  // The ACP Intelligence summary of last week is enough by default; the
+  // itemised "what went well" breakdown is behind a "review in detail" tap.
+  const [showLastWeekDetail, setShowLastWeekDetail] = useState(false);
+  // Day 9 — per-activity execution feedback (plan_activity_execution). Loaded
+  // non-blocking with coaching memory. feedbackFor/skipFor drive the compact
+  // inline prompts; both are fully optional and dismissable.
+  const [executionRows, setExecutionRows] = useState<PlanActivityExecutionRow[]>([]);
+  const [feedbackFor, setFeedbackFor] = useState<number | null>(null);
+  const [skipFor, setSkipFor] = useState<number | null>(null);
+  // Beta Feedback #001 — Sunday next-week preview. nextWeekPlan is the
+  // prepared-but-not-yet-current plan (fitness_plans 'scheduled' row). On My
+  // Plan it only drives the CTA copy that links to the dedicated
+  // /next-week-plan screen; the preview itself lives on that screen.
+  const [nextWeekPlan, setNextWeekPlan] = useState<ScheduledNextPlan | null>(null);
+  const [viewingWeek, setViewingWeek] = useState<'this' | 'next'>('this');
+  const promotedRef = useRef(false);
   // Guards against a second concurrent load() — e.g. the user backgrounds
   // the app mid-generation and useFocusEffect re-fires on return — and backs
   // the independent timeout below, since authService.getSession() and the
@@ -148,7 +188,8 @@ export default function MyPlanScreen() {
           .select(`
             goal, starting_weight_kg, goal_weight_kg, goal_target_date,
             activity_level, experience_level, goal_details, barriers, preferred_activities,
-            cuisine_preference, ai_assessment, ai_assessment_generated_at
+            preferred_training_days,
+            cuisine_preference, ai_assessment, ai_assessment_generated_at, preferred_location
           `)
           .eq('user_id', session.user.id)
           .maybeSingle(),
@@ -173,10 +214,12 @@ export default function MyPlanScreen() {
         goalDetails: data?.goal_details ?? {},
         barriers: data?.barriers ?? [],
         preferredActivities: data?.preferred_activities ?? [],
+        preferredTrainingDays: sanitizeTrainingDays(data?.preferred_training_days),
       };
       setPlanSummary(buildPlanSummary(answers));
       setOnboardingAnswers(answers);
       setCuisinePreference(data?.cuisine_preference ?? null);
+      setPreferredLocation(data?.preferred_location ?? null);
 
       // Validate before trusting a saved row — accounts that generated an
       // assessment before the Day 2 schema change have an old-shaped object
@@ -204,15 +247,59 @@ export default function MyPlanScreen() {
 
         // Day 6 — coaching memory is already fully computed server-side
         // (weekly-adaptation route); this is a plain read, never a
-        // recomputation. Non-blocking, same pattern as the date upgrade
-        // above — the plan itself has already rendered by the time this
-        // resolves either way.
-        supabase
-          .from('coaching_memory')
-          .select('memory_type, subject, confidence, evidence, user_message')
-          .eq('user_id', session.user.id)
-          .eq('active', true)
-          .then(({ data: memoryRows }) => setCoachingMemory((memoryRows ?? []) as CoachingMemoryRow[]));
+        // recomputation. Day 8 — alongside it, the immediately-previous plan
+        // from fitness_plans (+ its completion count) so "What changed?" and
+        // the coaching brief can compare deterministically. Non-blocking,
+        // same pattern as the date upgrade above — the plan itself has
+        // already rendered by the time this resolves, and any failure just
+        // means no "what changed" section (never a crash).
+        (async () => {
+          try {
+            const currentPlanId = data.ai_assessment_generated_at as string;
+            const [{ data: memoryRows }, { data: planRows }, { data: execRows }] = await Promise.all([
+              supabase
+                .from('coaching_memory')
+                .select('memory_type, subject, confidence, evidence, user_message')
+                .eq('user_id', session.user.id)
+                .eq('active', true),
+              supabase
+                .from('fitness_plans')
+                .select('plan_id, assessment, week_start_date')
+                .eq('user_id', session.user.id)
+                .order('week_start_date', { ascending: false })
+                .limit(2),
+              supabase
+                .from('plan_activity_execution')
+                .select('activity_index, execution_status, difficulty, skip_reason, actual_duration_minutes')
+                .eq('user_id', session.user.id)
+                .eq('plan_id', currentPlanId),
+            ]);
+            setCoachingMemory((memoryRows ?? []) as CoachingMemoryRow[]);
+            setExecutionRows((execRows ?? []).map((r: any) => ({
+              activityIndex: r.activity_index, executionStatus: r.execution_status,
+              difficulty: r.difficulty, skipReason: r.skip_reason, actualDurationMinutes: r.actual_duration_minutes,
+            })));
+
+            const prevRow = (planRows ?? []).find(r => r.plan_id !== currentPlanId) ?? null;
+            const prevAssessment = prevRow?.assessment as AIAssessment | undefined;
+            if (prevAssessment?.starting_plan?.activities?.length) {
+              setPreviousActivities(prevAssessment.starting_plan.activities);
+              const { data: prevCompletions } = await supabase
+                .from('plan_activity_completions')
+                .select('activity_index')
+                .eq('user_id', session.user.id)
+                .eq('plan_id', prevRow!.plan_id);
+              const done = new Set((prevCompletions ?? []).map(c => c.activity_index)).size;
+              setLastWeekCompletion({ completed: done, planned: prevAssessment.starting_plan.activities.length });
+            }
+
+            // Beta Feedback #001 — load any prepared-ahead next-week plan.
+            const scheduled = await getScheduledNextPlan(supabase as any, session.user.id);
+            setNextWeekPlan(scheduled);
+          } catch {
+            /* explainability is enhancement-only — never blocks the plan */
+          }
+        })();
 
         return;
       }
@@ -264,6 +351,14 @@ export default function MyPlanScreen() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
+  // Beta Feedback #001 — which plan the plan card renders. "Next week" shows
+  // the prepared 'scheduled' plan read-only (no completion controls); "this
+  // week" is unchanged. Declared here so the fulfilment effect below can
+  // depend on it.
+  const isNextView = viewingWeek === 'next' && !!nextWeekPlan;
+  const shownAssessment = isNextView ? nextWeekPlan!.assessment : assessment;
+  const shownPlanId = isNextView ? nextWeekPlan!.planId : planId;
+
   // Fulfilment + completion enhancement — runs only after the canonical
   // plan (and its planId) exist, fetches each source exactly once per
   // screen visit (not once per activity — avoids N+1), and matches purely
@@ -276,6 +371,63 @@ export default function MyPlanScreen() {
     if (!assessment || !planId || !userId) return;
     let cancelled = false;
 
+    // Beta Feedback #001 — next-week preview: read-only, no completions/
+    // candidates. Supply is matched against each activity's own future
+    // planned_date (session-candidates.ts prefers planActivity.planned_date),
+    // so a Wednesday-next-week yoga session resolves the coming Wednesday.
+    if (isNextView && nextWeekPlan) {
+      (async () => {
+        const todayIso = new Date().toISOString().split('T')[0];
+        const [{ data: sess }, { data: exps }, stravaStatus] = await Promise.all([
+          supabase.from('sessions')
+            .select('id, name, category, date, time, duration_minutes, is_active, spots_left, image_url, gyms(id, name, area, lat, lng)')
+            .gte('date', todayIso).eq('is_active', true),
+          supabase.from('experiences')
+            .select('id, name, category, date, start_time, is_active, spots_left, image_url, gyms(id, name, area, lat, lng)')
+            .gte('date', todayIso).eq('is_active', true),
+          getStravaStatus(),
+        ]);
+        if (cancelled) return;
+        const toVenue = (g: any) => g ? { id: g.id, name: g.name, area: g.area, lat: g.lat, lng: g.lng } : null;
+        const inv: SessionCandidateRow[] = [
+          ...((sess ?? []) as any[]).map((s): SessionCandidateRow => ({
+            id: s.id, type: 'session', name: s.name, category: s.category ?? null, date: s.date ?? null,
+            startTime: s.time ?? null, durationMinutes: s.duration_minutes ?? null, isActive: !!s.is_active,
+            spotsLeft: s.spots_left ?? null, imageUrl: s.image_url ?? null, gym: toVenue(s.gyms),
+          })),
+          ...((exps ?? []) as any[]).map((e): SessionCandidateRow => ({
+            id: e.id, type: 'experience', name: e.name, category: e.category ?? null, date: e.date ?? null,
+            startTime: e.start_time ?? null, durationMinutes: null, isActive: !!e.is_active,
+            spotsLeft: e.spots_left ?? null, imageUrl: e.image_url ?? null, gym: toVenue(e.gyms),
+          })),
+        ];
+        const ctx: SupplyUserContext = {
+          goal: onboardingAnswers.goal, experience: onboardingAnswers.strengthExperience,
+          preferredActivities: onboardingAnswers.preferredActivities, barriers: onboardingAnswers.barriers,
+          location: { text: preferredLocation },
+        };
+        const anchor = new Date();
+        setFulfilments(nextWeekPlan.assessment.starting_plan.activities.map((activity, i): PlanActivityFulfilment => {
+          const key = normalizeActivity(activity.activity || activity.title, activity.category);
+          const candidates = getSupplyCandidates({ userContext: ctx, planActivity: activity, sessionInventory: inv, anchor, limitPerType: 2, overallCap: 2 });
+          return {
+            planActivityIndex: i,
+            selfDirected: getSelfDirectedSource(key, stravaStatus.connected),
+            marketplaceMatches: candidates.map(c => ({
+              id: c.id, type: c.type as 'session' | 'experience', title: c.title, activityType: c.category ?? key,
+              date: (c.startsAt ?? '').split('T')[0], startTime: c.startsAt?.includes('T') ? c.startsAt.split('T')[1] : null,
+              durationMinutes: c.durationMinutes ?? null, partnerName: c.venue?.name ?? null,
+              score: c.scoring.overall, matchReasons: c.reasons,
+              isAlternateDay: !c.reasons.includes('same_day'),
+              navigationTarget: c.navigationTarget as { pathname: string; params: Record<string, string> },
+              imageUrl: c.imageUrl ?? null, priceKes: null,
+            })),
+          };
+        }));
+      })().catch(() => { /* preview fulfilment is best-effort */ });
+      return () => { cancelled = true; };
+    }
+
     (async () => {
       const todayIso = new Date().toISOString().split('T')[0];
       const tenDaysAgoIso = new Date(Date.now() - 10 * 86400000).toISOString().split('T')[0];
@@ -286,12 +438,12 @@ export default function MyPlanScreen() {
       ] = await Promise.all([
         supabase
           .from('sessions')
-          .select('id, name, category, date, time, duration_minutes, is_active, spots_left, image_url, drop_in_price, gyms(name)')
+          .select('id, name, category, date, time, duration_minutes, is_active, spots_left, image_url, drop_in_price, gyms(id, name, area, lat, lng)')
           .gte('date', todayIso)
           .eq('is_active', true),
         supabase
           .from('experiences')
-          .select('id, name, category, date, start_time, price_kes, is_active, spots_left, image_url, gyms(name)')
+          .select('id, name, category, date, start_time, price_kes, is_active, spots_left, image_url, gyms(id, name, area, lat, lng)')
           .gte('date', todayIso)
           .eq('is_active', true),
         getStravaStatus(), // never throws — resolves { connected: false } on failure
@@ -333,24 +485,78 @@ export default function MyPlanScreen() {
       ]);
       if (cancelled) return;
 
-      const inventory: MarketplaceInventoryItem[] = [
-        ...((sessionsRes?.data ?? []) as any[]).map(s => ({
-          id: s.id, type: 'session' as const, name: s.name, category: s.category ?? null,
+      interface RawGymRef { id: string; name: string; area: string | null; lat: number | null; lng: number | null }
+      interface RawSessionRow {
+        id: string; name: string; category: string | null; date: string | null; time: string | null;
+        duration_minutes: number | null; is_active: boolean; spots_left: number | null; image_url: string | null;
+        drop_in_price: number | null; gyms: RawGymRef | null;
+      }
+      interface RawExperienceRow {
+        id: string; name: string; category: string | null; date: string | null; start_time: string | null;
+        is_active: boolean; spots_left: number | null; image_url: string | null; price_kes: number | null; gyms: RawGymRef | null;
+      }
+      const rawSessions = (sessionsRes?.data ?? []) as unknown as RawSessionRow[];
+      const rawExperiences = (experiencesRes?.data ?? []) as unknown as RawExperienceRow[];
+
+      // priceKes lookup by id — kept from the raw fetched rows rather than
+      // threaded through the supply layer, since price is a display-only
+      // concern outside the canonical SupplyCandidate contract (Day 7.3).
+      const priceByItemId = new Map<string, number | null>([
+        ...rawSessions.map((s): [string, number | null] => [s.id, s.drop_in_price ?? null]),
+        ...rawExperiences.map((e): [string, number | null] => [e.id, e.price_kes ?? null]),
+      ]);
+
+      const toVenueRef = (gym: RawGymRef | null) => gym ? { id: gym.id, name: gym.name, area: gym.area, lat: gym.lat, lng: gym.lng } : null;
+      const sessionInventory: SessionCandidateRow[] = [
+        ...rawSessions.map((s): SessionCandidateRow => ({
+          id: s.id, type: 'session', name: s.name, category: s.category ?? null,
           date: s.date ?? null, startTime: s.time ?? null, durationMinutes: s.duration_minutes ?? null,
-          gymName: s.gyms?.name ?? null, isActive: !!s.is_active, spotsLeft: s.spots_left ?? null,
-          imageUrl: s.image_url ?? null, priceKes: s.drop_in_price ?? null,
+          isActive: !!s.is_active, spotsLeft: s.spots_left ?? null, imageUrl: s.image_url ?? null,
+          gym: toVenueRef(s.gyms),
         })),
-        ...((experiencesRes?.data ?? []) as any[]).map(e => ({
-          id: e.id, type: 'experience' as const, name: e.name, category: e.category ?? null,
+        ...rawExperiences.map((e): SessionCandidateRow => ({
+          id: e.id, type: 'experience', name: e.name, category: e.category ?? null,
           date: e.date ?? null, startTime: e.start_time ?? null, durationMinutes: null,
-          gymName: e.gyms?.name ?? null, isActive: !!e.is_active, spotsLeft: e.spots_left ?? null,
-          imageUrl: e.image_url ?? null, priceKes: e.price_kes ?? null,
+          isActive: !!e.is_active, spotsLeft: e.spots_left ?? null, imageUrl: e.image_url ?? null,
+          gym: toVenueRef(e.gyms),
         })),
       ];
 
+      const supplyUserContext: SupplyUserContext = {
+        goal: onboardingAnswers.goal, experience: onboardingAnswers.strengthExperience,
+        preferredActivities: onboardingAnswers.preferredActivities, barriers: onboardingAnswers.barriers,
+        location: { text: preferredLocation },
+      };
+
       const anchor = new Date();
+      // ACP Intelligence™ Day 7.3 — unified supply orchestration decides
+      // WHICH marketplace sessions/experiences fulfil this plan activity and
+      // in what order (activity/schedule/duration/goal/location fit, same
+      // hard eligibility fulfilment.ts already enforced); self-directed
+      // routing (ExerciseDB/Strava) is untouched, reusing the exact same
+      // helper as before.
       setFulfilments(
-        assessment.starting_plan.activities.map((a, i) => getFulfilmentForActivity(a, i, inventory, stravaStatus.connected, anchor)),
+        assessment.starting_plan.activities.map((activity, i): PlanActivityFulfilment => {
+          const key = normalizeActivity(activity.activity || activity.title, activity.category);
+          const candidates = getSupplyCandidates({
+            userContext: supplyUserContext, planActivity: activity, sessionInventory, anchor,
+            limitPerType: 2, overallCap: 2,
+          });
+          return {
+            planActivityIndex: i,
+            selfDirected: getSelfDirectedSource(key, stravaStatus.connected),
+            marketplaceMatches: candidates.map(c => ({
+              id: c.id, type: c.type as 'session' | 'experience', title: c.title,
+              activityType: c.category ?? key, date: (c.startsAt ?? '').split('T')[0],
+              startTime: c.startsAt?.includes('T') ? c.startsAt.split('T')[1] : null,
+              durationMinutes: c.durationMinutes ?? null, partnerName: c.venue?.name ?? null,
+              score: c.scoring.overall, matchReasons: c.reasons,
+              isAlternateDay: !c.reasons.includes('same_day'),
+              navigationTarget: c.navigationTarget as { pathname: string; params: Record<string, string> },
+              imageUrl: c.imageUrl ?? null, priceKes: priceByItemId.get(c.id) ?? null,
+            })),
+          };
+        }),
       );
 
       const loadedCompletions: PlanActivityCompletion[] = ((completionsRes?.data ?? []) as any[]).map(c => ({
@@ -424,7 +630,14 @@ export default function MyPlanScreen() {
     })().catch(() => { /* leave fulfilment/completion data as-is — the plan remains fully usable without it */ });
 
     return () => { cancelled = true; };
-  }, [assessment, planId, userId]);
+    // onboardingAnswers/preferredLocation are intentionally excluded — both
+    // are set earlier in the same load() call, in the same render pass that
+    // sets assessment/planId, so they're always fresh by the time this
+    // effect fires; adding them would re-trigger this effect's full
+    // Supabase fetch (including completion auto-matching) on every profile
+    // field edit, a much larger behaviour change than Day 7.3 intends.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assessment, planId, userId, isNextView, nextWeekPlan]);
 
   // Day 5 — nutrition focus food suggestions. Only fetched when the current
   // plan actually has a nutrition_focus (i.e. a weekly-adaptation result) —
@@ -448,6 +661,24 @@ export default function MyPlanScreen() {
     return () => { cancelled = true; };
   }, [assessment?.nutrition_focus, cuisinePreference]);
 
+  // Beta Feedback #001 — Monday auto-promotion. If this week has ended and a
+  // plan was prepared ahead of time, one weekly-adaptation call promotes it
+  // to the current plan (no LLM — the route hits its idempotency branch).
+  // Runs at most once per screen mount. Gated on the user's LOCAL date, so a
+  // user west of UTC isn't shown next week's plan while it's still their
+  // Sunday (UTC has ticked to Monday but their week isn't over).
+  useEffect(() => {
+    if (promotedRef.current) return;
+    if (!assessment || !nextWeekPlan || !userId || !planId || generatingReview) return;
+    const weekEnd = assessment.starting_plan.week_end_date;
+    const today = localDateIso(new Date());
+    if (!weekEnd || today <= weekEnd) return; // current week not over in the user's timezone
+    if (nextWeekPlan.weekStartDate > today) return; // scheduled week hasn't started locally
+    promotedRef.current = true;
+    runWeeklyAdaptation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assessment, nextWeekPlan, userId, planId]);
+
   // "Start my plan" — Day 2 deliberately does not introduce a programme-
   // tracking system. This is the minimal handling: a lightweight
   // acknowledgement and navigation back, nothing persisted. See the Day 2
@@ -460,7 +691,7 @@ export default function MyPlanScreen() {
     );
   };
 
-  const categoryCounts = assessment ? deriveCategoryCounts(assessment.starting_plan.activities) : [];
+  const categoryCounts = shownAssessment ? deriveCategoryCounts(shownAssessment.starting_plan.activities) : [];
   // Day 6 — "Your Progress". Purely derived from the already-fetched
   // coaching_memory rows (selection/formatting only, see lib/coaching-memory.ts).
   const overallProgress = formatOverallProgress(coachingMemory);
@@ -470,6 +701,37 @@ export default function MyPlanScreen() {
   // Day 6.5 — Outcome Intelligence: measurement-based evidence, kept in its
   // own section so it's never confused with the behavioural evidence above.
   const outcomeInsights = selectOutcomeInsights(coachingMemory, 2);
+
+  // Day 8.2 / 8.3 — deterministic explanations derived from data already in
+  // hand (no network, no LLM). Wrapped so any unexpected shape degrades to
+  // "no explanation" rather than breaking the plan screen (section 43).
+  const { whyPlanReasons, whatChangedLines } = (() => {
+    if (!shownAssessment) return { whyPlanReasons: [], whatChangedLines: null as string[] | null };
+    try {
+      // For the next-week view, "what changed" compares this week's plan
+      // against the prepared next-week plan.
+      const baselineActivities = isNextView ? (assessment?.starting_plan.activities ?? null) : previousActivities;
+      const completedCats = previousActivities && lastWeekCompletion && lastWeekCompletion.completed > 0
+        ? Array.from(new Set(previousActivities.map(a => a.category)))
+        : null;
+      const whyPlanReasons = buildPlanExplanation({
+        assessment: shownAssessment,
+        goal: onboardingAnswers.goal ?? null,
+        lastWeek: lastWeekCompletion,
+        previousActivities: isNextView ? (assessment?.starting_plan.activities ?? null) : previousActivities,
+        completedCategoriesLastWeek: completedCats,
+        coachingMemory,
+        preferredActivities: onboardingAnswers.preferredActivities ?? null,
+        preferredTrainingDays: onboardingAnswers.preferredTrainingDays ?? null,
+      });
+      const whatChangedLines = baselineActivities
+        ? describePlanChanges(compareWeeklyPlans(baselineActivities, shownAssessment.starting_plan.activities))
+        : null;
+      return { whyPlanReasons, whatChangedLines };
+    } catch {
+      return { whyPlanReasons: [], whatChangedLines: null as string[] | null };
+    }
+  })();
   // "approach" (how independently the user can execute the plan) and
   // support opportunities (which forms of professional support could help)
   // are two separate questions — see the "Support Recommendation Logic Fix"
@@ -478,10 +740,20 @@ export default function MyPlanScreen() {
   const isGuidedApproach = assessment?.recommendation.approach === 'guided';
   const supportOpportunities = sortSupportOpportunities(assessment?.support_opportunities ?? []);
   const hasSupportOpportunities = supportOpportunities.length > 0;
-  // Day 5 — the week has fully ended, so a review can be generated. Never
-  // true for a plan mid-week, and never true again right after generating
-  // (the new plan's own week hasn't ended yet) — see isPlanReadyForReview.
-  const reviewReady = isPlanReadyForReview(assessment, new Date());
+  // Day 5 — the week has fully ended, so a review can be generated. Compared
+  // against the user's LOCAL calendar date (not UTC) so a user west of UTC
+  // isn't told their week is over — or shown next week's promoted plan —
+  // while it's still their last day. Matches isSundayPlanningWindow below.
+  const weekEndDate = assessment?.starting_plan?.week_end_date ?? null;
+  const localToday = localDateIso(new Date());
+  const reviewReady = !!weekEndDate && localToday > weekEndDate;
+  // Beta Feedback #001 — Sunday "prepare next week" window (local date).
+  const sundayWindow = isSundayPlanningWindow(assessment, new Date());
+  // A genuine first week — no prior plan behind it. A plan that resulted
+  // from a weekly adaptation carries a `review`, and any earlier plan shows
+  // up as previousActivities; either means this is week 2+ (so the plan
+  // card must not say "Your first week").
+  const isFirstWeek = !assessment?.review && !previousActivities;
 
   // ── Completion actions (Part 6/7/10) ──────────────────────────────────────
   // Manual completion: one tap, no logging form. planned_date uses the same
@@ -505,15 +777,53 @@ export default function MyPlanScreen() {
       })
       .select('id, plan_id, activity_index, planned_date, completed_at, completion_source, source_entity_id')
       .single();
-    if (error || !data) return; // best-effort — the plan stays fully usable either way
+    if (error || !data) return false; // best-effort — the plan stays fully usable either way
     setCompletions(prev => [...prev, {
       id: data.id, planId: data.plan_id, activityIndex: data.activity_index, plannedDate: data.planned_date,
       completedAt: data.completed_at, completionSource: data.completion_source, sourceEntityId: data.source_entity_id,
     }]);
     setCandidates(prev => prev.filter(c => c.activityIndex !== activityIndex));
+    // Day 9 — a completed activity is no longer "skipped": drop any prior
+    // skip execution row so it can't linger as stale evidence (section 48).
+    setExecutionRows(prev => prev.filter(r => !(r.activityIndex === activityIndex && r.executionStatus === 'skipped')));
+    if (userId && planId) {
+      supabase.from('plan_activity_execution').delete()
+        .eq('user_id', userId).eq('plan_id', planId).eq('activity_index', activityIndex).then(() => {});
+    }
+    return true;
   };
 
-  const handleMarkDone = (activityIndex: number) => recordCompletion(activityIndex, 'manual', null);
+  // Day 9 — after a manual completion of a session where difficulty is
+  // meaningful (section 10), open a one-tap "How did that feel?" prompt.
+  // Never blocks completion; the user can ignore it entirely (section 9).
+  const handleMarkDone = async (activityIndex: number) => {
+    const ok = await recordCompletion(activityIndex, 'manual', null);
+    const activity = assessment?.starting_plan.activities[activityIndex];
+    if (ok && activity && isFeedbackEligible(activity) && EXECUTION_FEEDBACK_ON) setFeedbackFor(activityIndex);
+  };
+
+  const upsertExecutionRowLocal = (row: PlanActivityExecutionRow) =>
+    setExecutionRows(prev => [...prev.filter(r => r.activityIndex !== row.activityIndex), row]);
+
+  const submitDifficultyFeedback = async (activityIndex: number, difficulty: DifficultyFeedback) => {
+    setFeedbackFor(null);
+    if (!userId || !planId) return;
+    upsertExecutionRowLocal({ activityIndex, executionStatus: 'completed', difficulty, skipReason: null, actualDurationMinutes: null });
+    await recordActivityFeedback(supabase as any, { userId, planId, activityIndex }, difficulty);
+  };
+
+  const submitSkipReason = async (activityIndex: number, skipReason: SkipReason) => {
+    setSkipFor(null);
+    if (!userId || !planId) return;
+    upsertExecutionRowLocal({ activityIndex, executionStatus: 'skipped', difficulty: null, skipReason, actualDurationMinutes: null });
+    await recordActivitySkip(supabase as any, { userId, planId, activityIndex }, skipReason);
+  };
+
+  const clearSkip = async (activityIndex: number) => {
+    setExecutionRows(prev => prev.filter(r => r.activityIndex !== activityIndex));
+    if (!userId || !planId) return;
+    await clearActivityExecution(supabase as any, { userId, planId, activityIndex });
+  };
 
   const handleConfirmCandidate = (candidate: CompletionCandidate) =>
     recordCompletion(candidate.activityIndex, candidate.source, candidate.sourceEntityId);
@@ -528,6 +838,11 @@ export default function MyPlanScreen() {
     const { error } = await supabase.from('plan_activity_completions').delete().eq('id', existing.id);
     if (error) return;
     setCompletions(prev => prev.filter(c => c.id !== existing.id));
+    // Day 9 — an undone completion has no execution: its feedback must not
+    // linger as active evidence (section 47).
+    setFeedbackFor(f => (f === activityIndex ? null : f));
+    setExecutionRows(prev => prev.filter(r => r.activityIndex !== activityIndex));
+    if (userId && planId) await clearActivityExecution(supabase as any, { userId, planId, activityIndex });
   };
 
   // ── Professional support — only fetched after explicit tap. PT and
@@ -543,9 +858,11 @@ export default function MyPlanScreen() {
       const wantsNutrition = supportOpportunities.some(o => o.type === 'nutrition');
       const { data } = await supabase
         .from('personal_trainers')
-        .select('id, full_name, professional_name, specialisations')
+        .select('id, full_name, professional_name, specialisations, status')
         .eq('status', 'approved');
-      const providers = ((data ?? []) as any[]).map(p => ({
+      interface RawProviderRow { id: string; full_name: string; professional_name: string | null; specialisations: string[] | null; status: string }
+      const rawProviders = (data ?? []) as unknown as RawProviderRow[];
+      const providers = rawProviders.map(p => ({
         id: p.id, name: p.professional_name || p.full_name, specialisations: p.specialisations ?? [],
       }));
       const matches = [
@@ -553,7 +870,31 @@ export default function MyPlanScreen() {
         ...(wantsNutrition ? matchProfessionalProviders(null, [], true, providers) : []),
       ];
       const seenIds = new Set<string>();
-      setSupportMatches(matches.filter(m => (seenIds.has(m.id) ? false : (seenIds.add(m.id), true))));
+      const deduped = matches.filter(m => (seenIds.has(m.id) ? false : (seenIds.add(m.id), true)));
+
+      // ACP Intelligence™ Day 7.3 — the unified supply orchestration reorders
+      // these same, already-eligible matches by support_opportunities
+      // RELEVANCE (high vs medium — the existing matchProfessionalProviders
+      // call only used relevance as a boolean gate, never an ordering
+      // signal). Eligibility and every displayed field (name, matchReasons,
+      // photo) stay exactly what matchProfessionalProviders already produced
+      // — only the order changes.
+      const providerRows: ProviderCandidateRow[] = rawProviders.map(p => ({
+        id: p.id, name: p.professional_name || p.full_name, specialisations: p.specialisations ?? [], status: p.status,
+      }));
+      const supplyUserContext: SupplyUserContext = {
+        goal: onboardingAnswers.goal, experience: onboardingAnswers.strengthExperience,
+        preferredActivities: onboardingAnswers.preferredActivities, barriers: onboardingAnswers.barriers,
+        location: { text: preferredLocation },
+      };
+      const orchestrated = getSupplyCandidates({
+        userContext: supplyUserContext, supportOpportunities: assessment.support_opportunities,
+        providers: providerRows, anchor: new Date(), overallCap: providerRows.length || 1,
+      });
+      const orderById = new Map(orchestrated.map((c, i) => [c.id, i]));
+      deduped.sort((a, b) => (orderById.get(a.id) ?? 999) - (orderById.get(b.id) ?? 999));
+
+      setSupportMatches(deduped);
     } catch {
       setSupportMatches([]); // fails safe — the plan itself is unaffected
     } finally {
@@ -565,8 +906,14 @@ export default function MyPlanScreen() {
   // generated automatically on load — Part 40/42). Behaviour is computed
   // from real records fetched fresh right here, in code (Part 7/36) — the
   // AI never sees raw rows, only the already-summarised facts.
-  const handleGenerateWeeklyReview = async () => {
-    if (!userId || !assessment || !planId || generatingReview) return;
+  // Day 5 — LEARN + ADAPT. Runs on "See my weekly review" (Monday+), and is
+  // also invoked headlessly by the auto-promote effect once a scheduled
+  // next-week plan's week has started. The route decides whether this is a
+  // normal review, a promotion, or (from the /next-week-plan screen) advance
+  // generation — the client just routes the result.
+  const runWeeklyAdaptation = async () => {
+    if (!userId || !assessment || !planId) return;
+    if (generatingReview) return;
     setGeneratingReview(true);
     try {
       const weekStart = assessment.starting_plan.week_start_date;
@@ -601,12 +948,14 @@ export default function MyPlanScreen() {
       if (!session?.access_token) return;
 
       const result = await fetchWeeklyAdaptation({ userId, accessToken: session.access_token, behaviourSummary });
-      if (result) {
+      if (result && !result.scheduled) {
+        // Normal review / promotion of a scheduled plan → new current plan.
+        // (An advance 'scheduled' result can only come from the
+        // /next-week-plan screen, never from here.)
         setAssessment(result.assessment);
         setPlanId(result.generatedAt);
-        // Session-only UI state from the old plan no longer applies to the
-        // new one — the fulfilment/candidate effect above re-fetches
-        // automatically since assessment/planId just changed.
+        setNextWeekPlan(null);
+        setViewingWeek('this');
         setSupportExpanded(false);
         setSupportMatches(null);
       }
@@ -614,6 +963,8 @@ export default function MyPlanScreen() {
       setGeneratingReview(false);
     }
   };
+
+  const handleGenerateWeeklyReview = () => runWeeklyAdaptation();
 
   return (
     <View style={styles.root}>
@@ -663,28 +1014,71 @@ export default function MyPlanScreen() {
             </View>
           )}
 
-          {assessment ? (
+          {/* Beta Feedback #001 — on the last day of the week, an entry point
+              to the dedicated next-week screen (prepare / review + book
+              ahead). Lives here on My Plan; the screen itself is separate. */}
+          {assessment && sundayWindow && (
+            <TouchableOpacity
+              style={styles.nextWeekCta}
+              onPress={() => router.push('/next-week-plan' as any)}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel={nextWeekPlan ? 'Review next week' : 'Prepare next week'}
+            >
+              <ThemedText style={styles.nextWeekCtaEyebrow}>YOUR NEXT WEEK</ThemedText>
+              <ThemedText style={styles.nextWeekCtaBody}>
+                {nextWeekPlan
+                  ? 'Your plan for next week is ready to review and book ahead.'
+                  : 'Get next week’s plan now so you can organise your week and book any sessions you need.'}
+              </ThemedText>
+              <ThemedText style={styles.exploreSupportBtnText}>
+                {nextWeekPlan ? 'Review next week →' : 'Prepare next week →'}
+              </ThemedText>
+            </TouchableOpacity>
+          )}
+
+          {shownAssessment ? (
             <>
-              <ThemedText style={styles.coachHeadline}>{assessment.headline}</ThemedText>
+              <ThemedText style={styles.coachHeadline}>{shownAssessment.headline}</ThemedText>
 
               {/* Distinct from "your next week" below (Part 44) — visually
                   secondary (same card language, smaller/eyebrow-only
                   heading), and only present at all on a plan that actually
                   resulted from a weekly adaptation. */}
-              {assessment.review && (
+              {!isNextView && assessment?.review && (
                 <View style={styles.card}>
                   <ThemedText style={styles.cardEyebrow}>Last week</ThemedText>
+                  {/* ACP Intelligence summary — enough on its own by default. */}
+                  <ThemedText style={styles.aiBody}>{assessment.review.summary}</ThemedText>
+                  <ThemedText style={[styles.aiBody, { marginTop: 8 }]}>{assessment.review.focus_next_week}</ThemedText>
+
                   {assessment.review.wins.length > 0 && (
-                    <View style={{ marginBottom: 10 }}>
-                      {assessment.review.wins.map((w, i) => (
-                        <View key={i} style={styles.nextStepRow}>
-                          <View style={styles.nextStepBullet} />
-                          <ThemedText style={styles.nextStepText}>{w}</ThemedText>
+                    <>
+                      <TouchableOpacity
+                        onPress={() => setShowLastWeekDetail(v => !v)}
+                        activeOpacity={0.7}
+                        accessibilityRole="button"
+                        accessibilityState={{ expanded: showLastWeekDetail }}
+                        accessibilityLabel="Review last week in detail"
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 10 }}
+                      >
+                        <ThemedText style={styles.undoLink}>
+                          {showLastWeekDetail ? 'Hide detail' : 'Review in detail'}
+                        </ThemedText>
+                        <Ionicons name={showLastWeekDetail ? 'chevron-up' : 'chevron-down'} size={14} color={palette.gray450} />
+                      </TouchableOpacity>
+                      {showLastWeekDetail && (
+                        <View style={{ marginTop: 8 }}>
+                          {assessment.review.wins.map((w, i) => (
+                            <View key={i} style={styles.nextStepRow}>
+                              <View style={styles.nextStepBullet} />
+                              <ThemedText style={styles.nextStepText}>{w}</ThemedText>
+                            </View>
+                          ))}
                         </View>
-                      ))}
-                    </View>
+                      )}
+                    </>
                   )}
-                  <ThemedText style={styles.aiBody}>{assessment.review.focus_next_week}</ThemedText>
                 </View>
               )}
 
@@ -695,15 +1089,15 @@ export default function MyPlanScreen() {
                 <View style={styles.divider} />
 
                 <ThemedText style={styles.rowLabel}>Where you are starting</ThemedText>
-                <ThemedText style={styles.aiBody}>{assessment.summary}</ThemedText>
+                <ThemedText style={styles.aiBody}>{shownAssessment.summary}</ThemedText>
 
                 <View style={styles.divider} />
 
                 <ThemedText style={styles.rowLabel}>
                   {isGuidedApproach ? 'Your approach' : 'What we recommend'}
                 </ThemedText>
-                <ThemedText style={styles.rowValue}>{assessment.recommendation.title}</ThemedText>
-                <ThemedText style={styles.aiBody}>{assessment.recommendation.reason}</ThemedText>
+                <ThemedText style={styles.rowValue}>{shownAssessment.recommendation.title}</ThemedText>
+                <ThemedText style={styles.aiBody}>{shownAssessment.recommendation.reason}</ThemedText>
               </View>
 
               {hasWorkoutProgramme && (
@@ -720,11 +1114,22 @@ export default function MyPlanScreen() {
               )}
 
               <View style={styles.card}>
-                <ThemedText style={styles.cardEyebrow}>Your first week</ThemedText>
+                <View style={styles.weekEyebrowRow}>
+                  <ThemedText style={[styles.cardEyebrow, { marginBottom: 0 }]}>{isNextView ? 'Next week' : reviewReady ? 'Last week' : sundayWindow ? 'Your week' : isFirstWeek ? 'Your first week' : 'This week'}</ThemedText>
+                  <TouchableOpacity
+                    onPress={() => setShowWeekInfo(true)}
+                    hitSlop={10}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel="How weeks are counted"
+                  >
+                    <Ionicons name="information-circle-outline" size={14} color={palette.gray450} />
+                  </TouchableOpacity>
+                </View>
 
                 {/* Deterministic — completedActivities / totalPlanActivities, never asked of the AI (Part 8). */}
-                {(() => {
-                  const progress = getCompletionProgress(assessment.starting_plan.activities.length, completions);
+                {!isNextView && (() => {
+                  const progress = getCompletionProgress(assessment!.starting_plan.activities.length, completions);
                   return (
                     <View style={styles.progressBlock}>
                       <ThemedText style={styles.progressLabel}>{progress.completed} of {progress.total} completed</ThemedText>
@@ -746,12 +1151,35 @@ export default function MyPlanScreen() {
                   </View>
                 )}
 
+                {/* Once the week has ended, the day-by-day activity list is
+                    "last week's detail" — collapsed behind a tap; the summary
+                    above (progress + category mix + the ACP review card) is
+                    what most people need. Mid-week it stays open (it's the
+                    plan you're executing). */}
+                {(reviewReady || sundayWindow) && !isNextView && (
+                  <TouchableOpacity
+                    onPress={() => setShowLastWeekDetail(v => !v)}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: showLastWeekDetail }}
+                    accessibilityLabel="Review last week's activities in detail"
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: categoryCounts.length > 0 ? 14 : 4 }}
+                  >
+                    <ThemedText style={styles.undoLink}>
+                      {showLastWeekDetail ? 'Hide activity detail' : 'Review in detail'}
+                    </ThemedText>
+                    <Ionicons name={showLastWeekDetail ? 'chevron-up' : 'chevron-down'} size={14} color={palette.gray450} />
+                  </TouchableOpacity>
+                )}
+
+                {(!(reviewReady || sundayWindow) || isNextView || showLastWeekDetail) && (
                 <View style={{ marginTop: categoryCounts.length > 0 ? 18 : 0 }}>
-                  {assessment.starting_plan.activities.map((a, i) => {
-                    const doneRecord = completions.find(c => c.activityIndex === i);
-                    const candidate = candidates.find(c => c.activityIndex === i && !dismissedCandidateIds.has(`${c.activityIndex}:${c.sourceEntityId}`));
+                  {shownAssessment.starting_plan.activities.map((a, i) => {
+                    const doneRecord = isNextView ? undefined : completions.find(c => c.activityIndex === i);
+                    const candidate = isNextView ? undefined : candidates.find(c => c.activityIndex === i && !dismissedCandidateIds.has(`${c.activityIndex}:${c.sourceEntityId}`));
+                    const execRow = isNextView ? undefined : executionRows.find(r => r.activityIndex === i);
                     return (
-                    <View key={i} style={[styles.dayRow, i === assessment.starting_plan.activities.length - 1 && { borderBottomWidth: 0, marginBottom: 0, paddingBottom: 0 }]}>
+                    <View key={i} style={[styles.dayRow, i === shownAssessment.starting_plan.activities.length - 1 && { borderBottomWidth: 0, marginBottom: 0, paddingBottom: 0 }]}>
                       <View style={styles.dayNameCol}>
                         <ThemedText style={styles.dayName}>{a.day}</ThemedText>
                         <View style={styles.dayCategoryPill}>
@@ -770,10 +1198,10 @@ export default function MyPlanScreen() {
                           </View>
                         ) : null}
                         <ThemedText style={styles.dayTitle}>{a.title}</ThemedText>
-                        <ThemedText style={styles.dayMeta}>{a.activity} · {a.duration_minutes} min</ThemedText>
+                        <ThemedText style={styles.dayMeta}>{a.activity} · {a.duration_minutes} min{a.planned_date ? ` · ${a.planned_date}` : ''}</ThemedText>
                         <ThemedText style={styles.dayDesc}>{a.description}</ThemedText>
 
-                        {doneRecord ? (
+                        {!isNextView && (doneRecord ? (
                           <TouchableOpacity onPress={() => handleUndo(i)} activeOpacity={0.7} style={{ marginTop: 8 }}>
                             <ThemedText style={styles.undoLink}>Undo</ThemedText>
                           </TouchableOpacity>
@@ -781,6 +1209,77 @@ export default function MyPlanScreen() {
                           <TouchableOpacity style={styles.markDoneBtn} onPress={() => handleMarkDone(i)} activeOpacity={0.85}>
                             <ThemedText style={styles.markDoneBtnText}>Mark as done</ThemedText>
                           </TouchableOpacity>
+                        ))}
+
+                        {/* Day 9 — optional one-tap "How did that feel?" after
+                            a completed session where difficulty is meaningful. */}
+                        {EXECUTION_FEEDBACK_ON && !isNextView && doneRecord && isFeedbackEligible(a) && feedbackFor === i && (
+                          <View style={{ marginTop: 10 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <ThemedText style={styles.dayMeta}>How did that feel?</ThemedText>
+                              <TouchableOpacity onPress={() => setFeedbackFor(null)} accessibilityRole="button" accessibilityLabel="Dismiss feedback">
+                                <Ionicons name="close" size={16} color={palette.gray450} />
+                              </TouchableOpacity>
+                            </View>
+                            <View style={{ flexDirection: 'row', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+                              {DIFFICULTY_OPTIONS.map(opt => (
+                                <TouchableOpacity
+                                  key={opt.value}
+                                  onPress={() => submitDifficultyFeedback(i, opt.value)}
+                                  activeOpacity={0.85}
+                                  accessibilityRole="button"
+                                  style={styles.feedbackChip}
+                                >
+                                  <ThemedText style={styles.feedbackChipText}>{opt.label}</ThemedText>
+                                </TouchableOpacity>
+                              ))}
+                            </View>
+                          </View>
+                        )}
+                        {EXECUTION_FEEDBACK_ON && !isNextView && doneRecord && execRow?.difficulty && feedbackFor !== i && (
+                          <TouchableOpacity onPress={() => setFeedbackFor(i)} activeOpacity={0.7} style={{ marginTop: 6 }}>
+                            <ThemedText style={styles.dayMeta}>
+                              You said this felt {DIFFICULTY_OPTIONS.find(o => o.value === execRow.difficulty)?.label.toLowerCase()} · change
+                            </ThemedText>
+                          </TouchableOpacity>
+                        )}
+
+                        {/* Day 9 — optional, non-shaming skip context for an
+                            activity that hasn't happened. */}
+                        {EXECUTION_FEEDBACK_ON && !isNextView && !doneRecord && execRow?.executionStatus === 'skipped' && (
+                          <TouchableOpacity onPress={() => clearSkip(i)} activeOpacity={0.7} style={{ marginTop: 6 }}>
+                            <ThemedText style={styles.dayMeta}>
+                              Marked as not done{execRow.skipReason ? ` · ${SKIP_REASON_OPTIONS.find(o => o.value === execRow.skipReason)?.label.toLowerCase()}` : ''} · undo
+                            </ThemedText>
+                          </TouchableOpacity>
+                        )}
+                        {EXECUTION_FEEDBACK_ON && !isNextView && !doneRecord && (!execRow || execRow.executionStatus !== 'skipped') && skipFor !== i && (
+                          <TouchableOpacity onPress={() => setSkipFor(i)} activeOpacity={0.7} style={{ marginTop: 6 }}>
+                            <ThemedText style={styles.dayMeta}>Couldn&apos;t do this one?</ThemedText>
+                          </TouchableOpacity>
+                        )}
+                        {EXECUTION_FEEDBACK_ON && !isNextView && !doneRecord && skipFor === i && (
+                          <View style={{ marginTop: 8 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <ThemedText style={styles.dayMeta}>What got in the way? (optional)</ThemedText>
+                              <TouchableOpacity onPress={() => setSkipFor(null)} accessibilityRole="button" accessibilityLabel="Dismiss">
+                                <Ionicons name="close" size={16} color={palette.gray450} />
+                              </TouchableOpacity>
+                            </View>
+                            <View style={{ flexDirection: 'row', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+                              {SKIP_REASON_OPTIONS.map(opt => (
+                                <TouchableOpacity
+                                  key={opt.value}
+                                  onPress={() => submitSkipReason(i, opt.value)}
+                                  activeOpacity={0.85}
+                                  accessibilityRole="button"
+                                  style={styles.feedbackChip}
+                                >
+                                  <ThemedText style={styles.feedbackChipText}>{opt.label}</ThemedText>
+                                </TouchableOpacity>
+                              ))}
+                            </View>
+                          </View>
                         )}
 
                         {!doneRecord && candidate && (
@@ -810,6 +1309,7 @@ export default function MyPlanScreen() {
                     );
                   })}
                 </View>
+                )}
               </View>
 
               {/* Day 6 — "Your Progress": deterministic, evidence-backed
@@ -885,26 +1385,78 @@ export default function MyPlanScreen() {
                 </View>
               )}
 
+              {/* Day 8.2 — Why this plan? Structured, evidence-grounded
+                  reasons (progressive disclosure). Falls back to the plan's
+                  own rationale text if no structured reason could be built. */}
               <View style={styles.card}>
-                <ThemedText style={styles.rowLabel}>Why this plan?</ThemedText>
-                <ThemedText style={styles.aiBody}>{assessment.starting_plan.rationale}</ThemedText>
+                <TouchableOpacity
+                  onPress={() => setShowWhyPlan(v => !v)}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: showWhyPlan }}
+                  accessibilityLabel="Why this plan"
+                  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+                >
+                  <ThemedText style={styles.rowLabel}>Why this plan?</ThemedText>
+                  <Ionicons name={showWhyPlan ? 'chevron-up' : 'chevron-down'} size={18} color={palette.gray450} />
+                </TouchableOpacity>
+                {showWhyPlan && (
+                  whyPlanReasons.length > 0 ? (
+                    <View style={{ marginTop: 8 }}>
+                      {whyPlanReasons.map(r => (
+                        <View key={r.type} style={{ marginBottom: 10 }}>
+                          <ThemedText style={styles.dayTitle}>{r.title}</ThemedText>
+                          <ThemedText style={styles.dayMeta}>{r.explanation}</ThemedText>
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <ThemedText style={[styles.aiBody, { marginTop: 8 }]}>{shownAssessment.starting_plan.rationale}</ThemedText>
+                  )
+                )}
               </View>
+
+              {/* Day 8.3 — What changed this week? Deterministic comparison
+                  against the immediately-previous plan. Only shown when a
+                  previous plan exists. */}
+              {whatChangedLines && (
+                <View style={styles.card}>
+                  <TouchableOpacity
+                    onPress={() => setShowWhatChanged(v => !v)}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: showWhatChanged }}
+                    accessibilityLabel="What changed this week"
+                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+                  >
+                    <ThemedText style={styles.rowLabel}>What changed this week?</ThemedText>
+                    <Ionicons name={showWhatChanged ? 'chevron-up' : 'chevron-down'} size={18} color={palette.gray450} />
+                  </TouchableOpacity>
+                  {showWhatChanged && (
+                    <View style={{ marginTop: 8 }}>
+                      {whatChangedLines.map((line, i) => (
+                        <ThemedText key={i} style={[styles.dayMeta, { marginBottom: 4 }]}>{`• ${line}`}</ThemedText>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              )}
 
               <View style={styles.card}>
                 <ThemedText style={styles.rowLabel}>Your focus this week</ThemedText>
-                <ThemedText style={styles.rowValue}>{assessment.weekly_focus.title}</ThemedText>
-                <ThemedText style={styles.aiBody}>{assessment.weekly_focus.description}</ThemedText>
+                <ThemedText style={styles.rowValue}>{shownAssessment.weekly_focus.title}</ThemedText>
+                <ThemedText style={styles.aiBody}>{shownAssessment.weekly_focus.description}</ThemedText>
               </View>
 
               {/* Day 5 — nutrition intent from ACP Intelligence™, real foods
                   and reasons from ACP's own data (Part 18/27/32) — never an
                   AI-generated nutrient claim. Subordinate to the weekly
                   coaching flow, one focus only, small shortlist (Part 30/31). */}
-              {assessment.nutrition_focus && (
+              {shownAssessment.nutrition_focus && (
                 <View style={styles.card}>
                   <ThemedText style={styles.cardEyebrow}>Nutrition focus</ThemedText>
-                  <ThemedText style={styles.rowValue}>{assessment.nutrition_focus.title}</ThemedText>
-                  <ThemedText style={styles.aiBody}>{assessment.nutrition_focus.reason}</ThemedText>
+                  <ThemedText style={styles.rowValue}>{shownAssessment.nutrition_focus.title}</ThemedText>
+                  <ThemedText style={styles.aiBody}>{shownAssessment.nutrition_focus.reason}</ThemedText>
 
                   {foodSuggestions.length > 0 && (
                     <>
@@ -926,7 +1478,7 @@ export default function MyPlanScreen() {
 
               <View style={styles.card}>
                 <ThemedText style={[styles.rowLabel, { marginBottom: 10 }]}>Next steps</ThemedText>
-                {assessment.next_steps.map((step, i) => (
+                {shownAssessment.next_steps.map((step, i) => (
                   <View key={i} style={styles.nextStepRow}>
                     <View style={styles.nextStepBullet} />
                     <ThemedText style={styles.nextStepText}>{step}</ThemedText>
@@ -1063,6 +1615,32 @@ export default function MyPlanScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      <Modal
+        visible={showWeekInfo}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowWeekInfo(false)}
+      >
+        <TouchableOpacity
+          style={styles.tooltipOverlay}
+          activeOpacity={1}
+          onPress={() => setShowWeekInfo(false)}
+        >
+          <View style={styles.tooltipCard}>
+            <ThemedText style={styles.tooltipTitle}>How weeks are counted</ThemedText>
+            <ThemedText style={styles.tooltipBody}>
+              Your plan runs Monday to Sunday. &ldquo;This week&rdquo; is the plan you&apos;re
+              following now; on its last day you can prepare next week&apos;s. Once a week
+              ends it becomes &ldquo;Last week&rdquo;, and ACP Intelligence™ reviews it to
+              shape the week ahead.
+            </ThemedText>
+            <TouchableOpacity style={styles.tooltipCloseBtn} onPress={() => setShowWeekInfo(false)} activeOpacity={0.85}>
+              <ThemedText style={styles.tooltipCloseText}>Got it</ThemedText>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -1188,6 +1766,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: 16,
   },
+  weekEyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 16 },
   row: { gap: 4 },
   rowLabel: {
     fontSize: fontSize.xs,
@@ -1357,6 +1936,30 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
     fontWeight: '700',
     color: palette.white,
+  },
+  feedbackChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: palette.gray200,
+    backgroundColor: palette.white,
+  },
+  // Beta Feedback #001 — Sunday next-week preview
+  nextWeekCta: {
+    backgroundColor: palette.white,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: palette.gray200,
+    padding: 14,
+    marginBottom: 12,
+  },
+  nextWeekCtaEyebrow: { fontSize: 10, fontWeight: '700', color: palette.blue600, letterSpacing: 0.5, marginBottom: 4 },
+  nextWeekCtaBody: { fontSize: fontSize.sm, color: palette.ink700, marginBottom: 10, lineHeight: 19 },
+  feedbackChipText: {
+    fontSize: fontSize.xs,
+    fontWeight: '600',
+    color: palette.ink900,
   },
   undoLink: {
     fontSize: fontSize.xs,

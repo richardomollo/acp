@@ -265,6 +265,21 @@ describe('resolveMemorySync — Scenario J: memory update/replace, no contradict
     assert.ok(!(freshTypesForCardio.includes('category_success') && freshTypesForCardio.includes('category_difficulty')));
   });
 
+  test('Day 9 — extra execution memory rows are folded into toUpsert and follow the same deactivate-if-absent lifecycle', () => {
+    const summary = buildLongitudinalSummary([], [], NOW); // empty window
+    const existingActive = [{ memory_type: 'execution_pattern', subject: 'time_fit' }];
+    const executionRows = [{ memory_type: 'execution_pattern', subject: 'difficulty_fit', confidence: 'moderate' as const, evidence: { direction: 'too_hard' }, user_message: 'Several recent sessions have felt harder than expected.' }];
+    const { toUpsert, toDeactivate } = resolveMemorySync(summary, existingActive, executionRows);
+    assert.ok(toUpsert.some(r => r.memory_type === 'execution_pattern' && r.subject === 'difficulty_fit'));
+    // the previously-active time_fit pattern is no longer confirmed this run → deactivated
+    assert.ok(toDeactivate.some(r => r.memory_type === 'execution_pattern' && r.subject === 'time_fit'));
+  });
+
+  test('Day 9 — no execution rows passed → identical behaviour to before (default param)', () => {
+    const summary = buildLongitudinalSummary([], [], NOW);
+    assert.deepEqual(resolveMemorySync(summary, []), resolveMemorySync(summary, [], []));
+  });
+
   test('a subject that becomes ambiguous deactivates whichever conclusion was previously active', () => {
     const summary = buildLongitudinalSummary(
       ['w1', 'w2'].map((id, i) => plan({

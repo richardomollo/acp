@@ -24,6 +24,85 @@ export type PreferredActivity =
   | 'gym' | 'running' | 'walking' | 'football' | 'yoga'
   | 'swimming' | 'cycling' | 'boxing' | 'personal_training';
 
+// ─── Training schedule preference (Beta Feedback #002) ──────────────────────
+// AVAILABILITY ("how much could I train" — already covered by the
+// starting-point hours) is distinct from TRAINING SCHEDULE PREFERENCE ("how
+// do I prefer to structure my week"). This is the latter: the weekdays the
+// user likes to train on. Frequency (days/week) is always DERIVED from the
+// selected days — never a separate stored number (spec §7).
+//
+// ONE canonical representation: lowercase full weekday names, Monday-first.
+// Mirrors CANONICAL_WEEKDAYS in
+// apps/web/app/api/ai/onboarding-assessment/assessment.ts (web and mobile
+// share no package). Never store Mon / Monday / MONDAY.
+export type CanonicalWeekday =
+  | 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
+
+export const CANONICAL_WEEKDAYS: CanonicalWeekday[] = [
+  'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
+];
+
+// Valid range (spec §8): 2–6. Not 1 (not a week structure), not 7 (the plan
+// model has no first-class Rest activity; 7 demanding days is unsafe by
+// default). The DB CHECK on preferred_training_days enforces the same.
+export const MIN_TRAINING_DAYS = 2;
+export const MAX_TRAINING_DAYS = 6;
+
+export const TRAINING_DAY_OPTIONS: { key: CanonicalWeekday; short: string; letter: string }[] = [
+  { key: 'monday',    short: 'Mon', letter: 'M' },
+  { key: 'tuesday',   short: 'Tue', letter: 'T' },
+  { key: 'wednesday', short: 'Wed', letter: 'W' },
+  { key: 'thursday',  short: 'Thu', letter: 'T' },
+  { key: 'friday',    short: 'Fri', letter: 'F' },
+  { key: 'saturday',  short: 'Sat', letter: 'S' },
+  { key: 'sunday',    short: 'Sun', letter: 'S' },
+];
+
+const WEEKDAY_ALIAS: Record<string, CanonicalWeekday> = (() => {
+  const map: Record<string, CanonicalWeekday> = {};
+  for (const d of CANONICAL_WEEKDAYS) { map[d] = d; map[d.slice(0, 3)] = d; }
+  return map;
+})();
+
+/** "Monday" / "mon" / " MON. " / "Tues" → canonical; unknown → null. */
+export function normalizeWeekdayName(input: unknown): CanonicalWeekday | null {
+  if (typeof input !== 'string') return null;
+  const key = input.trim().toLowerCase().replace(/[^a-z]/g, '');
+  if (!key) return null;
+  return WEEKDAY_ALIAS[key] ?? WEEKDAY_ALIAS[key.slice(0, 3)] ?? null;
+}
+
+/**
+ * Cleans arbitrary input into the canonical stored form: each entry
+ * normalised, unknown dropped, duplicates removed, sorted Monday-first.
+ * Does NOT clamp the count — an empty or out-of-range result is treated as
+ * "no preference" (same as null) by every caller.
+ */
+export function sanitizeTrainingDays(input: unknown): CanonicalWeekday[] {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set<CanonicalWeekday>();
+  for (const raw of input) {
+    const day = normalizeWeekdayName(raw);
+    if (day) seen.add(day);
+  }
+  return CANONICAL_WEEKDAYS.filter(d => seen.has(d));
+}
+
+/** ["monday","wednesday","friday"] → "Mon · Wed · Fri" */
+export function formatTrainingDaysLabel(days: CanonicalWeekday[]): string {
+  const order = new Map(TRAINING_DAY_OPTIONS.map((o, i) => [o.key, i]));
+  return [...days]
+    .sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0))
+    .map(d => TRAINING_DAY_OPTIONS.find(o => o.key === d)?.short ?? d)
+    .join(' · ');
+}
+
+/** 5 → "5 days per week"; 1 → "1 day per week"; 0 → "Not set". */
+export function describeTrainingFrequency(dayCount: number): string {
+  if (dayCount <= 0) return 'Not set';
+  return `${dayCount} day${dayCount === 1 ? '' : 's'} per week`;
+}
+
 export interface GoalDetails {
   // health / maintain_weight focus areas — multi-select
   health_focus?: string[];
@@ -46,6 +125,9 @@ export interface OnboardingAnswers {
   goalDetails: GoalDetails;
   barriers: Barrier[];
   preferredActivities: PreferredActivity[];
+  // Beta Feedback #002 — canonical lowercase weekdays. Empty array = no
+  // explicit preference (persisted as NULL, legacy planning behaviour kept).
+  preferredTrainingDays: CanonicalWeekday[];
 }
 
 export const EMPTY_ANSWERS: OnboardingAnswers = {
@@ -58,6 +140,7 @@ export const EMPTY_ANSWERS: OnboardingAnswers = {
   goalDetails: {},
   barriers: [],
   preferredActivities: [],
+  preferredTrainingDays: [],
 };
 
 // ─── Copy / option lists ────────────────────────────────────────────────────

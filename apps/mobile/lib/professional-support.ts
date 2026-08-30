@@ -34,14 +34,17 @@ export interface ProviderMatch {
 // .specialisations values (Weight Loss, Strength Training, HIIT, CrossFit,
 // Swimming, Rehabilitation, Sports Performance, Nutrition, Functional
 // Training, Running, Dance, Yoga, Martial Arts, Pilates) — not invented.
-const GOAL_SPECIALISM_KEYWORDS: Partial<Record<PrimaryGoal, string[]>> = {
+// Exported (Day 7.3) so the unified supply-orchestration layer can reuse
+// the exact same, already-live keyword vocabulary for its own per-dimension
+// provider scoring instead of duplicating it — see lib/supply/provider-candidates.ts.
+export const GOAL_SPECIALISM_KEYWORDS: Partial<Record<PrimaryGoal, string[]>> = {
   lose_weight: ['weight loss', 'hiit', 'functional training'],
   build_muscle: ['strength training', 'functional training', 'sports performance'],
   maintain_weight: ['functional training', 'sports performance'],
   reduce_stress: ['yoga', 'pilates'],
 };
 
-const ACTIVITY_SPECIALISM_KEYWORDS: Partial<Record<PreferredActivity, string[]>> = {
+export const ACTIVITY_SPECIALISM_KEYWORDS: Partial<Record<PreferredActivity, string[]>> = {
   gym: ['strength training', 'functional training', 'crossfit'],
   running: ['running', 'sports performance'],
   cycling: ['sports performance'],

@@ -162,14 +162,14 @@ export interface GeneralMealCandidate {
   calories: number | null;
 }
 
-export interface DailyMealCandidates {
+export interface DailyMealCandidates<T = GeneralMealCandidate> {
   category: string;
-  foods: GeneralMealCandidate[];
+  foods: T[];
 }
 
-export interface DailyMealSelection {
+export interface DailyMealSelection<T = GeneralMealCandidate> {
   category: string;
-  food: GeneralMealCandidate;
+  food: T;
 }
 
 /**
@@ -192,12 +192,12 @@ function stableHash(input: string): number {
  * timestamp), matching this app's existing "today" convention, so the
  * selection only changes once per day rather than on every reload.
  */
-export function selectDailyMeals(
+export function selectDailyMeals<T = GeneralMealCandidate>(
   userId: string | null,
   date: string,
-  mealsBySlot: DailyMealCandidates[],
-): DailyMealSelection[] {
-  const results: DailyMealSelection[] = [];
+  mealsBySlot: DailyMealCandidates<T>[],
+): DailyMealSelection<T>[] {
+  const results: DailyMealSelection<T>[] = [];
   for (const { category, foods } of mealsBySlot) {
     if (foods.length === 0) continue; // empty slot — omitted, never substituted from another slot
     const seed = `${userId ?? 'anon'}:${date}:${category}`;

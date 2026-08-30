@@ -126,6 +126,23 @@ export function pickOutcomeInsight(rows: CoachingMemoryRow[]): HomeCoachingInsig
   return null;
 }
 
+// Day 9 — execution patterns (memory_type 'execution_pattern', subject
+// 'difficulty_fit' | 'time_fit'). Server-computed from repeated execution
+// feedback across weeks; user_message is a fixed safe template. Moderate/
+// strong only, exactly like every other surfaced memory.
+export function selectExecutionInsights(rows: CoachingMemoryRow[], max = 2): CoachingMemoryRow[] {
+  return rows
+    .filter(r => r.memory_type === 'execution_pattern' && r.confidence !== 'emerging')
+    .sort((a, b) => CONFIDENCE_RANK[b.confidence] - CONFIDENCE_RANK[a.confidence])
+    .slice(0, max);
+}
+
+/** A single execution-derived "ACP noticed" line, or null. */
+export function pickExecutionNoticed(rows: CoachingMemoryRow[]): HomeCoachingInsight | null {
+  const row = selectExecutionInsights(rows, 1)[0];
+  return row?.user_message ? { headline: row.user_message, body: '' } : null;
+}
+
 export function pickHomeInsight(rows: CoachingMemoryRow[]): HomeCoachingInsight | null {
   const overall = formatOverallProgress(rows);
   if (overall && overall.trendDirection === 'improving' && overall.planned > 0) {
