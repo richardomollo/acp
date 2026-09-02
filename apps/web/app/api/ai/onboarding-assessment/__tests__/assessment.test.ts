@@ -6,7 +6,14 @@ import {
   enforceSupportLogic, getWeekBounds, dateForWeekdayInWeek, attachPlanDates, upgradeLegacyPlanDates,
   AI_REQUEST_CONFIG, SYSTEM_PROMPT,
   normalizeWeekdayName, sanitizeTrainingDays, formatTrainingDaysForPrompt, CANONICAL_WEEKDAYS,
+  enforceStrengthSessionDuration, isLightOrSupportStrength,
 } from '../assessment.ts';
+import type { StartingPlanActivity } from '../assessment.ts';
+
+const strengthAct = (over: Partial<StartingPlanActivity> = {}): StartingPlanActivity => ({
+  day: 'monday', category: 'strength', activity: 'gym', duration_minutes: 30,
+  intensity: 'moderate', title: 'Full-body strength', description: 'Compound lifts.', ...over,
+});
 
 const VALID_ASSESSMENT = {
   headline: 'You’re already putting in the work. Let’s make it count.',
@@ -214,6 +221,59 @@ describe('enforceTimeBudget', () => {
     const activities = [VALID_ASSESSMENT.starting_plan.activities[0]]; // 60 min, single activity
     const result = enforceTimeBudget(activities, 10);
     assert.equal(result.length, 1);
+  });
+});
+
+describe('enforceStrengthSessionDuration (Beta Feedback #013 — Bug A)', () => {
+  test('§32 advanced + budget headroom → a 30-min primary strength session is raised to the advanced floor (55)', () => {
+    const acts = [strengthAct({ duration_minutes: 30 })];
+    const out = enforceStrengthSessionDuration(acts, 'advanced', 120); // total 30, headroom 90
+    assert.equal(out[0].duration_minutes, 55);
+  });
+
+  test('§33 advanced + NO budget headroom → the short session is kept (never exceeds the budget)', () => {
+    const acts = [strengthAct({ duration_minutes: 30 })];
+    const out = enforceStrengthSessionDuration(acts, 'advanced', 30); // headroom 0
+    assert.equal(out[0].duration_minutes, 30);
+  });
+
+  test('§33 advanced + partial headroom → raised only as far as the budget allows', () => {
+    const acts = [strengthAct({ duration_minutes: 30 })];
+    const out = enforceStrengthSessionDuration(acts, 'advanced', 45); // headroom 15
+    assert.equal(out[0].duration_minutes, 45);
+  });
+
+  test('§34 a light / support strength day is left exactly as prescribed', () => {
+    const acts = [
+      strengthAct({ title: 'Upper/lower support', description: 'upper/lower split light day', duration_minutes: 30 }),
+      strengthAct({ day: 'thursday', title: 'Full-body strength', duration_minutes: 30 }),
+    ];
+    const out = enforceStrengthSessionDuration(acts, 'advanced', 200);
+    assert.equal(out[0].duration_minutes, 30);   // support day untouched
+    assert.equal(out[1].duration_minutes, 55);   // primary day raised
+  });
+
+  test('§35 beginner is never modified', () => {
+    const acts = [strengthAct({ duration_minutes: 30 })];
+    assert.equal(enforceStrengthSessionDuration(acts, 'beginner', 200)[0].duration_minutes, 30);
+    assert.equal(enforceStrengthSessionDuration(acts, undefined, 200)[0].duration_minutes, 30);
+  });
+
+  test('§36 intermediate floor is 45; an already-long session is untouched', () => {
+    assert.equal(enforceStrengthSessionDuration([strengthAct({ duration_minutes: 30 })], 'intermediate', 200)[0].duration_minutes, 45);
+    assert.equal(enforceStrengthSessionDuration([strengthAct({ duration_minutes: 70 })], 'advanced', 200)[0].duration_minutes, 70);
+  });
+
+  test('non-strength activities are untouched', () => {
+    const acts = [strengthAct({ category: 'cardio', activity: 'run', duration_minutes: 20, title: 'Easy run', description: '' })];
+    assert.equal(enforceStrengthSessionDuration(acts, 'advanced', 200)[0].duration_minutes, 20);
+  });
+
+  test('isLightOrSupportStrength recognises support / light / recovery / intensity:light', () => {
+    assert.equal(isLightOrSupportStrength({ title: 'Upper/lower support', description: '', intensity: 'moderate' }), true);
+    assert.equal(isLightOrSupportStrength({ title: 'Strength', description: 'light technique day', intensity: 'moderate' }), true);
+    assert.equal(isLightOrSupportStrength({ title: 'Strength', description: '', intensity: 'light' }), true);
+    assert.equal(isLightOrSupportStrength({ title: 'Full-body strength', description: 'Heavy compound lifts.', intensity: 'challenging' }), false);
   });
 });
 
