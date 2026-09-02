@@ -18,7 +18,7 @@ import { selectExerciseForRequirement, type SelectedExercise } from './exercise-
 import {
   buildGenerationContext, isGoalSupported, MOBILITY_REQUIREMENTS,
   workoutTypeSpec, estimateSessionMinutes,
-  classifyStrengthStructure, fitStrengthSessionForStructure, type ProfileLike,
+  classifyStrengthStructure, fitStrengthSessionForStructure, fullBodyOrdinalInPlan, type ProfileLike,
 } from '@/lib/programme-generator';
 import type { ExerciseRequirement, GenerationContext } from '@/lib/programme-types';
 import { resolveWeekNumber, parseLocalDateOnly } from '@/lib/workout-execution';
@@ -111,9 +111,14 @@ async function estimateWorkoutDuration(workoutId: string): Promise<number | null
     .eq('workout_id', workoutId);
   const rows = (data as any[]) ?? [];
   if (rows.length === 0) return null;
+  // Beta #015B — a persisted row is a compound lift when its rest is
+  // compound-length (accessory 60s / core 45s / compound ≥ 75s, and ≥ 120s
+  // for intermediate/advanced). Count them so the ramp-set time matches the
+  // generator's own estimate (estimateSessionMinutes second arg).
+  const compoundCount = rows.filter(r => (r.rest_seconds ?? 0) >= 90).length;
   return estimateSessionMinutes(rows.map(r => ({
     sets: r.sets ?? 0, reps: r.reps ?? 0, restSeconds: r.rest_seconds ?? 0,
-  })));
+  })), compoundCount);
 }
 
 /**
@@ -345,13 +350,13 @@ async function claimStandaloneWorkoutSlot(
 async function generateExerciseSession(
   userId: string, requirements: ExerciseRequirement[], context: GenerationContext,
   key: SupportedActivityKey, title: string, category: string, durationMinutes: number,
-  opts?: { workoutType?: string; description?: string; slotDate?: string },
+  opts?: { workoutType?: string; description?: string; slotDate?: string; locationType?: 'home' | 'gym' | 'both' },
 ): Promise<{ id: string; title: string; durationMinutes: number; exerciseCount: number } | null> {
   const claim = await claimStandaloneWorkoutSlot(userId, key, {
     title,
     description: opts?.description ?? exerciseWorkoutDescription(context.experience),
     category,
-    location_type: context.equipmentLocation,
+    location_type: opts?.locationType ?? context.equipmentLocation,
     difficulty: context.experience,
     duration_minutes: durationMinutes,
     is_active: true,
@@ -397,6 +402,10 @@ async function generateActivityBlockSession(
 
 async function generateSession(
   userId: string, key: SupportedActivityKey, context: GenerationContext, activity: StartingPlanActivity,
+  // Beta #014 follow-up — the full-body A/B seed (session ORDINAL in the
+  // plan) computed once by the caller, so fresh generation and the reuse /
+  // repair path pick the identical variant.
+  strengthSeed?: number | string | null,
 ): Promise<{ id: string; title: string; durationMinutes: number; sessionType: SessionType; exerciseCount?: number } | null> {
   switch (key) {
     case 'gym': {
@@ -408,13 +417,15 @@ async function generateSession(
       // description now follow the CANONICAL activity (its structure /
       // "Upper/lower support" / "…light day"), not a fixed full-body template.
       const structure = classifyStrengthStructure(activity.title, activity.description);
-      // Beta #014 — a STABLE per-activity seed (planned_date, else weekday)
-      // so two full-body days in one week alternate A/B instead of both
-      // resolving to the identical full-body-A programme.
-      const seed = activity.planned_date ?? activity.day ?? null;
       const { requirements, durationMinutes } = fitStrengthSessionForStructure(
-        structure, context.experience, activity.duration_minutes, seed,
+        structure, context.experience, activity.duration_minutes,
+        strengthSeed ?? activity.planned_date ?? activity.day ?? null,
       );
+      // Beta #015C — location is NOT a substitute for session duration (§10):
+      // a standalone support day is now a substantive ~60-min session for an
+      // advanced user, so it's no longer stamped 'both' to soften a 24-min
+      // gym trip. location_type follows the user's real equipment context
+      // (context.equipmentLocation), same as primary strength.
       const w = await generateExerciseSession(
         userId, requirements, context, 'gym', strengthHeadline(activity), 'strength', durationMinutes,
         {
@@ -494,7 +505,7 @@ export async function getActivityRecommendation(userId: string, activity: Starti
 
   const { data: profileRow } = await supabase
     .from('fitness_profile')
-    .select('goal, experience_level, activity_level, preferred_activities, goal_target_date')
+    .select('goal, experience_level, activity_level, preferred_activities, goal_target_date, ai_assessment')
     .eq('user_id', userId)
     .maybeSingle();
   const profile: ProfileLike = {
@@ -525,7 +536,21 @@ export async function getActivityRecommendation(userId: string, activity: Starti
   // in one sitting no longer share one workout row), and the same stable
   // seed picks the full-body A/B variant so two full-body days differ.
   const strengthSlotDate = key === 'gym' ? (activity.planned_date ?? undefined) : undefined;
-  const strengthSeed = activity.planned_date ?? activity.day ?? null;
+  // Beta #014 follow-up — the A/B seed is this session's ORDINAL among the
+  // plan's full-body sessions (position, not calendar parity), so two
+  // full-body days always alternate regardless of their dates. Falls back to
+  // planned_date only when the plan can't be enumerated (legacy shape).
+  const strengthSeed: number | string | null = (() => {
+    if (key !== 'gym' || strengthStructure !== 'full_body') return null;
+    const planActs = (profileRow?.ai_assessment as any)?.starting_plan?.activities;
+    if (Array.isArray(planActs)) {
+      const idx = planActs.findIndex((a: any) =>
+        a && a.day === activity.day && a.title === activity.title
+        && (a.planned_date ?? null) === (activity.planned_date ?? null));
+      if (idx >= 0) return fullBodyOrdinalInPlan(planActs, idx);
+    }
+    return activity.planned_date ?? activity.day ?? null;
+  })();
 
   const requirementsForKey: ExerciseRequirement[] | null =
     key === 'gym'
@@ -564,7 +589,7 @@ export async function getActivityRecommendation(userId: string, activity: Starti
     };
   }
 
-  const generated = await generateSession(userId, key, context, activity);
+  const generated = await generateSession(userId, key, context, activity, strengthSeed);
   if (!generated) return fallback(professionalSupport);
 
   return {

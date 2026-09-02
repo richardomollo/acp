@@ -6,6 +6,7 @@
 import { exerciseService } from './exercise-service.ts';
 import type { ACPExercise, ExerciseDifficulty } from '../lib/exercise-types.ts';
 import { REPS_BY_ROLE, type ExerciseRequirement } from '../lib/programme-types.ts';
+import { compoundPrescription } from '../lib/programme-generator.ts';
 import { rankExerciseCandidates, isMobilityRequirement } from '../lib/exercise-fit-validator.ts';
 
 export interface SelectedExercise {
@@ -124,7 +125,12 @@ export async function selectExerciseForRequirement(
   difficulty: ExerciseDifficulty,
   alreadySelected: Set<string>,
 ): Promise<SelectedExercise> {
-  const rx = REPS_BY_ROLE[requirement.role];
+  // Beta #015B — a compound row's sets/reps/rest scale with experience so an
+  // advanced primary session's stored prescription matches its estimated
+  // (longer) duration. Accessory / core / mobility unchanged.
+  const rx = requirement.role === 'compound'
+    ? { ...REPS_BY_ROLE.compound, ...compoundPrescription(difficulty) } // keep the coaching note, scale sets/reps/rest
+    : REPS_BY_ROLE[requirement.role];
   const primaryQuery = requirement.muscleHint ?? requirement.bodyPart;
   const pool = await fetchCandidates(primaryQuery, difficulty);
   const byLocation = pool.filter(ex => matchesLocation(equipmentLocation, ex.equipment));
