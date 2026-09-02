@@ -62,6 +62,8 @@ out
 .DS_Store
 
 *.apk
+*.aab
+*.ipa
 
 # Claude Code local settings (may contain secrets in permission allowlists)
 .claude/
