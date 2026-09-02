@@ -4,7 +4,7 @@ import {
   isGoalSupported, deriveSessionsPerWeek, deriveEquipmentLocation, deriveDurationWeeks,
   buildGenerationContext, buildTrainingStrategy, buildWorkoutSlots, workoutTypeSpec,
   buildStrengthRequirements, strengthDurationMinutes, FULL_BODY_A_REQUIREMENTS,
-  estimateSessionMinutes, prescriptionForRequirements, fitStrengthSession,
+  estimateSessionMinutes, prescriptionForRequirements, estimateStrengthSessionMinutes, fitStrengthSession,
   type ProfileLike,
 } from '../programme-generator.ts';
 
@@ -246,8 +246,8 @@ describe('buildWorkoutSlots — experience-aware Strength prescription (Chunk 4.
     // experience band — so it always matches "N exercises · M min" on the
     // workout screen. Advanced still lands longer purely because it carries
     // more volume.
-    assert.equal(beginnerSlot.durationMinutes, estimateSessionMinutes(prescriptionForRequirements(beginnerSlot.requirements!)));
-    assert.equal(advancedSlot.durationMinutes, estimateSessionMinutes(prescriptionForRequirements(advancedSlot.requirements!)));
+    assert.equal(beginnerSlot.durationMinutes, estimateStrengthSessionMinutes(beginnerSlot.requirements!, 'beginner'));
+    assert.equal(advancedSlot.durationMinutes, estimateStrengthSessionMinutes(advancedSlot.requirements!, 'advanced'));
     assert.ok(advancedSlot.durationMinutes > beginnerSlot.durationMinutes);
     assert.ok(advancedSlot.requirements!.length > beginnerSlot.requirements!.length);
   });
@@ -260,7 +260,9 @@ describe('buildWorkoutSlots — experience-aware Strength prescription (Chunk 4.
     );
     const slot = buildWorkoutSlots(buildTrainingStrategy(ctx), ctx).find(s => s.workoutType === 'full_body_a')!;
     assert.ok(slot.durationMinutes <= 30, `expected <= 30, got ${slot.durationMinutes}`);
-    assert.equal(slot.durationMinutes, estimateSessionMinutes(prescriptionForRequirements(slot.requirements!)));
+    // #015B: an advanced compound base can exceed a tight 30-min ceiling; the
+    // label is then capped at the planned minutes (never claims more), per #013.
+    assert.equal(slot.durationMinutes, Math.min(estimateStrengthSessionMinutes(slot.requirements!, 'advanced'), 30));
   });
 
   test('an activity-block slot (e.g. an easy run) keeps the flat session default regardless of experience — mobility/running/walking are out of scope for this chunk', () => {
@@ -302,7 +304,7 @@ describe('estimateSessionMinutes / fitStrengthSession', () => {
   test('with no ceiling, fitStrengthSession keeps the full experience-aware list', () => {
     const fitted = fitStrengthSession(FULL_BODY_A_REQUIREMENTS, 'advanced');
     assert.deepEqual(fitted.requirements, buildStrengthRequirements(FULL_BODY_A_REQUIREMENTS, 'advanced'));
-    assert.equal(fitted.durationMinutes, estimateSessionMinutes(prescriptionForRequirements(fitted.requirements)));
+    assert.equal(fitted.durationMinutes, estimateStrengthSessionMinutes(fitted.requirements, 'advanced'));
   });
 
   test('a tight ceiling trims trailing accessory work but never below the base compound + core list', () => {
@@ -312,8 +314,9 @@ describe('estimateSessionMinutes / fitStrengthSession', () => {
   });
 
   test('a generous ceiling never inflates the session beyond what the prescription actually takes', () => {
+    // #015B — no fillStructure passed here, so no growth; still no inflation past the real estimate.
     const fitted = fitStrengthSession(FULL_BODY_A_REQUIREMENTS, 'advanced', 999);
-    assert.equal(fitted.durationMinutes, estimateSessionMinutes(prescriptionForRequirements(fitted.requirements)));
+    assert.equal(fitted.durationMinutes, estimateStrengthSessionMinutes(fitted.requirements, 'advanced'));
     assert.ok(fitted.durationMinutes < 999);
   });
 });
