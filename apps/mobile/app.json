@@ -2,7 +2,7 @@
   "expo": {
     "name": "Active CityPass",
     "slug": "acitypass",
-    "version": "1.0.6",
+    "version": "1.0.7",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "acitypass",
@@ -19,8 +19,8 @@
       "bundleIdentifier": "com.activecitypass.app",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSPhotoLibraryUsageDescription": "Active City Pass needs access to your photo library so you can upload a profile picture for your account.",
-        "NSCameraUsageDescription": "Active CityPass uses your camera to take a profile photo.",
+        "NSPhotoLibraryUsageDescription": "Active City Pass needs access to your photo library so you can upload a profile picture and choose meal photos to help log what you ate.",
+        "NSCameraUsageDescription": "Active City Pass uses your camera to take a profile photo and to photograph meals so you can log what you ate.",
         "CFBundleURLTypes": [
           {
             "CFBundleURLSchemes": [
@@ -78,6 +78,13 @@
         }
       ],
       "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Active City Pass lets you choose a meal photo to help log what you ate. The photo is analysed once and not stored.",
+          "cameraPermission": "Active City Pass lets you photograph a meal to help log what you ate. The photo is analysed once and not stored."
+        }
+      ],
       [
         "@sentry/react-native/expo",
         {

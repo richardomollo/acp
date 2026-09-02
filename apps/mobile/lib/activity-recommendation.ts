@@ -9,6 +9,7 @@ import type { ProviderMatch } from './professional-support.ts';
 import type { HumanSupportSignal } from './human-support-types.ts';
 import type { ProfessionalSupportRecommendation } from './activity-recommendation-types.ts';
 import { textMatchesActivityKeyword, type NormalizedActivityKey } from './fulfilment.ts';
+import type { StrengthStructure } from './programme-generator.ts';
 
 // Mirrors services/human-support-service.ts's HumanSupportInsight shape —
 // duplicated as a structural type here (not imported) so this pure module
@@ -129,6 +130,18 @@ export const SUGGESTED_WORKOUT_TYPE: Record<SupportedActivityKey, string> = {
   running: 'acp_suggested_running',
   walking: 'acp_suggested_walking',
 };
+
+// Beta Feedback #013 — a strength activity's standalone-session identity now
+// also carries its canonical STRUCTURE, so two strength days in the same
+// week (e.g. a primary upper day and a lower/support day) never collide on
+// the (user, workout_type, suggested_local_date) idempotency key and never
+// reuse each other's content. `full_body` and `support` keep the original
+// 'acp_suggested_strength' string verbatim — no migration/backfill (§16).
+export function suggestedStrengthWorkoutType(structure: StrengthStructure): string {
+  if (structure === 'upper') return 'acp_suggested_strength_upper';
+  if (structure === 'lower') return 'acp_suggested_strength_lower';
+  return 'acp_suggested_strength';
+}
 
 // ── Session validity (Chunk 4.5A) ────────────────────────────────────────────
 // An atomically-claimed workouts row can exist yet still not be a genuinely

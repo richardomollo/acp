@@ -20,36 +20,40 @@ const { width, height } = Dimensions.get('window');
 
 export const WALKTHROUGH_KEY = 'walkthrough_complete';
 
+// Beta Feedback #008 — the walkthrough now tells one progressive story:
+// ACP starts with the PERSON (goal → personalised plan), turns that plan
+// into action (marketplace supply as a fulfilment layer, not the headline),
+// and adapts as the user does. No "membership", "pass" or venue-count claims.
 const SLIDES = [
   {
     id: '1',
     eyebrow: 'Welcome to Active CityPass',
-    headline: "All of Nairobi's fitness\nin one membership",
-    body: 'Gyms, yoga, boxing, swimming, spas, kids activities — one flexible pass unlocks them all. Train, play, and unwind on your terms.',
+    headline: 'Fitness built\naround you',
+    body: 'Tell us what you want to achieve. ACP creates a personalised plan around your goals, experience, schedule and preferences.',
   },
   {
     id: '2',
-    eyebrow: '50+ Venues across Nairobi',
-    headline: 'Discover world-class\nvenues near you',
-    body: 'From Westlands to Karen, Kilimani to Lavington — browse top-rated gyms, studios, pools, and wellness centres all on one map.',
+    eyebrow: 'Your week, planned',
+    headline: 'Know what to do —\nand when',
+    body: 'Get a realistic weekly plan for strength, cardio, recovery and the activities you enjoy, built around the time you actually have.',
   },
   {
     id: '3',
-    eyebrow: 'Instant booking',
-    headline: 'Pick a class, tap book,\nshow up',
-    body: 'Browse real-time availability, book in seconds, and get an instant confirmation. No phone calls, no forms — just tap and go.',
+    eyebrow: 'Move your way',
+    headline: 'Your plan. Your choice\nof where to do it.',
+    body: 'Train on your own, book an open gym, join a class or get support from a professional — ACP helps you turn your plan into action.',
   },
   {
     id: '4',
-    eyebrow: 'Flexible booking',
-    headline: 'Book anything\nacross Nairobi',
-    body: 'Gym session Monday, yoga Tuesday, spa Friday — your membership works across every partner venue. Mix and match as your week demands.',
+    eyebrow: 'It learns with you',
+    headline: 'A plan that changes\nas you do',
+    body: "ACP notices what you complete, skip or find hard, and adapts next week to fit your real life — not a fixed programme you're expected to keep up with.",
   },
   {
     id: '5',
-    eyebrow: 'Join today',
-    headline: 'Your city, your\nfitness pass',
-    body: 'Pick a plan, book your first class, and start exploring the best fitness and wellness Nairobi has to offer.',
+    eyebrow: 'Your first step',
+    headline: 'Start with\nyour goal',
+    body: "Answer a few questions about what you want, where you're starting and the time you have — ACP builds your first week right away.",
   },
 ];
 
@@ -110,7 +114,7 @@ export default function Walkthrough() {
         />
         <Text style={styles.logoText}>Active CityPass</Text>
         <TouchableOpacity onPress={finish} style={styles.skipBtn}>
-          <Text style={styles.skipText}>Explore →</Text>
+          <Text style={styles.skipText}>Skip</Text>
         </TouchableOpacity>
       </View>
 

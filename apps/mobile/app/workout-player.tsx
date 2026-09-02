@@ -7,7 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ThemedText } from '@/components/themed-text';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { palette, radii, fontSize, shadows, darkTheme } from '@/constants/theme';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { authService } from '@/services/auth';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +17,10 @@ import {
 } from '@/services/notifications';
 import { workoutExecutionService, type PerceivedDifficulty } from '@/services/workout-execution-service';
 import { ExerciseMedia } from '@/components/exercise-media';
+import {
+  buildWorkoutSessionEvidence, summarizeWorkoutSession,
+  type WorkoutSessionSummary, type SessionExerciseInput, type WorkoutSessionInput,
+} from '@/lib/workout-session-summary';
 
 const SCREEN_W = Dimensions.get('window').width;
 const GIF_SIZE = SCREEN_W - 120;
@@ -242,7 +246,18 @@ const r = StyleSheet.create({
 // ── Main player ────────────────────────────────────────────────────────────────
 
 export default function WorkoutPlayerScreen() {
-  const { workoutId } = useLocalSearchParams<{ workoutId: string }>();
+  // Beta #010 — plan link (present only when launched from Home's plan
+  // recommendation). When set, finishing moves plan_activity_completions +
+  // plan_activity_execution directly, and the done screen returns to Home.
+  const { workoutId, planId, activityIndex, plannedDate } = useLocalSearchParams<{
+    workoutId: string; planId?: string; activityIndex?: string; plannedDate?: string;
+  }>();
+  const planLink = useMemo(
+    () => (planId && activityIndex != null && activityIndex !== '' && plannedDate
+      ? { planId, activityIndex: Number(activityIndex), plannedDate }
+      : null),
+    [planId, activityIndex, plannedDate],
+  );
   const router = useRouter();
 
   const [workout, setWorkout]         = useState<Workout | null>(null);
@@ -283,6 +298,12 @@ export default function WorkoutPlayerScreen() {
   const [perceivedDifficulty, setPerceivedDifficulty] = useState<PerceivedDifficulty | null>(null);
   const [activityDurationMin, setActivityDurationMin] = useState(0);
   const [completionPct, setCompletionPct]     = useState<number | null>(null);
+  // Beta #011 — deterministic session summary shown on the done screen.
+  // `sessionEvidenceInput` is the difficulty/rating-independent part, set once
+  // at finish; `sessionSummary` is derived from it + the current taps.
+  const [sessionEvidenceInput, setSessionEvidenceInput] =
+    useState<Omit<WorkoutSessionInput, 'perceivedDifficulty' | 'sessionRating'> | null>(null);
+  const [sessionSummary, setSessionSummary]   = useState<WorkoutSessionSummary | null>(null);
 
   const lastSetCompletedAtRef                 = useRef<number | null>(null);
 
@@ -493,13 +514,75 @@ export default function WorkoutPlayerScreen() {
         userId, historyId, workoutId as string, { actualDurationMinutes: durationMinutes },
       );
       setCompletionPct(completionPercentage);
+
+      // Beta #010 — the workout is persisted; now move the CANONICAL plan state
+      // (completion + Day 9 execution) so Home reflects it on next focus with no
+      // separate confirm tap. Best-effort — never blocks the completion flow.
+      if (planLink) {
+        workoutExecutionService.linkPlanActivityCompletion({
+          userId, planId: planLink.planId, activityIndex: planLink.activityIndex,
+          plannedDate: planLink.plannedDate, historyId, completionPercentage, durationMinutes,
+        }).catch(() => {});
+      }
+
+      // Beta #011 — assemble the deterministic session-summary inputs (strength
+      // sessions only). Set logs come from the DB (getLoggedSets), not local
+      // state, so the just-logged final set is never one render behind. The
+      // user-facing text is derived reactively below so a later difficulty /
+      // rating tap flows straight into it.
+      if (workout && !workout.is_activity_block) {
+        const exerciseIds = exercises.map(e => e.exercises.id);
+        const [loggedSets, previousByExercise] = await Promise.all([
+          workoutExecutionService.getLoggedSets(historyId).catch(() => [] as Awaited<ReturnType<typeof workoutExecutionService.getLoggedSets>>),
+          workoutExecutionService.getPreviousExerciseSets(userId, historyId, exerciseIds).catch(() => ({} as Record<string, { reps: number | null; weightKg: number | null }[]>)),
+        ]);
+        const exInputs: SessionExerciseInput[] = exercises.map(we => {
+          const exId = we.exercises.id;
+          return {
+            exerciseId: exId,
+            name: we.exercises.name,
+            plannedSets: we.sets,
+            plannedReps: we.reps,
+            loggedSets: loggedSets
+              .filter(l => l.exerciseId === exId)
+              .map(l => ({ setNumber: l.setNumber, reps: l.reps, weightKg: l.weightKg })),
+            rating: exerciseRatings[exId] ?? null,
+            note: exerciseNotes[exId]?.trim() || null,
+            previousSets: previousByExercise[exId] ?? null,
+          };
+        });
+        setSessionEvidenceInput({
+          workoutTitle: workout.title,
+          plannedExerciseCount: exercises.length,
+          actualDurationMinutes: durationMinutes,
+          completionPercentage,
+          exercises: exInputs,
+        });
+      }
     }
-  }, [elapsed, workoutId, exerciseNotes, userId, historyId, workout, activityDurationMin]);
+  }, [elapsed, workoutId, exerciseNotes, userId, historyId, workout, activityDurationMin, planLink, exercises, exerciseRatings]);
+
+  // Beta #011 — derive the summary text reactively so a difficulty / session-
+  // rating tap on the done screen updates it immediately. Purely deterministic.
+  useEffect(() => {
+    if (!sessionEvidenceInput) { setSessionSummary(null); return; }
+    const evidence = buildWorkoutSessionEvidence({
+      ...sessionEvidenceInput,
+      perceivedDifficulty,
+      sessionRating: sessionRating || null,
+    });
+    setSessionSummary(summarizeWorkoutSession(evidence));
+  }, [sessionEvidenceInput, perceivedDifficulty, sessionRating]);
 
   const chooseDifficulty = async (value: PerceivedDifficulty) => {
     if (!userId || !historyId) return;
     setPerceivedDifficulty(value);
     await workoutExecutionService.setPerceivedDifficulty(userId, historyId, value);
+    if (planLink) {
+      workoutExecutionService.setPlanActivityDifficulty({
+        userId, planId: planLink.planId, activityIndex: planLink.activityIndex, perceived: value,
+      }).catch(() => {});
+    }
   };
 
   const handleSaveNote = async () => {
@@ -617,6 +700,21 @@ export default function WorkoutPlayerScreen() {
                 </ThemedText>
               ) : null}
 
+              {/* Beta #011 — grounded session summary. Deterministic: every line
+                  is computed from this session's own evidence (no model). */}
+              {sessionSummary ? (
+                <View style={s.summaryCard}>
+                  <ThemedText style={s.summaryLabel}>Session summary</ThemedText>
+                  {sessionSummary.facts.map((f, i) => (
+                    <View key={i} style={s.summaryRow}>
+                      <View style={s.summaryDot} />
+                      <ThemedText style={s.summaryFact}>{f}</ThemedText>
+                    </View>
+                  ))}
+                  <ThemedText style={s.summaryCoaching}>{sessionSummary.coachingLine}</ThemedText>
+                </View>
+              ) : null}
+
               {historyId && !reopenedSummary ? (
                 <View style={s.ratingCard}>
                   <ThemedText style={s.noteCardLabel}>How did that feel?</ThemedText>
@@ -681,16 +779,23 @@ export default function WorkoutPlayerScreen() {
                 </View>
               ) : null}
 
+              {/* Beta #010 — when launched from the plan, pop straight back to
+                  Home so the user immediately sees the activity marked done /
+                  the exercise ring updated (the Home focus-refresh re-reads the
+                  now-persisted completion). */}
               <TouchableOpacity
                 style={s.doneBtn}
-                onPress={() => router.replace('/fitness-journey')}
+                onPress={() => (planLink ? router.dismissAll() : router.replace('/fitness-journey'))}
                 activeOpacity={0.85}
               >
-                <ThemedText style={s.doneBtnText}>View My Journey</ThemedText>
+                <ThemedText style={s.doneBtnText}>{planLink ? 'Done' : 'View My Journey'}</ThemedText>
                 <Ionicons name="arrow-forward" size={18} color={palette.ink900} />
               </TouchableOpacity>
-              <TouchableOpacity style={s.doneBtnGhost} onPress={() => router.replace('/workout-hub' as any)}>
-                <ThemedText style={s.doneBtnGhostText}>Back to Workouts</ThemedText>
+              <TouchableOpacity
+                style={s.doneBtnGhost}
+                onPress={() => router.replace((planLink ? '/fitness-journey' : '/workout-hub') as any)}
+              >
+                <ThemedText style={s.doneBtnGhostText}>{planLink ? 'View my progress' : 'Back to Workouts'}</ThemedText>
               </TouchableOpacity>
             </ScrollView>
           </KeyboardAvoidingView>
@@ -1076,6 +1181,23 @@ const s = StyleSheet.create({
   noteCard: {
     alignSelf: 'stretch', backgroundColor: 'rgba(0,0,0,0.25)',
     borderRadius: radii.xl, padding: 18, marginBottom: 20, gap: 10,
+  },
+
+  // Beta #011 — session summary card
+  summaryCard: {
+    alignSelf: 'stretch', backgroundColor: 'rgba(0,0,0,0.25)',
+    borderRadius: radii.xl, padding: 18, marginBottom: 16, gap: 8,
+  },
+  summaryLabel: {
+    fontSize: 11, fontWeight: '800', color: 'rgba(255,255,255,0.6)',
+    textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 2,
+  },
+  summaryRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
+  summaryDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.5)', marginTop: 7 },
+  summaryFact: { flex: 1, fontSize: 13, color: 'rgba(255,255,255,0.9)', lineHeight: 18 },
+  summaryCoaching: {
+    fontSize: 13, color: '#fff', lineHeight: 19, marginTop: 6,
+    paddingTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.14)',
   },
   noteCardLabel: { fontSize: 13, fontWeight: '700', color: 'rgba(255,255,255,0.75)' },
   noteCardInput: {

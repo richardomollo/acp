@@ -7,6 +7,7 @@
 // are gathered (a separate, non-blocking effect; the existing Home load
 // path is untouched).
 import type { AIAssessment, ActivityCategory, StartingPlanActivity } from './ai-assessment';
+import { WEEKDAY_INDEX, localISODate } from './fulfilment.ts';
 
 export interface HomeIntelligenceInsight {
   headline: string;
@@ -116,8 +117,113 @@ export function getHomeIntelligenceInsight(params: HomeIntelligenceParams): Home
   };
 }
 
-/** Finds the canonical plan activity, if any, whose `day` matches today's weekday name. */
+/**
+ * Finds the canonical plan activity, if any, scheduled for `today`. Matches
+ * the way every other plan surface does (weekly-plan, my-plan, fulfilment):
+ * prefer Day 5's historically-stable `planned_date`, then fall back to a
+ * lenient weekday-name match. The stored `day` is a free LLM string with no
+ * enforced casing (`{ type: 'string', maxLength: 12 }` in the web routes), so
+ * a strict `a.day === "Wednesday"` silently missed `"wednesday"` / `" Wed "`
+ * — which suppressed Home's "Today's Plan" card and its ACP Intelligence
+ * insight while weekly-plan still showed the session.
+ */
 export function findTodayActivity(activities: StartingPlanActivity[], today: Date = new Date()): StartingPlanActivity | null {
-  const todayName = today.toLocaleDateString('en-US', { weekday: 'long' });
-  return activities.find(a => a.day === todayName) ?? null;
+  const iso = localISODate(today);
+  const byDate = activities.find(a => a.planned_date === iso);
+  if (byDate) return byDate;
+  const todayIdx = today.getDay();
+  return activities.find(a => WEEKDAY_INDEX[a.day.trim().toLowerCase()] === todayIdx) ?? null;
+}
+
+// ── Beta Feedback #012 — "what's next?" after today is done ─────────────────
+// Once today's actionable activity is resolved, Home advances (presentation
+// only — NEVER plan regeneration) to the chronologically next unresolved
+// planned activity, so the user can book / prepare without waiting for the
+// calendar to change. All local-date, no UTC boundaries (spec §16).
+
+const MS_DAY = 86_400_000;
+
+/**
+ * The local calendar date (YYYY-MM-DD) a plan activity falls on — the same
+ * rule every plan surface uses: Day 5's stored `planned_date` wins, else the
+ * next occurrence of the activity's weekday on/after `anchor`. Local, not UTC.
+ */
+export function resolveActivityDate(a: StartingPlanActivity, anchor: Date = new Date()): string | null {
+  if (a.planned_date) return a.planned_date;
+  const targetIdx = WEEKDAY_INDEX[a.day.trim().toLowerCase()];
+  if (targetIdx === undefined) return null;
+  const offset = (targetIdx - anchor.getDay() + 7) % 7;
+  return localISODate(new Date(anchor.getTime() + offset * MS_DAY));
+}
+
+/** "Today" / "Tomorrow" / weekday name ("Wednesday") for a date, relative to now (spec §20). */
+export function dateLabelFor(iso: string, now: Date = new Date()): string {
+  const todayIso = localISODate(now);
+  const tomorrowIso = localISODate(new Date(now.getTime() + MS_DAY));
+  if (iso === todayIso) return 'Today';
+  if (iso === tomorrowIso) return 'Tomorrow';
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'long' });
+}
+
+export interface ResolvedActivityRef {
+  activity: StartingPlanActivity;
+  activityIndex: number;
+  dateIso: string;
+}
+
+export type NextActivitySelection =
+  | { kind: 'today'; ref: ResolvedActivityRef }
+  | { kind: 'upcoming'; ref: ResolvedActivityRef; dateLabel: string; restTomorrow: boolean }
+  | { kind: 'none' };
+
+export interface SelectNextActivityParams {
+  activities: StartingPlanActivity[];
+  /** activity indexes with a plan_activity_completions row (completed / partial) */
+  completedIndexes: ReadonlySet<number>;
+  /** activity indexes explicitly skipped (plan_activity_execution.execution_status === 'skipped') */
+  skippedIndexes?: ReadonlySet<number>;
+  now?: Date;
+}
+
+/**
+ * Picks the ONE activity Home should feature:
+ *  1. any still-unresolved actionable activity dated TODAY (same-day queue
+ *     always beats tomorrow — spec §4/§6);
+ *  2. otherwise the chronologically next unresolved activity on a future
+ *     date (not hard-coded to "tomorrow" — spec §6);
+ *  3. otherwise 'none' (caller falls back to Sunday / scheduled-next-week /
+ *     the existing empty state).
+ * "Resolved" = completed OR (explicitly) skipped. A partial activity always
+ * also has a completion row, so it's covered by `completedIndexes` (§5).
+ */
+export function selectNextActivity({
+  activities, completedIndexes, skippedIndexes = new Set(), now = new Date(),
+}: SelectNextActivityParams): NextActivitySelection {
+  const todayIso = localISODate(now);
+  const tomorrowIso = localISODate(new Date(now.getTime() + MS_DAY));
+  const isResolved = (i: number) => completedIndexes.has(i) || skippedIndexes.has(i);
+
+  const dated: ResolvedActivityRef[] = activities
+    .map((activity, activityIndex) => ({ activity, activityIndex, dateIso: resolveActivityDate(activity, now) }))
+    .filter((x): x is ResolvedActivityRef => x.dateIso !== null);
+
+  const unresolvedToday = dated
+    .filter(x => x.dateIso === todayIso && !isResolved(x.activityIndex))
+    .sort((a, b) => a.activityIndex - b.activityIndex);
+  if (unresolvedToday.length > 0) return { kind: 'today', ref: unresolvedToday[0] };
+
+  const future = dated
+    .filter(x => x.dateIso > todayIso && !isResolved(x.activityIndex))
+    .sort((a, b) => (a.dateIso === b.dateIso ? a.activityIndex - b.activityIndex : a.dateIso < b.dateIso ? -1 : 1));
+  if (future.length === 0) return { kind: 'none' };
+
+  const next = future[0];
+  const tomorrowHasUnresolved = dated.some(x => x.dateIso === tomorrowIso && !isResolved(x.activityIndex));
+  return {
+    kind: 'upcoming',
+    ref: next,
+    dateLabel: dateLabelFor(next.dateIso, now),
+    restTomorrow: next.dateIso > tomorrowIso && !tomorrowHasUnresolved,
+  };
 }
