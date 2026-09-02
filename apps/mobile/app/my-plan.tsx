@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { View, ScrollView, TouchableOpacity, ActivityIndicator, Modal, StyleSheet } from 'react-native';
 import { useRouter, useFocusEffect, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/themed-text';
 import { supabase } from '@/lib/supabase';
@@ -967,6 +968,13 @@ export default function MyPlanScreen() {
     <View style={styles.root}>
       <Stack.Screen options={{ headerShown: false }} />
 
+      {/* Same soft blue top wash as the Home screen */}
+      <LinearGradient
+        colors={[palette.blue100, 'rgba(208,224,255,0)']}
+        style={styles.topFadeBg}
+        pointerEvents="none"
+      />
+
       <SafeAreaView edges={['top']} style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} hitSlop={12}>
           <Ionicons name="arrow-back" size={22} color={palette.ink900} />
@@ -1660,11 +1668,12 @@ export default function MyPlanScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: palette.white },
+  topFadeBg: { position: 'absolute', top: 0, left: 0, right: 0, height: 460 },
 
   header: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
     paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16,
-    borderBottomWidth: 1, borderBottomColor: palette.hairline,
+    backgroundColor: 'transparent',
   },
   backBtn: {
     width: 38, height: 38, borderRadius: 19,
