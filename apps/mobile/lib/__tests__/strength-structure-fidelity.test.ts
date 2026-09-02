@@ -7,7 +7,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   classifyStrengthStructure, strengthRequirementBase, fitStrengthSessionForStructure,
-  UPPER_BODY_REQUIREMENTS, LOWER_BODY_REQUIREMENTS, FULL_BODY_A_REQUIREMENTS,
+  UPPER_BODY_REQUIREMENTS, LOWER_BODY_REQUIREMENTS, FULL_BODY_A_REQUIREMENTS, SUPPORT_REQUIREMENTS,
   estimateSessionMinutes, prescriptionForRequirements,
   type StrengthStructure,
 } from '../programme-generator.ts';
@@ -33,11 +33,15 @@ describe('classifyStrengthStructure (§15/§39)', () => {
 });
 
 describe('strengthRequirementBase', () => {
-  test('maps each structure to a distinct, non-generic base', () => {
+  test('maps each structure to a distinct base (Beta #014 — support is no longer full-body)', () => {
     assert.equal(strengthRequirementBase('upper'), UPPER_BODY_REQUIREMENTS);
     assert.equal(strengthRequirementBase('lower'), LOWER_BODY_REQUIREMENTS);
-    assert.equal(strengthRequirementBase('full_body'), FULL_BODY_A_REQUIREMENTS);
-    assert.equal(strengthRequirementBase('support'), FULL_BODY_A_REQUIREMENTS);
+    assert.equal(strengthRequirementBase('full_body'), FULL_BODY_A_REQUIREMENTS); // default seed → A
+    assert.equal(strengthRequirementBase('support'), SUPPORT_REQUIREMENTS);
+    // support must NOT be a prefix of the full-body compound day
+    const fbKeys = FULL_BODY_A_REQUIREMENTS.map(r => `${r.pattern}:${r.role}`);
+    const supKeys = SUPPORT_REQUIREMENTS.map(r => `${r.pattern}:${r.role}`);
+    assert.ok(!supKeys.every((k, i) => k === fbKeys[i]));
   });
 
   test('§39 upper and lower do NOT resolve to the same requirement set', () => {
@@ -59,7 +63,7 @@ describe('fitStrengthSessionForStructure', () => {
   test('a support day carries NO experience-tier accessory volume, even for an advanced user', () => {
     const advSupport = fitStrengthSessionForStructure('support', 'advanced', 60);
     const advFull = fitStrengthSessionForStructure('full_body', 'advanced', 60);
-    assert.equal(advSupport.requirements.length, FULL_BODY_A_REQUIREMENTS.length); // base only, no +2 accessories
+    assert.equal(advSupport.requirements.length, SUPPORT_REQUIREMENTS.length); // base only, no +2 accessories
     assert.ok(advFull.requirements.length > advSupport.requirements.length);
     assert.equal(advSupport.structure, 'support');
   });
@@ -80,11 +84,14 @@ describe('fitStrengthSessionForStructure', () => {
 });
 
 describe('suggestedStrengthWorkoutType (§40 — cache identity carries structure)', () => {
-  test('full_body and support keep the legacy string; upper/lower get their own', () => {
+  test('full_body keeps the legacy string; upper/lower/support each get their own (Beta #014)', () => {
     assert.equal(suggestedStrengthWorkoutType('full_body'), 'acp_suggested_strength');
-    assert.equal(suggestedStrengthWorkoutType('support'), 'acp_suggested_strength');
+    assert.equal(suggestedStrengthWorkoutType('support'), 'acp_suggested_strength_support');
     assert.equal(suggestedStrengthWorkoutType('upper'), 'acp_suggested_strength_upper');
     assert.equal(suggestedStrengthWorkoutType('lower'), 'acp_suggested_strength_lower');
+    // all four distinct → a full-body day and a support day reviewed in one
+    // sitting can never claim the same (user, workout_type, date) slot
+    assert.equal(new Set(['full_body', 'upper', 'lower', 'support'].map(s => suggestedStrengthWorkoutType(s as any))).size, 4);
   });
 
   test('an upper day and a lower day in the same week never share an identity', () => {

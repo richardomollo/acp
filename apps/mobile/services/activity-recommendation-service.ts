@@ -189,17 +189,22 @@ async function findReusableSuggested(
   activity?: StartingPlanActivity,
   workoutType: string = SUGGESTED_WORKOUT_TYPE[key],
   canonical?: { title: string; description: string },
+  // Beta #014 — when set (a strength activity's planned_date), reuse the row
+  // for that exact planned slot instead of "a row created today". Lets a
+  // session planned ahead be reopened on its day without forking, and keeps
+  // two different strength days from ever resolving to one row.
+  slotDate?: string,
 ): Promise<{ id: string; title: string; durationMinutes: number; exerciseCount?: number } | null> {
-  const { data } = await supabase
+  let query = supabase
     .from('workouts')
     .select('id, title, description, difficulty, created_at, duration_minutes')
     .eq('user_id', userId)
     .eq('workout_type', workoutType)
-    .is('program_week_id', null)
-    .order('created_at', { ascending: false })
-    .limit(5);
+    .is('program_week_id', null);
+  if (slotDate) query = query.eq('suggested_local_date', slotDate);
+  const { data } = await query.order('created_at', { ascending: false }).limit(5);
   const rows = ((data as any[]) ?? []).map(r => ({ id: r.id, title: r.title, description: r.description ?? '', difficulty: r.difficulty ?? null, createdAt: r.created_at, durationMinutes: r.duration_minutes }));
-  const reused = findReusableSuggestedSession(rows, new Date());
+  const reused = slotDate ? rows[0] : findReusableSuggestedSession(rows, new Date());
   if (!reused) return null;
   const reusedRow = rows.find(r => r.id === reused.id);
   const durationMinutes = reusedRow?.durationMinutes ?? SESSION_DURATION_MINUTES[key];
@@ -293,8 +298,13 @@ async function findReusableSuggested(
 async function claimStandaloneWorkoutSlot(
   userId: string, key: SupportedActivityKey, fields: Record<string, unknown>,
   workoutType: string = SUGGESTED_WORKOUT_TYPE[key],
+  // Beta #014 — for a canonical strength activity this is the activity's own
+  // planned_date, so the (user, workout_type, suggested_local_date) slot is
+  // unique per plan activity, not per "day the user happened to open it".
+  // Non-strength callers omit it and keep the today-keyed behaviour.
+  slotDate?: string,
 ): Promise<{ id: string; title: string; durationMinutes: number; won: boolean } | null> {
-  const suggestedLocalDate = toLocalDateKey(new Date());
+  const suggestedLocalDate = slotDate ?? toLocalDateKey(new Date());
 
   const { data: won } = await supabase
     .from('workouts')
@@ -335,7 +345,7 @@ async function claimStandaloneWorkoutSlot(
 async function generateExerciseSession(
   userId: string, requirements: ExerciseRequirement[], context: GenerationContext,
   key: SupportedActivityKey, title: string, category: string, durationMinutes: number,
-  opts?: { workoutType?: string; description?: string },
+  opts?: { workoutType?: string; description?: string; slotDate?: string },
 ): Promise<{ id: string; title: string; durationMinutes: number; exerciseCount: number } | null> {
   const claim = await claimStandaloneWorkoutSlot(userId, key, {
     title,
@@ -346,7 +356,7 @@ async function generateExerciseSession(
     duration_minutes: durationMinutes,
     is_active: true,
     is_activity_block: false,
-  }, opts?.workoutType ?? SUGGESTED_WORKOUT_TYPE[key]);
+  }, opts?.workoutType ?? SUGGESTED_WORKOUT_TYPE[key], opts?.slotDate);
   if (!claim) return null;
 
   if (!claim.won) {
@@ -398,12 +408,20 @@ async function generateSession(
       // description now follow the CANONICAL activity (its structure /
       // "Upper/lower support" / "…light day"), not a fixed full-body template.
       const structure = classifyStrengthStructure(activity.title, activity.description);
+      // Beta #014 — a STABLE per-activity seed (planned_date, else weekday)
+      // so two full-body days in one week alternate A/B instead of both
+      // resolving to the identical full-body-A programme.
+      const seed = activity.planned_date ?? activity.day ?? null;
       const { requirements, durationMinutes } = fitStrengthSessionForStructure(
-        structure, context.experience, activity.duration_minutes,
+        structure, context.experience, activity.duration_minutes, seed,
       );
       const w = await generateExerciseSession(
         userId, requirements, context, 'gym', strengthHeadline(activity), 'strength', durationMinutes,
-        { workoutType: suggestedStrengthWorkoutType(structure), description: strengthDescription(activity, context.experience) },
+        {
+          workoutType: suggestedStrengthWorkoutType(structure),
+          description: strengthDescription(activity, context.experience),
+          slotDate: activity.planned_date ?? undefined,
+        },
       );
       return w ? { ...w, sessionType: 'exercise_workout' } : null;
     }
@@ -502,10 +520,16 @@ export async function getActivityRecommendation(userId: string, activity: Starti
   const resolvedWorkoutType = strengthStructure
     ? suggestedStrengthWorkoutType(strengthStructure)
     : SUGGESTED_WORKOUT_TYPE[key];
+  // Beta #014 — strength standalone sessions are keyed to the plan
+  // activity's own planned_date (a full-body day and a support day reviewed
+  // in one sitting no longer share one workout row), and the same stable
+  // seed picks the full-body A/B variant so two full-body days differ.
+  const strengthSlotDate = key === 'gym' ? (activity.planned_date ?? undefined) : undefined;
+  const strengthSeed = activity.planned_date ?? activity.day ?? null;
 
   const requirementsForKey: ExerciseRequirement[] | null =
     key === 'gym'
-      ? fitStrengthSessionForStructure(strengthStructure!, context.experience, activity.duration_minutes).requirements
+      ? fitStrengthSessionForStructure(strengthStructure!, context.experience, activity.duration_minutes, strengthSeed).requirements
     : key === 'mobility' ? MOBILITY_REQUIREMENTS : null;
 
   // Beta Feedback #006 (cardio) + #013 (strength) — the headline/title must
@@ -522,6 +546,7 @@ export async function getActivityRecommendation(userId: string, activity: Starti
   const reusable = await findReusableSuggested(
     userId, key, requirementsForKey, context, activity, resolvedWorkoutType,
     key === 'gym' ? { title: headline, description: strengthDescription(activity, context.experience) } : undefined,
+    strengthSlotDate,
   );
   const sessionType: SessionType = key === 'running' || key === 'walking' ? 'activity_block' : 'exercise_workout';
 
