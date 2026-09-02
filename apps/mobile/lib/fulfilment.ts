@@ -191,9 +191,22 @@ export function getSelfDirectedSource(key: NormalizedActivityKey, stravaConnecte
 
 // ── Day → upcoming calendar date ────────────────────────────────────────────
 
-const WEEKDAY_INDEX: Record<string, number> = {
+export const WEEKDAY_INDEX: Record<string, number> = {
   sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6,
 };
+
+/**
+ * Local (not UTC) yyyy-mm-dd for a Date — matches how `planned_date` is
+ * stored and how every plan surface compares "is this activity today".
+ * `toISOString().split('T')[0]` would shift the date across the day boundary
+ * for non-UTC timezones.
+ */
+export function localISODate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 
 /**
  * Maps a plan day name ("Wednesday") to the next occurrence of that weekday

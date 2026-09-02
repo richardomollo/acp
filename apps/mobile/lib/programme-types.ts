@@ -26,6 +26,13 @@ export interface GenerationContext {
   experience: ExerciseDifficulty;
   sessionsPerWeek: number;
   sessionDurationMinutes: number;
+  /**
+   * Minutes ACP Intelligence prescribed for the Strength activity, if known
+   * (starting_plan.activities[].duration_minutes). Used as the ceiling the
+   * generated Strength session's volume/duration is fitted under. Null when
+   * no assessment/strength activity is available.
+   */
+  prescribedStrengthMinutes?: number | null;
   equipmentLocation: EquipmentLocation;
   preferredActivities: string[];
   activityLevel: string | null;

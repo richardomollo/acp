@@ -67,11 +67,13 @@ function sessionDeposit(session: SearchSession) {
 
 // ─── Tour ─────────────────────────────────────────────────────────────────────
 
+// Beta Feedback #008B — the marketplace is FULFILMENT for the user's plan,
+// not the whole proposition. Frame it as "ways to follow your plan".
 const DISCOVER_TOUR: TourStep[] = [
-  { icon: 'compass-outline', title: 'Your Discovery Hub', description: 'Browse venues, classes, trainers, and experiences — all from one place.' },
-  { icon: 'options-outline', title: 'Find Your Fit', description: 'Tap a card to open that category, where you can filter and search in more detail.' },
-  { icon: 'person-outline', title: 'Find a Personal Trainer', description: 'Tap Trainers to browse certified coaches — see their specialisations, ratings, and pricing.' },
-  { icon: 'ticket-outline', title: 'Discover Experiences', description: 'Tap Experiences for upcoming retreats, hikes, and wellness days. Secure your spot with a small deposit.' },
+  { icon: 'compass-outline', title: 'Ways to follow your plan', description: 'Browse gyms, classes, trainers and experiences you can use to put your plan into action.' },
+  { icon: 'options-outline', title: 'Open a category', description: 'Tap a card to explore that category, where you can search and filter in more detail.' },
+  { icon: 'person-outline', title: 'Get expert support', description: 'Tap Trainers to browse certified coaches — see their specialisations, ratings and pricing — when you want a professional in your corner.' },
+  { icon: 'ticket-outline', title: 'Classes & experiences', description: 'Reserve a class or an experience with a small deposit — the balance is settled at the venue.' },
 ];
 
 // ─── Main screen ──────────────────────────────────────────────────────────────

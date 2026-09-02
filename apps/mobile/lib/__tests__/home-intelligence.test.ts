@@ -1,6 +1,9 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { getHomeIntelligenceInsight, findTodayActivity } from '../home-intelligence.ts';
+import {
+  getHomeIntelligenceInsight, findTodayActivity,
+  selectNextActivity, resolveActivityDate, dateLabelFor,
+} from '../home-intelligence.ts';
 import type { StartingPlanActivity } from '../ai-assessment.ts';
 import type { AIAssessment } from '../ai-assessment.ts';
 
@@ -157,5 +160,123 @@ describe('findTodayActivity', () => {
     const activities = [activity({ day: 'Monday' })];
     const wednesday = new Date('2026-09-02T09:00:00');
     assert.equal(findTodayActivity(activities, wednesday), null);
+  });
+
+  // Beta QA — the stored `day` is a free LLM string with no enforced casing;
+  // a strict `===` silently hid Home's Today's Plan card while weekly-plan
+  // (which normalises) still showed the session.
+  test('matches leniently regardless of casing or surrounding whitespace', () => {
+    const wednesday = new Date('2026-09-02T09:00:00');
+    for (const day of ['wednesday', 'WEDNESDAY', ' Wednesday', 'Wednesday ']) {
+      assert.equal(findTodayActivity([activity({ day, activity: 'Yoga' })], wednesday)?.activity, 'Yoga', day);
+    }
+  });
+
+  test('prefers an explicit planned_date over the weekday name', () => {
+    const wednesday = new Date('2026-09-02T09:00:00');
+    const activities = [
+      activity({ day: 'Wednesday', activity: 'StaleWeekday' }),
+      activity({ day: 'Monday', planned_date: '2026-09-02', activity: 'DatedToday' }),
+    ];
+    assert.equal(findTodayActivity(activities, wednesday)?.activity, 'DatedToday');
+  });
+});
+
+// ── Beta Feedback #012 — "up next" selection ───────────────────────────────
+describe('selectNextActivity (Beta #012)', () => {
+  const NOW = new Date('2026-09-01T12:00:00'); // Tuesday; tomorrow = Wed 2 Sep
+
+  const A = (i: number, date: string, o: Partial<StartingPlanActivity> = {}) =>
+    activity({ planned_date: date, title: `act${i}`, activity: `act${i}`, ...o });
+
+  test('A — one activity today, incomplete → feature today; complete → advance to next future', () => {
+    const acts = [A(0, '2026-09-01'), A(1, '2026-09-03', { category: 'mobility' })];
+    const incomplete = selectNextActivity({ activities: acts, completedIndexes: new Set(), now: NOW });
+    assert.equal(incomplete.kind, 'today');
+    assert.equal(incomplete.kind === 'today' && incomplete.ref.activityIndex, 0);
+
+    const done = selectNextActivity({ activities: acts, completedIndexes: new Set([0]), now: NOW });
+    assert.equal(done.kind, 'upcoming');
+    assert.equal(done.kind === 'upcoming' && done.ref.activityIndex, 1);
+    assert.equal(done.kind === 'upcoming' && done.dateLabel, 'Thursday');
+  });
+
+  test('B — two activities today, first done → feature the SECOND (still today), not tomorrow', () => {
+    const acts = [A(0, '2026-09-01'), A(1, '2026-09-01', { category: 'mobility' }), A(2, '2026-09-02')];
+    const sel = selectNextActivity({ activities: acts, completedIndexes: new Set([0]), now: NOW });
+    assert.equal(sel.kind, 'today');
+    assert.equal(sel.kind === 'today' && sel.ref.activityIndex, 1);
+  });
+
+  test('C — all of today resolved → advance to next future activity', () => {
+    const acts = [A(0, '2026-09-01'), A(1, '2026-09-01'), A(2, '2026-09-02')];
+    const sel = selectNextActivity({ activities: acts, completedIndexes: new Set([0, 1]), now: NOW });
+    assert.equal(sel.kind, 'upcoming');
+    assert.equal(sel.kind === 'upcoming' && sel.ref.activityIndex, 2);
+    assert.equal(sel.kind === 'upcoming' && sel.dateLabel, 'Tomorrow');
+  });
+
+  test('D — today explicitly skipped → Home is not trapped, it advances', () => {
+    const acts = [A(0, '2026-09-01'), A(1, '2026-09-04')];
+    const sel = selectNextActivity({ activities: acts, completedIndexes: new Set(), skippedIndexes: new Set([0]), now: NOW });
+    assert.equal(sel.kind, 'upcoming');
+    assert.equal(sel.kind === 'upcoming' && sel.ref.activityIndex, 1);
+  });
+
+  test('tomorrow is a rest day (no activity), Wednesday has one → label the weekday, flag restTomorrow', () => {
+    const acts = [A(0, '2026-09-01'), A(1, '2026-09-03', { category: 'strength' })];
+    const sel = selectNextActivity({ activities: acts, completedIndexes: new Set([0]), now: NOW });
+    assert.equal(sel.kind, 'upcoming');
+    assert.equal(sel.kind === 'upcoming' && sel.dateLabel, 'Thursday');
+    assert.equal(sel.kind === 'upcoming' && sel.restTomorrow, true);
+  });
+
+  test('no activity for two days → shows the actual next day, not an empty tomorrow', () => {
+    const acts = [A(0, '2026-09-01'), A(1, '2026-09-05')];
+    const sel = selectNextActivity({ activities: acts, completedIndexes: new Set([0]), now: NOW });
+    assert.equal(sel.kind, 'upcoming');
+    assert.equal(sel.kind === 'upcoming' && sel.ref.dateIso, '2026-09-05');
+    assert.equal(sel.kind === 'upcoming' && sel.dateLabel, 'Saturday');
+    assert.equal(sel.kind === 'upcoming' && sel.restTomorrow, true);
+  });
+
+  test('a future activity already completed early is skipped — next UNRESOLVED wins (§15)', () => {
+    const acts = [A(0, '2026-09-01'), A(1, '2026-09-02'), A(2, '2026-09-03')];
+    const sel = selectNextActivity({ activities: acts, completedIndexes: new Set([0, 1]), now: NOW });
+    assert.equal(sel.kind, 'upcoming');
+    assert.equal(sel.kind === 'upcoming' && sel.ref.activityIndex, 2);
+  });
+
+  test('nothing left in the plan → kind "none" (caller handles Sunday / next-week / empty state)', () => {
+    const acts = [A(0, '2026-09-01')];
+    assert.equal(selectNextActivity({ activities: acts, completedIndexes: new Set([0]), now: NOW }).kind, 'none');
+  });
+
+  test('Sunday → Monday: run the selector on a scheduled next-week plan whose activities are all future', () => {
+    const sundayNow = new Date('2026-09-06T20:00:00'); // Sunday
+    const nextWeek = [
+      activity({ planned_date: '2026-09-07', title: 'Mon strength', activity: 'strength' }),
+      activity({ planned_date: '2026-09-09', title: 'Wed run', activity: 'run', category: 'cardio' }),
+    ];
+    const sel = selectNextActivity({ activities: nextWeek, completedIndexes: new Set(), now: sundayNow });
+    assert.equal(sel.kind, 'upcoming');
+    assert.equal(sel.kind === 'upcoming' && sel.ref.activityIndex, 0);
+    assert.equal(sel.kind === 'upcoming' && sel.dateLabel, 'Tomorrow');
+  });
+});
+
+describe('resolveActivityDate / dateLabelFor', () => {
+  const NOW = new Date('2026-09-01T12:00:00');
+  test('resolveActivityDate prefers the stored planned_date', () => {
+    assert.equal(resolveActivityDate(activity({ planned_date: '2026-09-10', day: 'Monday' }), NOW), '2026-09-10');
+  });
+  test('resolveActivityDate falls back to the next occurrence of the weekday (local)', () => {
+    assert.equal(resolveActivityDate(activity({ day: 'wednesday' }), NOW), '2026-09-02');
+    assert.equal(resolveActivityDate(activity({ day: 'Tuesday' }), NOW), '2026-09-01'); // today itself
+  });
+  test('dateLabelFor: today / tomorrow / weekday', () => {
+    assert.equal(dateLabelFor('2026-09-01', NOW), 'Today');
+    assert.equal(dateLabelFor('2026-09-02', NOW), 'Tomorrow');
+    assert.equal(dateLabelFor('2026-09-04', NOW), 'Friday');
   });
 });

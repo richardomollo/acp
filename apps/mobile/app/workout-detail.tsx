@@ -104,7 +104,11 @@ function prescriptionLabel(ex: WorkoutExercise): string {
 // ── Main screen ────────────────────────────────────────────────────────────────
 
 export default function WorkoutDetailScreen() {
-  const { workoutId } = useLocalSearchParams<{ workoutId: string }>();
+  // Beta #010 — plan link forwarded from Home's recommendation card through to
+  // the player, so finishing the workout moves the canonical plan state.
+  const { workoutId, planId, activityIndex, plannedDate } = useLocalSearchParams<{
+    workoutId: string; planId?: string; activityIndex?: string; plannedDate?: string;
+  }>();
   const router = useRouter();
 
   const [workout, setWorkout]       = useState<Workout | null>(null);
@@ -533,7 +537,13 @@ export default function WorkoutDetailScreen() {
         <SafeAreaView edges={['bottom']} style={s.ctaWrap}>
           <TouchableOpacity
             style={[s.startBtn, s.startBtnGrad]}
-            onPress={() => router.push({ pathname: '/workout-player', params: { workoutId: workout.id } })}
+            onPress={() => router.push({
+              pathname: '/workout-player',
+              params: {
+                workoutId: workout.id,
+                ...(planId ? { planId, activityIndex: activityIndex ?? '', plannedDate: plannedDate ?? '' } : {}),
+              },
+            })}
             activeOpacity={0.88}
           >
             <Ionicons name={isActivityBlockCardio ? 'create-outline' : 'play'} size={20} color="#fff" />

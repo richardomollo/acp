@@ -24,6 +24,22 @@ function toWorkoutGoal(goal: string): 'lose_weight' | 'build_muscle' | 'improve_
   return 'general_fitness';
 }
 
+/**
+ * The minutes ACP Intelligence prescribed for Strength work — the shortest
+ * `duration_minutes` among the assessment's strength activities, so no
+ * generated Strength session overshoots the slot the plan gave it. Returns
+ * null for any missing/legacy/malformed assessment (generation then falls
+ * back to the pure prescription estimate).
+ */
+function prescribedStrengthMinutes(aiAssessment: unknown): number | null {
+  const activities = (aiAssessment as any)?.starting_plan?.activities;
+  if (!Array.isArray(activities)) return null;
+  const mins = activities
+    .filter((a: any) => a?.category === 'strength' && Number.isFinite(a?.duration_minutes) && a.duration_minutes > 0)
+    .map((a: any) => a.duration_minutes as number);
+  return mins.length > 0 ? Math.min(...mins) : null;
+}
+
 function categoryForWorkoutType(workoutType: string): string {
   return workoutType.startsWith('full_body') ? 'strength' : 'cardio';
 }
@@ -154,7 +170,7 @@ async function fetchActiveProgrammeRow(userId: string) {
 async function runGeneration(userId: string, createdFromProgramId: string | null): Promise<GenerateProgrammeResult> {
   const { data: profile } = await supabase
     .from('fitness_profile')
-    .select('goal, experience_level, activity_level, preferred_activities, goal_target_date')
+    .select('goal, experience_level, activity_level, preferred_activities, goal_target_date, ai_assessment')
     .eq('user_id', userId)
     .maybeSingle();
 
@@ -171,7 +187,7 @@ async function runGeneration(userId: string, createdFromProgramId: string | null
   }
 
   const startDate = new Date();
-  const context = buildGenerationContext(profileLike, startDate);
+  const context = buildGenerationContext(profileLike, startDate, prescribedStrengthMinutes(profile?.ai_assessment));
   const strategy = buildTrainingStrategy(context);
   const slots = buildWorkoutSlots(strategy, context);
 

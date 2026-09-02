@@ -1,10 +1,12 @@
-import { StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Image } from 'react-native';
+import { StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Image, Platform } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { palette, radii, fontSize } from '@/constants/theme';
 import { useState, useEffect, useCallback } from 'react';
 import { authService } from '@/services/auth';
 import { supabase } from '@/lib/supabase';
+import { checkAppleHealthConnection } from '@/services/health';
+import { getStravaStatus } from '@/services/strava';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { TourOverlay, type TourStep } from '@/components/tour-overlay';
@@ -79,6 +81,8 @@ export default function ProfileScreen() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [isGuest, setIsGuest] = useState(false);
+  const [appleHealthConnected, setAppleHealthConnected] = useState(false);
+  const [stravaConnected, setStravaConnected] = useState(false);
 
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
@@ -128,10 +132,25 @@ export default function ProfileScreen() {
       };
 
       setUser(profile);
+      loadConnections();
     } catch (err) {
       console.error('Profile load error:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Connected-fitness status for the Profile section labels. Non-blocking and
+  // best-effort — a failed check just leaves the row without a "Connected"
+  // label, and the integration screen shows the real state on tap.
+  const loadConnections = () => {
+    getStravaStatus()
+      .then(status => setStravaConnected(!!status.connected))
+      .catch(() => {});
+    if (Platform.OS === 'ios') {
+      checkAppleHealthConnection()
+        .then(state => setAppleHealthConnected(state === 'connected'))
+        .catch(() => {});
     }
   };
 
@@ -297,13 +316,37 @@ export default function ProfileScreen() {
               </View>
               <Ionicons name="chevron-forward" size={18} color={palette.gray200} />
             </TouchableOpacity>
-            <View style={styles.menuDivider} />
-            <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/health-settings' as any)}>
+          </View>
+        </View>
+
+        {/* ── Connected Fitness ── */}
+        <View style={styles.menuSection}>
+          <ThemedText style={styles.menuSectionTitle}>CONNECTED FITNESS</ThemedText>
+          <View style={styles.menuCard}>
+            {Platform.OS === 'ios' && (
+              <>
+                <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/health-settings' as any)}>
+                  <View style={styles.menuItemLeft}>
+                    <Ionicons name="heart-outline" size={20} color={palette.ink600} />
+                    <ThemedText style={styles.menuText}>Apple Health</ThemedText>
+                  </View>
+                  <View style={styles.menuItemRight}>
+                    {appleHealthConnected && <ThemedText style={styles.menuStatus}>Connected</ThemedText>}
+                    <Ionicons name="chevron-forward" size={18} color={palette.gray200} />
+                  </View>
+                </TouchableOpacity>
+                <View style={styles.menuDivider} />
+              </>
+            )}
+            <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/strava-settings' as any)}>
               <View style={styles.menuItemLeft}>
-                <Ionicons name="heart-outline" size={20} color={palette.ink600} />
-                <ThemedText style={styles.menuText}>Apple Health</ThemedText>
+                <Ionicons name="bicycle-outline" size={20} color={palette.ink600} />
+                <ThemedText style={styles.menuText}>Strava</ThemedText>
               </View>
-              <Ionicons name="chevron-forward" size={18} color={palette.gray200} />
+              <View style={styles.menuItemRight}>
+                {stravaConnected && <ThemedText style={styles.menuStatus}>Connected</ThemedText>}
+                <Ionicons name="chevron-forward" size={18} color={palette.gray200} />
+              </View>
             </TouchableOpacity>
           </View>
         </View>
@@ -429,7 +472,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 15,
   },
   menuItemLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 },
+  menuItemRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   menuText: { fontSize: fontSize.base, color: palette.ink900 },
+  menuStatus: { fontSize: fontSize.sm, fontWeight: '600', color: palette.success700 },
   menuDivider: { height: 1, backgroundColor: palette.hairline, marginHorizontal: 16 },
 
   // Sign out

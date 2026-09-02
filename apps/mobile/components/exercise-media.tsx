@@ -20,7 +20,14 @@ import { isMuscleWikiStreamUrl } from '@/services/providers/musclewiki-provider'
 // ImageStyle (satisfied by both call sites) and cast for VideoView (which
 // wants ViewStyle) since RN's Image/View style types are incompatible on a
 // couple of unrelated fields (e.g. `overflow`) neither caller actually sets.
-export function ExerciseMedia({ url, style }: { url: string | null; style: StyleProp<ImageStyle> }) {
+export function ExerciseMedia({
+  url, style, fit = 'contain',
+}: {
+  url: string | null;
+  style: StyleProp<ImageStyle>;
+  /** 'contain' (default) for the exercise-detail/player thumbnails; 'cover' for a full-bleed background. */
+  fit?: 'contain' | 'cover';
+}) {
   const resolvedUrl = useMuscleWikiMedia(url);
   const isVideo = !!resolvedUrl && isMuscleWikiStreamUrl(resolvedUrl);
 
@@ -50,8 +57,8 @@ export function ExerciseMedia({ url, style }: { url: string | null; style: Style
 
   if (isVideo) {
     if (videoFailed) return null;
-    return <VideoView player={player} style={style as any} contentFit="contain" nativeControls={false} />;
+    return <VideoView player={player} style={style as any} contentFit={fit} nativeControls={false} />;
   }
 
-  return <Image source={{ uri: resolvedUrl }} style={style} resizeMode="contain" />;
+  return <Image source={{ uri: resolvedUrl }} style={style} resizeMode={fit} />;
 }

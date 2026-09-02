@@ -24,7 +24,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/themed-text';
 import { palette, radii, fontSize } from '@/constants/theme';
 import type { StartingPlanActivity } from '@/lib/ai-assessment';
-import type { PlanActivityFulfilment } from '@/lib/fulfilment';
+import type { PlanActivityFulfilment, MarketplaceMatch } from '@/lib/fulfilment';
 import type { ActivityRecommendation } from '@/lib/activity-recommendation-types';
 import { getActivityRecommendation } from '@/services/activity-recommendation-service';
 import { normalizeActivity, isGymAccessListing } from '@/lib/fulfilment';
@@ -56,16 +56,51 @@ const PRESCRIPTION_UNIT: Record<string, string> = {
   gym: 'exercises', mobility: 'movements',
 };
 
+// Gym-access listings that pair with a self-directed GYM workout (Beta #005):
+// only for a 'gym' activity, only genuine access listings (never a competing
+// coached class), and only where the access window covers the planned
+// session. Shared by inline rendering and the detached (parent-rendered) path.
+function gymAccessFor(
+  fulfilment: PlanActivityFulfilment | undefined, activity: StartingPlanActivity,
+): MarketplaceMatch[] {
+  if (!fulfilment) return [];
+  const key = normalizeActivity(activity.activity || activity.title, activity.category);
+  if (key !== 'gym') return [];
+  return fulfilment.marketplaceMatches
+    .filter(m =>
+      isGymAccessListing(m.title, m.activityType)
+      && (m.durationMinutes == null || m.durationMinutes >= activity.duration_minutes),
+    )
+    .slice(0, 2);
+}
+
 export function ActivityFulfilmentCard({
-  userId, activity, fulfilment, onInfoPress, emptyFallback,
+  userId, activity, fulfilment, onInfoPress, emptyFallback, onResolved, onDark = false,
+  gymAccessSlot = 'inline', planContext,
 }: {
   userId: string | null;
   activity: StartingPlanActivity;
   fulfilment: PlanActivityFulfilment | undefined;
   onInfoPress: () => void;
+  /** Beta #010 — when this card is the plan's own recommendation (Home), pass the
+   *  plan link so finishing the workout moves the canonical plan state directly
+   *  instead of waiting for a candidate-confirm tap. */
+  planContext?: { planId: string; activityIndex: number; plannedDate: string };
   /** Rendered only when there is truly nothing else to show (no ACP recommendation, no self-directed capability, no marketplace matches) — e.g. Home's "View this week's plan →" link. */
   emptyFallback?: ReactNode;
+  /** Fires once getActivityRecommendation settles — the resolved workout id, summary, and any gym-access matches, so a parent (Home) can decorate the card, show "N exercises · M min" in its own header, and render "Need a gym?" as its own card, without re-running the recommendation. */
+  onResolved?: (r: {
+    sessionId: string | null;
+    exerciseCount: number | null;
+    durationMinutes: number | null;
+    gymAccess: MarketplaceMatch[];
+  }) => void;
+  /** Render text/dividers light and drop the redundant "YOUR WORKOUT" / count·duration line (the parent shows it), for placement over a dark media background (Home's Today's Plan card). Layout is otherwise unchanged. */
+  onDark?: boolean;
+  /** 'inline' (default) renders the "NEED A GYM?" block inside this card; 'detached' omits it and lets the parent render those matches (from onResolved) as its own card. */
+  gymAccessSlot?: 'inline' | 'detached';
 }) {
+  const s = onDark ? sDark : sLight;
   const router = useRouter();
   const [recommendation, setRecommendation] = useState<ActivityRecommendation | null>(null);
   const [loading, setLoading] = useState(false);
@@ -91,6 +126,20 @@ export function ActivityFulfilmentCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, activity.day, activity.activity]);
 
+  // Report the resolved session (id + summary) and gym-access matches up to a
+  // parent that renders its own header / "Need a gym?" card (Home). Separate
+  // from the fetch effect so it also covers EXISTING_PROGRAMME_SESSION, and
+  // doesn't depend on the callback's identity.
+  useEffect(() => {
+    onResolved?.({
+      sessionId: recommendation?.selfGuided.sessionId ?? null,
+      exerciseCount: recommendation?.selfGuided.exerciseCount ?? null,
+      durationMinutes: recommendation?.durationMinutes ?? null,
+      gymAccess: gymAccessFor(fulfilment, activity),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recommendation, fulfilment, activity.day, activity.activity]);
+
   if (!fulfilment) return null;
 
   const acpRecommended = !!recommendation && recommendation.selfGuided.mode !== 'GENERIC_FALLBACK';
@@ -109,7 +158,15 @@ export function ActivityFulfilmentCard({
     const sessionId = recommendation?.selfGuided.sessionId;
     if (sessionId) {
       setNavigating(true);
-      router.push({ pathname: '/workout-detail', params: { workoutId: sessionId } } as any);
+      router.push({
+        pathname: '/workout-detail',
+        params: {
+          workoutId: sessionId,
+          ...(planContext
+            ? { planId: planContext.planId, activityIndex: String(planContext.activityIndex), plannedDate: planContext.plannedDate }
+            : {}),
+        },
+      } as any);
       return;
     }
     if (fulfilment?.selfDirected) {
@@ -136,70 +193,42 @@ export function ActivityFulfilmentCard({
   // Beta Feedback #005 — "what to do" (the workout) and "where to do it"
   // (gym access) are complementary, not mutually exclusive. When ACP has
   // prescribed a self-directed GYM workout, also surface any Open Gym / gym-
-  // access listings already present in fulfilment.marketplaceMatches (they
-  // were previously computed but never rendered in this branch). Deterministic:
-  // only gym-access listings (never a competing coached class), only for a
-  // 'gym' activity, and only where the access window is long enough for the
-  // planned workout (section 12). Reuses the existing marketplace-match row.
-  const gymAccessMatches = key === 'gym'
-    ? fulfilment.marketplaceMatches
-        .filter(m =>
-          isGymAccessListing(m.title, m.activityType)
-          && (m.durationMinutes == null || m.durationMinutes >= activity.duration_minutes),
-        )
-        .slice(0, 2)
-    : [];
+  // access listings already present in fulfilment.marketplaceMatches. With
+  // gymAccessSlot='detached' the parent renders these as its own card instead
+  // (Home) — see gymAccessFor below for the shared filter.
+  const gymAccessMatches = gymAccessFor(fulfilment, activity);
 
   return (
     <>
       {loading && !recommendation ? (
         <View style={s.block}>
-          <ThemedText style={s.header}>{header}</ThemedText>
+          {!onDark && <ThemedText style={s.header}>{header}</ThemedText>}
           <ThemedText style={s.meta}>{LOADING_COPY[key] ?? 'Preparing your session…'}</ThemedText>
         </View>
       ) : acpRecommended ? (
         <>
+          {/* onDark (Home): the parent shows "STRENGTH · N exercises · M min"
+              in its own title row, so this block is just the CTA. */}
           <View style={s.block}>
-            <ThemedText style={s.header}>{header}</ThemedText>
-            <ThemedText style={s.meta}>
-              {recommendation!.selfGuided.exerciseCount != null && unit
-                ? `${recommendation!.selfGuided.exerciseCount} ${unit} · ${recommendation!.durationMinutes ?? 0} min`
-                : `${recommendation!.durationMinutes ?? 0} min`}
-            </ThemedText>
-            <TouchableOpacity onPress={handlePrimaryCta} disabled={navigating} activeOpacity={0.7} style={{ marginTop: 6 }}>
+            {!onDark && <ThemedText style={s.header}>{header}</ThemedText>}
+            {!onDark && (
+              <ThemedText style={s.meta}>
+                {recommendation!.selfGuided.exerciseCount != null && unit
+                  ? `${recommendation!.selfGuided.exerciseCount} ${unit} · ${recommendation!.durationMinutes ?? 0} min`
+                  : `${recommendation!.durationMinutes ?? 0} min`}
+              </ThemedText>
+            )}
+            <TouchableOpacity onPress={handlePrimaryCta} disabled={navigating} activeOpacity={0.7} style={onDark ? undefined : { marginTop: 6 }}>
               <ThemedText style={s.link}>{ctaVerb} →</ThemedText>
             </TouchableOpacity>
           </View>
 
-          {/* Beta Feedback #005 — gym access alongside the workout. Additive:
-              the workout above is the coaching recommendation; this is just
-              where to do it. Navigation only — viewing/booking never marks
-              the activity done (section 20). */}
-          {gymAccessMatches.length > 0 && (
-            <View style={s.block}>
-              <ThemedText style={s.header}>NEED A GYM?</ThemedText>
-              {gymAccessMatches.map(m => (
-                <TouchableOpacity key={m.id} style={s.matchRow} onPress={() => router.push(m.navigationTarget as any)} activeOpacity={0.7}>
-                  {m.imageUrl ? (
-                    <Image source={{ uri: m.imageUrl }} style={s.matchImage} />
-                  ) : (
-                    <View style={[s.matchImage, s.matchImageFallback]}>
-                      <Ionicons name="barbell-outline" size={20} color={palette.gray300} />
-                    </View>
-                  )}
-                  <View style={{ flex: 1 }}>
-                    <ThemedText style={s.title}>{m.title}</ThemedText>
-                    <ThemedText style={s.meta}>
-                      {m.partnerName ? `${m.partnerName} · ` : ''}
-                      {m.isAlternateDay ? 'Available on ACP · ' : ''}
-                      {new Date(m.date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long' })}
-                      {m.startTime ? ` · ${m.startTime.slice(0, 5)}` : ''}
-                      {m.priceKes != null ? ` · KES ${m.priceKes.toLocaleString()}` : ''}
-                    </ThemedText>
-                  </View>
-                  <ThemedText style={s.link}>View →</ThemedText>
-                </TouchableOpacity>
-              ))}
+          {/* Beta Feedback #005 — "where to do it", alongside "what to do".
+              gymAccessSlot='detached' (Home) omits it here; the parent renders
+              <GymAccessList> as its own "Need a gym?" card. */}
+          {gymAccessSlot === 'inline' && gymAccessMatches.length > 0 && (
+            <View style={sLight.block}>
+              <GymAccessList matches={gymAccessMatches} />
             </View>
           )}
         </>
@@ -284,7 +313,45 @@ export function ActivityFulfilmentCard({
   );
 }
 
-const s = StyleSheet.create({
+/**
+ * The "NEED A GYM?" list — a small eyebrow header + one row per gym-access
+ * match (90×90 image, title, "partner · day · time · price", "View →"). Shared
+ * verbatim by the card's inline slot and Home's detached "Need a gym?" card so
+ * the two always look identical.
+ */
+export function GymAccessList({ matches }: { matches: MarketplaceMatch[] }) {
+  const router = useRouter();
+  if (matches.length === 0) return null;
+  return (
+    <>
+      <ThemedText style={sLight.header}>NEED A GYM?</ThemedText>
+      {matches.map(m => (
+        <TouchableOpacity key={m.id} style={sLight.matchRow} onPress={() => router.push(m.navigationTarget as any)} activeOpacity={0.7}>
+          {m.imageUrl ? (
+            <Image source={{ uri: m.imageUrl }} style={sLight.matchImage} />
+          ) : (
+            <View style={[sLight.matchImage, sLight.matchImageFallback]}>
+              <Ionicons name="barbell-outline" size={22} color={palette.gray300} />
+            </View>
+          )}
+          <View style={{ flex: 1 }}>
+            <ThemedText style={sLight.title}>{m.title}</ThemedText>
+            <ThemedText style={sLight.meta}>
+              {m.partnerName ? `${m.partnerName} · ` : ''}
+              {m.isAlternateDay ? 'Available on ACP · ' : ''}
+              {new Date(m.date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long' })}
+              {m.startTime ? ` · ${m.startTime.slice(0, 5)}` : ''}
+              {m.priceKes != null ? ` · KES ${m.priceKes.toLocaleString()}` : ''}
+            </ThemedText>
+          </View>
+          <ThemedText style={sLight.link}>View →</ThemedText>
+        </TouchableOpacity>
+      ))}
+    </>
+  );
+}
+
+const sLight = StyleSheet.create({
   block: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: palette.hairline },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6 },
   header: { fontSize: 10, fontWeight: '700', color: palette.gray300, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
@@ -299,3 +366,18 @@ const s = StyleSheet.create({
   trainerImage: { width: 90, height: 90, borderRadius: radii.lg, flexShrink: 0 },
   trainerImageFallback: { backgroundColor: palette.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
 });
+
+// onDark — same layout, light text/dividers for placement over Home's
+// exercise-media background. Only the colour-bearing keys are overridden;
+// image sizes etc. fall through from sLight.
+const sDark = {
+  ...sLight,
+  ...StyleSheet.create({
+    block: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.16)' },
+    header: { fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.72)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
+    link: { fontSize: fontSize.xs, fontWeight: '700', color: '#fff' },
+    title: { fontSize: fontSize.sm, fontWeight: '700', color: '#fff' },
+    meta: { fontSize: fontSize.xs, fontWeight: '600', color: 'rgba(255,255,255,0.82)', marginTop: 2 },
+    body: { fontSize: fontSize.sm, color: 'rgba(255,255,255,0.82)', marginTop: 6, lineHeight: 20 },
+  }),
+};
