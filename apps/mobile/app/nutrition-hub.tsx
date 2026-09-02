@@ -9,6 +9,7 @@ import { palette, radii, fontSize, shadows } from '@/constants/theme';
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { authService } from '@/services/auth';
+import { isNutritionSavedMealsEnabled } from '@/lib/flags';
 import { Ionicons } from '@expo/vector-icons';
 
 interface NutritionProfile {
@@ -179,7 +180,7 @@ export default function NutritionHubScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <ThemedText style={s.createCtaTitle}>Set your nutrition goal</ThemedText>
-                <ThemedText style={s.createCtaSub}>Tell us what you're eating for &amp; your cuisine preference</ThemedText>
+                <ThemedText style={s.createCtaSub}>Tell us what you&apos;re eating for &amp; your cuisine preference</ThemedText>
               </View>
               <Ionicons name="chevron-forward" size={18} color={palette.gray300} />
             </TouchableOpacity>
@@ -263,6 +264,45 @@ export default function NutritionHubScreen() {
             </>
           )}
 
+          {/* ── Nutrition N2: what you actually ate ── */}
+          <View style={s.bodyPartHeader}>
+            <ThemedText style={s.bodyPartEyebrow}>YOUR NUTRITION</ThemedText>
+            <ThemedText style={s.bodyPartTitle}>What you ate</ThemedText>
+          </View>
+          <TouchableOpacity style={s.browseCta} onPress={() => router.push('/today-nutrition' as any)} activeOpacity={0.85}>
+            <View style={s.browseCtaIcon}>
+              <Ionicons name="today-outline" size={22} color={palette.success700} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <ThemedText style={s.createCtaTitle}>Today&apos;s nutrition</ThemedText>
+              <ThemedText style={s.createCtaSub}>Log food and see your actual calories, macros and nutrients</ThemedText>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={palette.gray300} />
+          </TouchableOpacity>
+          <TouchableOpacity style={s.browseCta} onPress={() => router.push('/nutrition-history' as any)} activeOpacity={0.85}>
+            <View style={s.browseCtaIcon}>
+              <Ionicons name="bar-chart-outline" size={22} color={palette.success700} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <ThemedText style={s.createCtaTitle}>Recent nutrition</ThemedText>
+              <ThemedText style={s.createCtaSub}>Your last 7–14 logged days and what ACP has observed</ThemedText>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={palette.gray300} />
+          </TouchableOpacity>
+
+          {userId && isNutritionSavedMealsEnabled() && (
+            <TouchableOpacity style={s.browseCta} onPress={() => router.push('/my-meals' as any)} activeOpacity={0.85}>
+              <View style={s.browseCtaIcon}>
+                <Ionicons name="albums-outline" size={22} color={palette.success700} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <ThemedText style={s.createCtaTitle}>My meals</ThemedText>
+                <ThemedText style={s.createCtaSub}>Save combinations you eat regularly and log them faster</ThemedText>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={palette.gray300} />
+            </TouchableOpacity>
+          )}
+
           {/* ── Meal Library ── */}
           <View style={s.bodyPartHeader}>
             <ThemedText style={s.bodyPartEyebrow}>DISCOVER</ThemedText>
@@ -291,7 +331,7 @@ export default function NutritionHubScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <ThemedText style={s.createCtaTitle}>My Meal Plans</ThemedText>
-                  <ThemedText style={s.createCtaSub}>Build your own weekly plan or view what's assigned</ThemedText>
+                  <ThemedText style={s.createCtaSub}>Build your own weekly plan or view what&apos;s assigned</ThemedText>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color={palette.gray300} />
               </TouchableOpacity>
