@@ -15,6 +15,10 @@ import { getProgressSnapshot } from '@/services/progress-service';
 import { interpretProgress } from '@/lib/progress-interpreter';
 import type { ProgressSnapshot, ProgressInterpretation } from '@/lib/progress-types';
 import { getHumanSupportInsight, dismissHumanSupportInsight, type HumanSupportInsight } from '@/services/human-support-service';
+import { nutritionOutcomeIntelligenceService } from '@/services/nutrition-outcome-intelligence-service';
+import { NutritionWhatAcpIsLearning } from '@/components/nutrition/nutrition-what-acp-is-learning';
+import type { OutcomeObservation } from '@/lib/nutrition/nutrition-outcome-intelligence';
+import { localISODate } from '@/lib/fulfilment';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Circle, Line as SvgLine } from 'react-native-svg';
 import { computeWeightProgress } from '@/lib/weight-progress';
@@ -222,6 +226,7 @@ export default function FitnessJourneyScreen() {
   const [progressSnapshot, setProgressSnapshot] = useState<ProgressSnapshot | null>(null);
   const [humanSupport, setHumanSupport] = useState<HumanSupportInsight | null>(null);
   const [dismissingSupport, setDismissingSupport] = useState(false);
+  const [outcomeObservations, setOutcomeObservations] = useState<OutcomeObservation[]>([]);
 
   useFocusEffect(useCallback(() => {
     let active = true;
@@ -251,6 +256,14 @@ export default function FitnessJourneyScreen() {
       getHumanSupportInsight(session.user.id).then(insight => {
         if (active) setHumanSupport(insight);
       }).catch(() => { /* enhancement-only */ });
+
+      // Nutrition N9 — outcome intelligence. Read-only + non-blocking:
+      // replays N8 coaching episodes + plan completions longitudinally and
+      // surfaces only REPEATED, OBSERVATIONAL patterns. Never causal, never
+      // adapts anything.
+      nutritionOutcomeIntelligenceService.getObservations(session.user.id, localISODate(new Date())).then(res => {
+        if (active) setOutcomeObservations(res.observations);
+      }).catch(() => { /* enhancement-only — never blocks the page */ });
 
       setIsLoggedIn(true);
       setUserId(session.user.id);
@@ -558,6 +571,9 @@ export default function FitnessJourneyScreen() {
               <StatCard value={`${nutrition.avgProtein}g`} label="Avg Protein" icon="fitness-outline" color={palette.success700} />
               <StatCard value={`${nutrition.avgHydration}L`} label="Avg Hydration" icon="water-outline" color={palette.success700} />
             </View>
+
+            {/* ── What ACP is learning (Nutrition N9) — longitudinal, observational ── */}
+            <NutritionWhatAcpIsLearning observations={outcomeObservations} />
 
             {(startingWeight || goalWeight || measurements[0]?.weight_kg) && (
               <View style={s.weightProgressCard}>
