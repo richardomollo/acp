@@ -2,12 +2,12 @@ import {
   StyleSheet, View, TouchableOpacity, ActivityIndicator,
 } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
-import { useRouter, Stack } from 'expo-router';
-import { palette, radii, fontSize } from '@/constants/theme';
+import { useRouter, Stack, useFocusEffect } from 'expo-router';
+import { palette, radii } from '@/constants/theme';
 import { useState, useCallback } from 'react';
-import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   connectStrava, getStravaStatus, syncStravaNow, disconnectStrava, type StravaStatus,
 } from '@/services/strava';
@@ -75,6 +75,11 @@ export default function StravaSettingsScreen() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={s.root}>
+        <LinearGradient
+          colors={[palette.blue100, 'rgba(208,224,255,0)']}
+          style={s.topFadeBg}
+          pointerEvents="none"
+        />
         <SafeAreaView edges={['top']} style={s.header}>
           <TouchableOpacity style={s.backBtn} onPress={() => router.back()} hitSlop={12}>
             <Ionicons name="arrow-back" size={22} color={palette.ink900} />
@@ -96,10 +101,12 @@ export default function StravaSettingsScreen() {
 
             {status.connected ? (
               <>
-                <ThemedText style={s.title}>Strava Connected ✓</ThemedText>
+                <ThemedText style={s.title}>Strava connected ✓</ThemedText>
                 <ThemedText style={s.desc}>
-                  Your activities are syncing with Active City Pass. Runs, walks and rides
-                  from Strava show up in your Fitness Journey automatically.
+                  Supported activities you record on Strava — runs, walks and rides —
+                  are added to your Active City Pass activity history and can count
+                  towards your plan progress. ACP only reads activities; it never
+                  starts or changes your Strava recordings.
                 </ThemedText>
                 {status.lastSyncedAt && (
                   <ThemedText style={s.metaText}>
@@ -139,8 +146,10 @@ export default function StravaSettingsScreen() {
               <>
                 <ThemedText style={s.title}>Connect Strava</ThemedText>
                 <ThemedText style={s.desc}>
-                  Connect your Strava account to automatically bring your runs, walks and
-                  rides into your Active City Pass Fitness Journey.
+                  Connect Strava so ACP can recognise supported activities you record —
+                  runs, walks and rides — and use them to update your activity progress.
+                  ACP only reads your activities; it never starts or changes your Strava
+                  recordings.
                 </ThemedText>
 
                 <TouchableOpacity
@@ -169,11 +178,11 @@ export default function StravaSettingsScreen() {
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: palette.white },
+  root: { flex: 1, backgroundColor: palette.surfaceApp },
+  topFadeBg: { position: 'absolute', top: 0, left: 0, right: 0, height: 320 },
   header: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
     paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16,
-    borderBottomWidth: 1, borderBottomColor: palette.hairline,
   },
   backBtn: {
     width: 38, height: 38, borderRadius: 19,

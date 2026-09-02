@@ -196,6 +196,101 @@ export const workoutExecutionService = {
     await supabase.from('workout_history').update({ perceived_difficulty: difficulty }).eq('id', historyId).eq('user_id', userId);
   },
 
+  // ── Beta Feedback #010 — plan-activity linkage ─────────────────────────────
+  // When a workout is launched from the plan's own recommendation, finishing
+  // it must move the CANONICAL plan state, not just workout_history — otherwise
+  // Home keeps showing the activity as incomplete until the user separately
+  // confirms a detected candidate. Both writes are best-effort and idempotent;
+  // the completion flow never fails because of them (spec #010 §4, #011 §26).
+
+  /**
+   * Records the binary plan completion (source 'exercise_db' + the
+   * workout_history id, so the weekly-adaptation can link this session's
+   * perceived_difficulty / completion_percentage to the activity) plus a Day 9
+   * execution row (status from completion %, actual duration, source 'workout').
+   */
+  async linkPlanActivityCompletion(args: {
+    userId: string; planId: string; activityIndex: number; plannedDate: string;
+    historyId: string; completionPercentage: number | null; durationMinutes: number | null;
+  }): Promise<void> {
+    const { userId, planId, activityIndex, plannedDate, historyId, completionPercentage, durationMinutes } = args;
+
+    // plan_activity_completions has INSERT-only RLS (a completion is present or
+    // not — no UPDATE policy), so this is ON CONFLICT DO NOTHING, never an
+    // upsert: a second finish of the same activity is a silent no-op.
+    await supabase.from('plan_activity_completions').upsert(
+      {
+        user_id: userId, plan_id: planId, activity_index: activityIndex,
+        planned_date: plannedDate, completion_source: 'exercise_db', source_entity_id: historyId,
+      },
+      { onConflict: 'user_id,plan_id,activity_index', ignoreDuplicates: true },
+    );
+
+    const partial = completionPercentage != null && completionPercentage >= 30 && completionPercentage < 100;
+    await supabase.from('plan_activity_execution').upsert(
+      {
+        user_id: userId, plan_id: planId, activity_index: activityIndex,
+        execution_status: partial ? 'partial' : 'completed',
+        actual_duration_minutes: durationMinutes != null && durationMinutes >= 0 ? Math.round(durationMinutes) : null,
+        source: 'workout',
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id,plan_id,activity_index' },
+    );
+  },
+
+  /** Maps a post-workout perceived-difficulty tap onto the linked activity's Day 9 execution row (easy→too_easy, difficult→too_hard). */
+  async setPlanActivityDifficulty(args: {
+    userId: string; planId: string; activityIndex: number; perceived: PerceivedDifficulty;
+  }): Promise<void> {
+    const MAP: Record<PerceivedDifficulty, 'too_easy' | 'about_right' | 'too_hard'> = {
+      easy: 'too_easy', about_right: 'about_right', difficult: 'too_hard',
+    };
+    await supabase.from('plan_activity_execution').upsert(
+      {
+        user_id: args.userId, plan_id: args.planId, activity_index: args.activityIndex,
+        difficulty: MAP[args.perceived], source: 'workout',
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id,plan_id,activity_index' },
+    );
+  },
+
+  /**
+   * The user's PREVIOUS logged sets for each of `exerciseIds`, from their most
+   * recent *other* completed session — for deterministic actual-to-actual load
+   * comparison in the session summary (#011 §22). Never fabricates progression:
+   * an exercise with no prior data simply isn't in the returned map.
+   */
+  async getPreviousExerciseSets(
+    userId: string, currentHistoryId: string, exerciseIds: string[],
+  ): Promise<Record<string, { reps: number | null; weightKg: number | null }[]>> {
+    if (exerciseIds.length === 0) return {};
+    const { data } = await supabase
+      .from('workout_set_logs')
+      .select('exercise_id, set_number, reps, weight_kg, logged_at, workout_history:workout_history_id ( completed_at, status )')
+      .eq('user_id', userId)
+      .in('exercise_id', exerciseIds)
+      .neq('workout_history_id', currentHistoryId)
+      .order('logged_at', { ascending: false })
+      .limit(300);
+
+    const byExercise: Record<string, { reps: number | null; weightKg: number | null }[]> = {};
+    // Rows arrive newest-first; keep only those from each exercise's single
+    // most-recent completed session.
+    const seenSessionForExercise: Record<string, string | null> = {};
+    for (const row of ((data as any[]) ?? [])) {
+      const wh = Array.isArray(row.workout_history) ? row.workout_history[0] : row.workout_history;
+      if (!wh || wh.status !== 'completed') continue;
+      const exId = row.exercise_id as string;
+      const sessionKey = wh.completed_at as string;
+      if (seenSessionForExercise[exId] == null) seenSessionForExercise[exId] = sessionKey;
+      if (seenSessionForExercise[exId] !== sessionKey) continue; // a later (older) session — ignore
+      (byExercise[exId] ??= []).push({ reps: row.reps, weightKg: row.weight_kg });
+    }
+    return byExercise;
+  },
+
   async getWorkoutSummary(historyId: string) {
     const { data } = await supabase
       .from('workout_history')

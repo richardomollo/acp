@@ -16,8 +16,9 @@ import { programmeService } from './programme-service';
 import { getHumanSupportInsight } from './human-support-service';
 import { selectExerciseForRequirement, type SelectedExercise } from './exercise-selection-service';
 import {
-  buildGenerationContext, isGoalSupported, FULL_BODY_A_REQUIREMENTS, MOBILITY_REQUIREMENTS,
-  workoutTypeSpec, buildStrengthRequirements, strengthDurationMinutes, type ProfileLike,
+  buildGenerationContext, isGoalSupported, MOBILITY_REQUIREMENTS,
+  workoutTypeSpec, estimateSessionMinutes,
+  classifyStrengthStructure, fitStrengthSessionForStructure, type ProfileLike,
 } from '@/lib/programme-generator';
 import type { ExerciseRequirement, GenerationContext } from '@/lib/programme-types';
 import { resolveWeekNumber, parseLocalDateOnly } from '@/lib/workout-execution';
@@ -26,9 +27,10 @@ import type { StartingPlanActivity } from '@/lib/ai-assessment';
 import type { ActivityRecommendation, ProfessionalSupportRecommendation, SessionType } from '@/lib/activity-recommendation-types';
 import {
   buildProfessionalSupport, isSupportedActivity, matchesExistingSession, findReusableSuggestedSession, toLocalDateKey,
-  isValidSuggestedSession, SUGGESTED_WORKOUT_TYPE, SESSION_HEADLINE, SESSION_TITLE, SESSION_REASON, SESSION_DURATION_MINUTES,
+  isValidSuggestedSession, SUGGESTED_WORKOUT_TYPE, suggestedStrengthWorkoutType, SESSION_HEADLINE, SESSION_TITLE, SESSION_REASON, SESSION_DURATION_MINUTES,
   classifyRunSlot, needsExperienceHeal, type SupportedActivityKey,
 } from '@/lib/activity-recommendation';
+
 
 // Beta Feedback #006 — activity-block cardio (running/walking) is done
 // outdoors or on a treadmill; the workouts.location_type CHECK is
@@ -39,6 +41,16 @@ const ACTIVITY_BLOCK_LOCATION = 'both';
 /** Beta Feedback #007 — one definition of the auto-suggested exercise-workout blurb, kept in sync between generation and the stale-row self-heal. */
 const exerciseWorkoutDescription = (experience: string) =>
   `Recommended for your goal and ${experience} experience level.`;
+
+/** Beta Feedback #013 — a strength session's headline/description must stay
+ *  faithful to the canonical plan activity (like Beta #006 did for run/walk),
+ *  falling back to the generic constants only when the plan carries none. */
+function strengthHeadline(activity: StartingPlanActivity): string {
+  return (activity.title || activity.activity || SESSION_HEADLINE.gym).trim();
+}
+function strengthDescription(activity: StartingPlanActivity, experience: string): string {
+  return (activity.description || '').trim() || exerciseWorkoutDescription(experience);
+}
 
 /** Beta Feedback #006 — the run/walk EXECUTION prescription must stay faithful to the planned activity (title, duration, instructions), not a generic per-key template. */
 function activityBlockFields(key: SupportedActivityKey, activity: StartingPlanActivity) {
@@ -85,6 +97,23 @@ async function countWorkoutExercises(workoutId: string): Promise<number> {
     .select('id', { count: 'exact', head: true })
     .eq('workout_id', workoutId);
   return count ?? 0;
+}
+
+/**
+ * Duration (minutes) estimated from a workout's ACTUALLY persisted
+ * workout_exercises rows — the single source of truth (lib/programme-generator
+ * estimateSessionMinutes). `null` when the workout has no exercise rows.
+ */
+async function estimateWorkoutDuration(workoutId: string): Promise<number | null> {
+  const { data } = await supabase
+    .from('workout_exercises')
+    .select('sets, reps, rest_seconds')
+    .eq('workout_id', workoutId);
+  const rows = (data as any[]) ?? [];
+  if (rows.length === 0) return null;
+  return estimateSessionMinutes(rows.map(r => ({
+    sets: r.sets ?? 0, reps: r.reps ?? 0, restSeconds: r.rest_seconds ?? 0,
+  })));
 }
 
 /**
@@ -158,12 +187,14 @@ async function populateExerciseWorkout(
 async function findReusableSuggested(
   userId: string, key: SupportedActivityKey, requirements: ExerciseRequirement[] | null, context: GenerationContext,
   activity?: StartingPlanActivity,
+  workoutType: string = SUGGESTED_WORKOUT_TYPE[key],
+  canonical?: { title: string; description: string },
 ): Promise<{ id: string; title: string; durationMinutes: number; exerciseCount?: number } | null> {
   const { data } = await supabase
     .from('workouts')
     .select('id, title, description, difficulty, created_at, duration_minutes')
     .eq('user_id', userId)
-    .eq('workout_type', SUGGESTED_WORKOUT_TYPE[key])
+    .eq('workout_type', workoutType)
     .is('program_week_id', null)
     .order('created_at', { ascending: false })
     .limit(5);
@@ -211,12 +242,40 @@ async function findReusableSuggested(
     }).eq('id', reused.id).eq('user_id', userId);
   }
 
+  // Beta Feedback #013 — self-heal a stale same-day STRENGTH row whose
+  // title/description came from the old per-key constant ("Full-body
+  // strength") instead of the canonical plan activity ("Upper/lower
+  // support"). Same row id, no new row, no migration; exercise selection
+  // is untouched.
+  if (canonical && (reused.title !== canonical.title || (reusedRow?.description ?? '') !== canonical.description)) {
+    await supabase.from('workouts').update({
+      title: canonical.title, description: canonical.description,
+    }).eq('id', reused.id).eq('user_id', userId);
+    reused.title = canonical.title;
+  }
+
   let exerciseCount = await countWorkoutExercises(reused.id);
   if (!isValidSuggestedSession({ isActivityBlock: false, exerciseCount })) {
     exerciseCount = await populateExerciseWorkout(reused.id, requirements, context);
   }
   if (!isValidSuggestedSession({ isActivityBlock: false, exerciseCount })) return null; // repair didn't help — not safely reusable (section 9)
-  return { id: reused.id, title: reused.title, durationMinutes, exerciseCount };
+
+  // Self-heal a stale stored duration. Pre-fix rows carry a flat
+  // experience-tier band (e.g. 70) that never matched the real prescription;
+  // recompute from the persisted workout_exercises and, when we know the
+  // planned minutes, keep it within that ceiling. Same row id, no migration.
+  let healedDuration = durationMinutes;
+  const computed = await estimateWorkoutDuration(reused.id);
+  if (computed != null) {
+    const ceiling = activity && Number.isFinite(activity.duration_minutes) && activity.duration_minutes > 0
+      ? activity.duration_minutes : null;
+    const target = ceiling != null ? Math.min(computed, ceiling) : computed;
+    if (Math.abs(target - durationMinutes) >= 2) {
+      await supabase.from('workouts').update({ duration_minutes: target }).eq('id', reused.id).eq('user_id', userId);
+      healedDuration = target;
+    }
+  }
+  return { id: reused.id, title: reused.title, durationMinutes: healedDuration, exerciseCount };
 }
 
 /**
@@ -233,9 +292,9 @@ async function findReusableSuggested(
  */
 async function claimStandaloneWorkoutSlot(
   userId: string, key: SupportedActivityKey, fields: Record<string, unknown>,
+  workoutType: string = SUGGESTED_WORKOUT_TYPE[key],
 ): Promise<{ id: string; title: string; durationMinutes: number; won: boolean } | null> {
   const suggestedLocalDate = toLocalDateKey(new Date());
-  const workoutType = SUGGESTED_WORKOUT_TYPE[key];
 
   const { data: won } = await supabase
     .from('workouts')
@@ -276,17 +335,18 @@ async function claimStandaloneWorkoutSlot(
 async function generateExerciseSession(
   userId: string, requirements: ExerciseRequirement[], context: GenerationContext,
   key: SupportedActivityKey, title: string, category: string, durationMinutes: number,
+  opts?: { workoutType?: string; description?: string },
 ): Promise<{ id: string; title: string; durationMinutes: number; exerciseCount: number } | null> {
   const claim = await claimStandaloneWorkoutSlot(userId, key, {
     title,
-    description: exerciseWorkoutDescription(context.experience),
+    description: opts?.description ?? exerciseWorkoutDescription(context.experience),
     category,
     location_type: context.equipmentLocation,
     difficulty: context.experience,
     duration_minutes: durationMinutes,
     is_active: true,
     is_activity_block: false,
-  });
+  }, opts?.workoutType ?? SUGGESTED_WORKOUT_TYPE[key]);
   if (!claim) return null;
 
   if (!claim.won) {
@@ -330,12 +390,21 @@ async function generateSession(
 ): Promise<{ id: string; title: string; durationMinutes: number; sessionType: SessionType; exerciseCount?: number } | null> {
   switch (key) {
     case 'gym': {
-      // Chunk 4.5C2: experience-aware requirements/duration — see
-      // lib/programme-generator.ts's Strength prescription policy, the same
-      // one full programme generation now uses (section 18).
-      const requirements = buildStrengthRequirements(FULL_BODY_A_REQUIREMENTS, context.experience);
-      const durationMinutes = strengthDurationMinutes(context.experience);
-      const w = await generateExerciseSession(userId, requirements, context, 'gym', SESSION_HEADLINE.gym, 'strength', durationMinutes);
+      // Requirements AND stored duration both come from fitStrengthSession —
+      // one computed estimate of the real prescription, fitted under the
+      // minutes ACP Intelligence prescribed for this activity, so the
+      // workout-detail duration can't diverge from the plan card.
+      // Beta Feedback #013 — the base requirement set, the title and the
+      // description now follow the CANONICAL activity (its structure /
+      // "Upper/lower support" / "…light day"), not a fixed full-body template.
+      const structure = classifyStrengthStructure(activity.title, activity.description);
+      const { requirements, durationMinutes } = fitStrengthSessionForStructure(
+        structure, context.experience, activity.duration_minutes,
+      );
+      const w = await generateExerciseSession(
+        userId, requirements, context, 'gym', strengthHeadline(activity), 'strength', durationMinutes,
+        { workoutType: suggestedStrengthWorkoutType(structure), description: strengthDescription(activity, context.experience) },
+      );
       return w ? { ...w, sessionType: 'exercise_workout' } : null;
     }
     case 'mobility': {
@@ -420,23 +489,41 @@ export async function getActivityRecommendation(userId: string, activity: Starti
   if (!isGoalSupported(profile.goal as any)) return fallback(professionalSupport);
 
   // Built here (not just before generateSession below) so it's also
-  // available to findReusableSuggested's repair path (Chunk 4.5A).
-  const context = buildGenerationContext(profile, new Date());
+  // available to findReusableSuggested's repair path (Chunk 4.5A). The
+  // prescribed Strength minutes come from THIS activity, so a repaired row is
+  // populated with the same fitted requirement set generation would use.
+  const context = buildGenerationContext(profile, new Date(), activity.duration_minutes);
+
+  // Beta Feedback #013 — the strength session's structure drives its
+  // requirement base AND its standalone-session identity (so an upper day and
+  // a lower/support day in the same week never collide or reuse each other).
+  const strengthStructure = key === 'gym'
+    ? classifyStrengthStructure(activity.title, activity.description) : null;
+  const resolvedWorkoutType = strengthStructure
+    ? suggestedStrengthWorkoutType(strengthStructure)
+    : SUGGESTED_WORKOUT_TYPE[key];
+
   const requirementsForKey: ExerciseRequirement[] | null =
-    key === 'gym' ? buildStrengthRequirements(FULL_BODY_A_REQUIREMENTS, context.experience)
+    key === 'gym'
+      ? fitStrengthSessionForStructure(strengthStructure!, context.experience, activity.duration_minutes).requirements
     : key === 'mobility' ? MOBILITY_REQUIREMENTS : null;
 
-  const reusable = await findReusableSuggested(userId, key, requirementsForKey, context, activity);
-  const sessionType: SessionType = key === 'running' || key === 'walking' ? 'activity_block' : 'exercise_workout';
-
-  // Beta Feedback #006 — for activity-block cardio the headline/title must
-  // stay faithful to what ACP prescribed ("Run intervals"), not the generic
-  // per-key constant ("Easy run" / "Your run").
+  // Beta Feedback #006 (cardio) + #013 (strength) — the headline/title must
+  // stay faithful to what ACP prescribed ("Run intervals", "Upper/lower
+  // support"), not the generic per-key constant ("Easy run", "Full-body
+  // strength").
   const isActivityBlockCardio = key === 'running' || key === 'walking';
-  const headline = isActivityBlockCardio
+  const usesCanonicalTitle = isActivityBlockCardio || key === 'gym';
+  const headline = usesCanonicalTitle
     ? (activity.title || activity.activity || SESSION_HEADLINE[key]).trim()
     : SESSION_HEADLINE[key];
-  const selfTitle = isActivityBlockCardio ? headline : SESSION_TITLE[key];
+  const selfTitle = usesCanonicalTitle ? headline : SESSION_TITLE[key];
+
+  const reusable = await findReusableSuggested(
+    userId, key, requirementsForKey, context, activity, resolvedWorkoutType,
+    key === 'gym' ? { title: headline, description: strengthDescription(activity, context.experience) } : undefined,
+  );
+  const sessionType: SessionType = key === 'running' || key === 'walking' ? 'activity_block' : 'exercise_workout';
 
   if (reusable) {
     return {

@@ -16,7 +16,7 @@ import { authService } from '@/services/auth';
 import { Ionicons } from '@expo/vector-icons';
 import { type Recurrence } from '@/services/notifications';
 import { computeStreak, type Stats } from '@/services/fitnessStats';
-import { syncHealthData } from '@/services/health';
+import { syncHealthData, checkAppleHealthConnection } from '@/services/health';
 import { estimateTodayStepsFromStrava, getStravaStatus } from '@/services/strava';
 import { buildPlanSummary, GOAL_OPTIONS, EMPTY_ANSWERS, isStep2Complete } from '@/lib/onboarding';
 import { isValidAssessment, CATEGORY_LABEL, type AIAssessment } from '@/lib/ai-assessment';
@@ -24,16 +24,20 @@ import {
   selectMealsForNutritionFocus, nutritionFocusTagLabel, selectDailyMeals,
   type FoodCandidate, type DailyMealCandidates,
 } from '@/lib/nutrition-matching';
-import { getFulfilmentForActivity, nextDateForWeekday, type PlanActivityFulfilment, type MarketplaceInventoryItem } from '@/lib/fulfilment';
-import { ActivityFulfilmentCard } from '@/components/activity-fulfilment-card';
+import { getFulfilmentForActivity, nextDateForWeekday, type PlanActivityFulfilment, type MarketplaceInventoryItem, type MarketplaceMatch } from '@/lib/fulfilment';
+import { ActivityFulfilmentCard, GymAccessList } from '@/components/activity-fulfilment-card';
+import { ExerciseMedia } from '@/components/exercise-media';
 import {
   getCompletionProgress, findStravaCandidates, findExerciseDbCandidates, findAcpBookingCandidates, findHealthKitCandidates,
   type PlanActivityCompletion, type CompletionCandidate, type StravaActivityRow, type WorkoutHistoryRow, type AcpCheckedInRow, type HealthKitWorkoutRow,
 } from '@/lib/completion';
-import { getHomeIntelligenceInsight, findTodayActivity } from '@/lib/home-intelligence';
+import { getHomeIntelligenceInsight, findTodayActivity, selectNextActivity } from '@/lib/home-intelligence';
 import { pickHomeInsight, formatOverallProgress, type CoachingMemoryRow } from '@/lib/coaching-memory';
 import { buildWeeklyCoachingBrief } from '@/lib/coaching';
-import { isPlanReadyForReview, isSundayPlanningWindow, fetchPlanDateUpgrade } from '@/lib/weekly-review';
+import {
+  isPlanReadyForReview, isSundayPlanningWindow, fetchPlanDateUpgrade,
+  getScheduledNextPlan, localDateIso, type ScheduledNextPlan,
+} from '@/lib/weekly-review';
 
 const { width } = Dimensions.get('window');
 const RAIL_CARD_W = Math.round(width * 0.5);
@@ -442,7 +446,7 @@ function GuestHero({ onSearch }: { onSearch: () => void }) {
         Active City Pass — Get active, wherever you want.
       </ThemedText>
       <ThemedText style={styles.guestSub}>
-        Access to gyms, studios, wellness experiences, kids activities, coaches and trainers across Nairobi — all in one app.
+        Find gyms, studios, classes, coaches and experiences across Nairobi — and, once you join, a plan built around your goals to tie it together.
       </ThemedText>
       <TouchableOpacity style={styles.guestSearchBtn} onPress={onSearch} activeOpacity={0.8}>
         <Ionicons name="search" size={16} color={palette.gray300} />
@@ -462,11 +466,13 @@ const FOR_EVERYONE = [
 
 // ─── Tour ─────────────────────────────────────────────────────────────────────
 
+// Beta Feedback #008B — Home is contextual FEATURE education, not a second
+// product introduction (the pre-auth walkthrough already covers "what is
+// ACP"). It describes what's on this screen today; no membership/pass
+// framing, no overclaimed intelligence.
 const HOME_TOUR: TourStep[] = [
-  { icon: 'hand-left-outline', title: 'Welcome to Active CityPass', description: "Your all-in-one pass to gyms, classes, trainers, and experiences across Nairobi. Let's take a quick look around." },
-  { icon: 'calendar-outline', title: 'Book Classes Instantly', description: 'Coming Up Soon shows fitness classes in the next few days. Tap any card to see details and reserve your spot with a deposit.' },
-  { icon: 'location-outline', title: 'Explore Partner Venues', description: 'Browse top gyms and studios near you. Each venue has its own schedule — find the one that fits your lifestyle.' },
-  { icon: 'sparkles-outline', title: 'Experiences & Personal Training', description: 'Go beyond the gym — book a hike, a wellness retreat, or train 1-on-1 with a certified PT. Scroll down to discover everything on offer.' },
+  { icon: 'today-outline', title: 'Today, at a glance', description: "Your home shows what ACP has planned for you today — your session, your meals, and where you're at with the week." },
+  { icon: 'sparkles-outline', title: 'What ACP notices', description: 'As you complete, skip or log things, ACP shares short, plain observations here — and uses them to shape your next plan.' },
 ];
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
@@ -491,9 +497,22 @@ export default function HomeScreen() {
   const [stepsFromStrava, setStepsFromStrava] = useState(false);
   // Connection-status notifications (bell icon) — default true/connected so
   // nothing flashes on load; only flips once we've actually confirmed the
-  // account has no synced Health data / no linked Strava account.
-  const [healthEverSynced, setHealthEverSynced] = useState(true);
+  // account has no Apple Health authorization / no linked Strava account.
+  const [appleHealthConnected, setAppleHealthConnected] = useState(true);
   const [stravaConnected, setStravaConnected] = useState(true);
+  // Today's Plan card — reported by ActivityFulfilmentCard once its
+  // recommendation resolves: the workout id (→ background media lookup), the
+  // "N exercises · M min" summary shown next to the category, and any
+  // gym-access matches rendered as their own "Need a gym?" card below.
+  const [todayWorkoutId, setTodayWorkoutId] = useState<string | null>(null);
+  const [todayPlanMediaUrl, setTodayPlanMediaUrl] = useState<string | null>(null);
+  const [todayWorkoutMeta, setTodayWorkoutMeta] = useState<{ exerciseCount: number | null; durationMinutes: number | null } | null>(null);
+  const [todayGymAccess, setTodayGymAccess] = useState<MarketplaceMatch[]>([]);
+  // Beta #012 — same exercise-video background treatment for the "Up next" card;
+  // its gym-access matches render as their own card BELOW, never over the video.
+  const [upNextWorkoutId, setUpNextWorkoutId] = useState<string | null>(null);
+  const [upNextMediaUrl, setUpNextMediaUrl] = useState<string | null>(null);
+  const [upNextGymAccess, setUpNextGymAccess] = useState<MarketplaceMatch[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [upcomingWorkoutProgress, setUpcomingWorkoutProgress] = useState<{ completed: number; total: number } | null>(null);
   const [todayMeals, setTodayMeals] = useState<TodayMeal[]>([]);
@@ -516,6 +535,13 @@ export default function HomeScreen() {
   const [homeIntelLoaded, setHomeIntelLoaded] = useState(false);
   const [todayFulfilment, setTodayFulfilment] = useState<PlanActivityFulfilment | null>(null);
   const [todayCandidate, setTodayCandidate] = useState<CompletionCandidate | null>(null);
+  // Beta Feedback #012 — "what's next?" after today is resolved. Day 9 skip
+  // state + Beta #001 scheduled next-week plan feed the deterministic
+  // next-activity selection; upcomingFulfilment is the future-dated supply
+  // for that activity (its own bounded query, no LLM).
+  const [homeSkippedIndexes, setHomeSkippedIndexes] = useState<Set<number>>(new Set());
+  const [homeScheduledNext, setHomeScheduledNext] = useState<ScheduledNextPlan | null>(null);
+  const [upcomingFulfilment, setUpcomingFulfilment] = useState<PlanActivityFulfilment | null>(null);
   const [showIntelligenceInfo, setShowIntelligenceInfo] = useState(false);
   const [experiences, setExperiences] = useState<Experience[]>([]);
   const [loading, setLoading] = useState(true);
@@ -660,14 +686,76 @@ export default function HomeScreen() {
   const homeTodayIndex = homeAssessment && homeTodayActivity ? homeAssessment.starting_plan.activities.indexOf(homeTodayActivity) : -1;
   const homeTodayCompletionRecord = homeTodayIndex >= 0 ? homeCompletions.find(c => c.activityIndex === homeTodayIndex) : undefined;
   const homeTodayCompleted = !!homeTodayCompletionRecord;
-  const homeTodaySyncSourceLabel = homeTodayCompletionRecord?.completionSource === 'strava'
-    ? 'Synced from Strava'
-    : homeTodayCompletionRecord?.completionSource === 'healthkit'
-    ? 'Synced from Apple Health'
-    : null;
   const homeWeeklyProgress = homeAssessment
     ? getCompletionProgress(homeAssessment.starting_plan.activities.length, homeCompletions)
     : { completed: 0, total: 0, percent: 0 };
+
+  // ── Beta Feedback #012 — deterministic "what's next" selection ────────────
+  // Pure, no query, no AI. `homeTodayActivity` / `homeTodayCompleted` above
+  // are LEFT UNTOUCHED so the daily exercise ring keeps representing today's
+  // progress (spec §9). This is presentation-order only, over the same
+  // canonical completion/skip state Beta #010 fixed.
+  const homeCompletedIndexes = useMemo(
+    () => new Set(homeCompletions.map(c => c.activityIndex)),
+    [homeCompletions],
+  );
+  const homeNextSel = useMemo(
+    () => (homeAssessment
+      ? selectNextActivity({
+          activities: homeAssessment.starting_plan.activities,
+          completedIndexes: homeCompletedIndexes,
+          skippedIndexes: homeSkippedIndexes,
+        })
+      : { kind: 'none' as const }),
+    [homeAssessment, homeCompletedIndexes, homeSkippedIndexes],
+  );
+  // The "Today's Plan" section's featured activity: the still-unresolved
+  // activity dated today (which may be the 2nd of the day, §4/§22-B), else
+  // today's activity shown as completed/skipped context, else none.
+  const homePrimaryRef = useMemo(() => {
+    if (!homeAssessment) return null;
+    if (homeNextSel.kind === 'today') return homeNextSel.ref;
+    const ta = findTodayActivity(homeAssessment.starting_plan.activities);
+    if (!ta) return null;
+    return { activity: ta, activityIndex: homeAssessment.starting_plan.activities.indexOf(ta), dateIso: localDateIso(new Date()) };
+  }, [homeAssessment, homeNextSel]);
+  const homePrimaryCompletionRecord = homePrimaryRef
+    ? homeCompletions.find(c => c.activityIndex === homePrimaryRef.activityIndex)
+    : undefined;
+  const homePrimaryCompleted = !!homePrimaryCompletionRecord;
+  const homePrimarySkipped = homePrimaryRef ? homeSkippedIndexes.has(homePrimaryRef.activityIndex) : false;
+  const homePrimaryResolved = homePrimaryCompleted || homePrimarySkipped;
+  const homePrimarySyncLabel = homePrimaryCompletionRecord?.completionSource === 'strava'
+    ? 'Synced from Strava'
+    : homePrimaryCompletionRecord?.completionSource === 'healthkit'
+    ? 'Synced from Apple Health'
+    : null;
+  // "UP NEXT" — only once today's actionable work is resolved (kind !== 'today'):
+  // the next unresolved activity in the current plan, or the earliest activity
+  // of a scheduled next-week plan (Beta #001, read-only preview, §17).
+  const homeUpcomingRef = useMemo(() => {
+    if (homeNextSel.kind === 'upcoming') {
+      return {
+        activity: homeNextSel.ref.activity, activityIndex: homeNextSel.ref.activityIndex,
+        dateIso: homeNextSel.ref.dateIso, dateLabel: homeNextSel.dateLabel,
+        restTomorrow: homeNextSel.restTomorrow, planId: homePlanId, fromScheduled: false,
+      };
+    }
+    if (homeNextSel.kind === 'none' && homeScheduledNext) {
+      const s = selectNextActivity({
+        activities: homeScheduledNext.assessment.starting_plan.activities,
+        completedIndexes: new Set(), skippedIndexes: new Set(),
+      });
+      if (s.kind === 'upcoming') {
+        return {
+          activity: s.ref.activity, activityIndex: s.ref.activityIndex, dateIso: s.ref.dateIso,
+          dateLabel: s.dateLabel, restTomorrow: s.restTomorrow,
+          planId: homeScheduledNext.planId, fromScheduled: true,
+        };
+      }
+    }
+    return null;
+  }, [homeNextSel, homeScheduledNext, homePlanId]);
   // When today's canonical plan activity is strength, the Exercises ring
   // switches from the general trainer-workout schedule (a different,
   // unrelated system) to representing that specific plan activity instead —
@@ -773,6 +861,39 @@ export default function HomeScreen() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Today's Plan background — the first exercise with demo media (a real
+  // MuscleWiki video, else its animated GIF) from today's resolved workout.
+  // Cheap read, non-blocking; a miss just leaves the card in its plain form.
+  const fetchFirstExerciseMedia = useCallback(async (workoutId: string): Promise<string | null> => {
+    const { data } = await supabase
+      .from('workout_exercises')
+      .select('sort_order, exercises(gif_url)')
+      .eq('workout_id', workoutId)
+      .order('sort_order');
+    return ((data as any[]) ?? [])
+      .map(r => r.exercises?.gif_url as string | null)
+      .find(u => !!u) ?? null;
+  }, []);
+
+  useEffect(() => {
+    if (!todayWorkoutId) { setTodayPlanMediaUrl(null); return; }
+    let active = true;
+    fetchFirstExerciseMedia(todayWorkoutId)
+      .then(url => { if (active) setTodayPlanMediaUrl(url); })
+      .catch(() => { /* media is decorative — a lookup failure just leaves the plain card */ });
+    return () => { active = false; };
+  }, [todayWorkoutId, fetchFirstExerciseMedia]);
+
+  // Beta #012 — same background-media lookup for the "Up next" card.
+  useEffect(() => {
+    if (!upNextWorkoutId) { setUpNextMediaUrl(null); return; }
+    let active = true;
+    fetchFirstExerciseMedia(upNextWorkoutId)
+      .then(url => { if (active) setUpNextMediaUrl(url); })
+      .catch(() => { /* media is decorative — a lookup failure just leaves the plain card */ });
+    return () => { active = false; };
+  }, [upNextWorkoutId, fetchFirstExerciseMedia]);
+
   // ACP Intelligence™ Home integration — deliberately independent of
   // loadData() above: it never touches `loading`, so existing Home content
   // renders first regardless of whether/how fast this finishes. Reads only
@@ -823,7 +944,10 @@ export default function HomeScreen() {
         .select('memory_type, subject, confidence, evidence, user_message')
         .eq('user_id', userId)
         .eq('active', true)
-        .then(({ data: memoryRows }) => { if (!cancelled) setHomeCoachingMemory((memoryRows ?? []) as CoachingMemoryRow[]); });
+        .then(
+          ({ data: memoryRows }) => { if (!cancelled) setHomeCoachingMemory((memoryRows ?? []) as CoachingMemoryRow[]); },
+          () => { /* non-blocking read — Home renders fine without coaching memory */ },
+        );
 
       // Day 5.5 Problem C — same opportunistic, lazy date upgrade as My
       // Plan: never blocks this render, never surfaces an error if it fails
@@ -837,7 +961,7 @@ export default function HomeScreen() {
               }
             });
           }
-        });
+        }).catch(() => { /* opportunistic upgrade — the rendered plan is left as-is on any failure */ });
       }
 
       const { data: completionsData } = await supabase
@@ -853,19 +977,40 @@ export default function HomeScreen() {
       }));
       setHomeCompletions(completions);
 
-      const today = new Date();
-      const todayActivity = findTodayActivity(assessment.starting_plan.activities, today);
+      // Beta #012 — Day 9 skip state + Beta #001 scheduled next-week plan.
+      // Two bounded reads; feed the deterministic next-activity selection.
+      const [{ data: execData }, scheduledNext] = await Promise.all([
+        supabase.from('plan_activity_execution')
+          .select('activity_index, execution_status')
+          .eq('user_id', userId).eq('plan_id', planId),
+        getScheduledNextPlan(supabase as any, userId),
+      ]);
+      if (cancelled) return;
+      const skippedIndexes = new Set<number>(
+        ((execData ?? []) as any[]).filter(r => r.execution_status === 'skipped').map(r => r.activity_index),
+      );
+      setHomeSkippedIndexes(skippedIndexes);
+      setHomeScheduledNext(scheduledNext);
 
-      if (!todayActivity) {
+      const today = new Date();
+      const completedIndexes = new Set(completions.map(c => c.activityIndex));
+      // Which activity today still needs doing (§4/§22-B) — the same selector
+      // the render uses. `null` = every actionable activity today is resolved
+      // (or it's a rest day) → the "Today's Plan" fulfilment/candidate lookup
+      // is skipped and "UP NEXT" takes over.
+      const sel = selectNextActivity({
+        activities: assessment.starting_plan.activities,
+        completedIndexes, skippedIndexes, now: today,
+      });
+      const todayRef = sel.kind === 'today' ? sel.ref : null;
+
+      if (!todayRef) {
         setTodayFulfilment(null);
         setTodayCandidate(null);
       } else {
-        const todayIndex = assessment.starting_plan.activities.indexOf(todayActivity);
-        const alreadyDone = completions.some(c => c.activityIndex === todayIndex);
-        if (alreadyDone) {
-          setTodayFulfilment(null);
-          setTodayCandidate(null);
-        } else {
+        {
+          const todayActivity = todayRef.activity;
+          const todayIndex = todayRef.activityIndex;
           // Only fetched when there's actually an incomplete activity today
           // to enhance — no query at all on rest days or once today is done.
           const todayIso = today.toISOString().split('T')[0];
@@ -993,6 +1138,99 @@ export default function HomeScreen() {
 
     return () => { cancelled = true; };
   }, [isGuest, userId, goalStatus]);
+
+  // Beta Feedback #010 — the ACP-intel effect above only runs at mount, so
+  // completing a workout (or any plan action) elsewhere left Home showing the
+  // stale ring / recommendation until an app relaunch. Re-derive completion
+  // state from the canonical rows on every return to Home: one indexed query,
+  // no LLM, no marketplace fetch. State stays backend-derived — no local
+  // "workoutCompleted = true" is trusted (spec #010 §3).
+  const refreshHomeCompletions = useCallback(async () => {
+    if (isGuest || !userId || !homePlanId) return;
+    // Beta #012 — also re-read Day 9 skip state (a skip on My Plan must not
+    // leave Home trapped on the skipped activity) and the scheduled next-week
+    // plan (so a Beta #003 regeneration is reflected without a relaunch).
+    const [{ data }, { data: execData }, scheduledNext] = await Promise.all([
+      supabase
+        .from('plan_activity_completions')
+        .select('id, plan_id, activity_index, planned_date, completed_at, completion_source, source_entity_id')
+        .eq('user_id', userId).eq('plan_id', homePlanId),
+      supabase
+        .from('plan_activity_execution')
+        .select('activity_index, execution_status')
+        .eq('user_id', userId).eq('plan_id', homePlanId),
+      getScheduledNextPlan(supabase as any, userId),
+    ]);
+    setHomeScheduledNext(scheduledNext);
+    if (!data) return;
+    const next: PlanActivityCompletion[] = (data as any[]).map(c => ({
+      id: c.id, planId: c.plan_id, activityIndex: c.activity_index, plannedDate: c.planned_date,
+      completedAt: c.completed_at, completionSource: c.completion_source, sourceEntityId: c.source_entity_id,
+    }));
+    setHomeCompletions(next);
+    setHomeSkippedIndexes(new Set(
+      ((execData ?? []) as any[]).filter(r => r.execution_status === 'skipped').map(r => r.activity_index),
+    ));
+    if (homeAssessment) {
+      const todayAct = findTodayActivity(homeAssessment.starting_plan.activities, new Date());
+      const todayIdx = todayAct ? homeAssessment.starting_plan.activities.indexOf(todayAct) : -1;
+      if (todayIdx >= 0 && next.some(c => c.activityIndex === todayIdx)) {
+        setTodayCandidate(null);
+        setTodayFulfilment(null);
+      }
+    }
+  }, [isGuest, userId, homePlanId, homeAssessment]);
+
+  useFocusEffect(useCallback(() => {
+    if (homeIntelLoaded) refreshHomeCompletions();
+  }, [homeIntelLoaded, refreshHomeCompletions]));
+
+  // Beta #012 — supply for the "UP NEXT" activity, fetched for its real
+  // future date (§11). Its own bounded query; skipped for a scheduled
+  // next-week plan (read-only preview, §17) and when nothing is upcoming.
+  const upcomingKey = homeUpcomingRef && !homeUpcomingRef.fromScheduled
+    ? `${homeUpcomingRef.dateIso}:${homeUpcomingRef.activityIndex}`
+    : null;
+  useEffect(() => {
+    if (isGuest || !userId || !homeUpcomingRef || homeUpcomingRef.fromScheduled) {
+      setUpcomingFulfilment(null);
+      return;
+    }
+    const { activity, activityIndex, dateIso } = homeUpcomingRef;
+    let cancelled = false;
+    (async () => {
+      const [sessionsRes, experiencesRes, stravaStatusRes] = await Promise.all([
+        supabase.from('sessions')
+          .select('id, name, category, date, time, duration_minutes, is_active, spots_left, image_url, drop_in_price, gyms(name)')
+          .eq('date', dateIso).eq('is_active', true),
+        supabase.from('experiences')
+          .select('id, name, category, date, start_time, price_kes, is_active, spots_left, image_url, gyms(name)')
+          .eq('date', dateIso).eq('is_active', true),
+        getStravaStatus(),
+      ]);
+      if (cancelled) return;
+      const inventory: MarketplaceInventoryItem[] = [
+        ...((sessionsRes?.data ?? []) as any[]).map(sn => ({
+          id: sn.id, type: 'session' as const, name: sn.name, category: sn.category ?? null,
+          date: sn.date ?? null, startTime: sn.time ?? null, durationMinutes: sn.duration_minutes ?? null,
+          gymName: sn.gyms?.name ?? null, isActive: !!sn.is_active, spotsLeft: sn.spots_left ?? null,
+          imageUrl: sn.image_url ?? null, priceKes: sn.drop_in_price ?? null,
+        })),
+        ...((experiencesRes?.data ?? []) as any[]).map(e => ({
+          id: e.id, type: 'experience' as const, name: e.name, category: e.category ?? null,
+          date: e.date ?? null, startTime: e.start_time ?? null, durationMinutes: null,
+          gymName: e.gyms?.name ?? null, isActive: !!e.is_active, spotsLeft: e.spots_left ?? null,
+          imageUrl: e.image_url ?? null, priceKes: e.price_kes ?? null,
+        })),
+      ];
+      const [y, m, d] = dateIso.split('-').map(Number);
+      setUpcomingFulfilment(
+        getFulfilmentForActivity(activity, activityIndex, inventory, stravaStatusRes.connected, new Date(y, m - 1, d)),
+      );
+    })().catch(() => { if (!cancelled) setUpcomingFulfilment(null); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isGuest, userId, upcomingKey]);
 
   // Home Nutrition Integration — deterministic, never a second OpenAI call.
   // Only ever overrides the existing GENERAL/suggested meal path
@@ -1210,26 +1448,34 @@ export default function HomeScreen() {
         });
         setStepsFromStrava(false);
 
-        // Connection-status notifications — Apple never reveals HealthKit
-        // grant/deny (see services/health.ts), so "ever having a synced row"
-        // is the same proxy the steps ring already relies on for connection
-        // state; Strava has a real status endpoint.
+        // Connection-status — the real signals, not proxies: Apple Health via
+        // getRequestStatusForAuthorization (see lib/connected-fitness.ts),
+        // Strava via its status endpoint. Both re-checked on every focus.
+        // All four are best-effort background enhancements: a network failure
+        // (offline, provider unreachable) must degrade silently and leave the
+        // page's existing state as-is — never surface a red error box on
+        // every launch. Hence the explicit .catch on each fire-and-forget.
         if (Platform.OS === 'ios') {
-          supabase.from('health_daily_stats').select('id').eq('user_id', authSession.user.id).limit(1)
-            .then(({ data }) => setHealthEverSynced(!!data && data.length > 0));
+          checkAppleHealthConnection()
+            .then(state => setAppleHealthConnected(state === 'connected'))
+            .catch(() => { /* leave connection state unchanged */ });
         }
-        getStravaStatus().then(status => setStravaConnected(status.connected));
+        getStravaStatus()
+          .then(status => setStravaConnected(status.connected))
+          .catch(() => { /* leave Strava state unchanged */ });
 
         // If there's no real HealthKit step count for today, fall back to a
         // rough estimate from today's Strava walk/run distance — better than
         // showing 0 for someone who tracks activity via Strava instead.
         if (!dailyStatsData?.steps) {
-          estimateTodayStepsFromStrava(authSession.user.id, today).then(estimated => {
-            if (estimated != null) {
-              setTodayGoals(g => ({ ...g, steps: estimated }));
-              setStepsFromStrava(true);
-            }
-          });
+          estimateTodayStepsFromStrava(authSession.user.id, today)
+            .then(estimated => {
+              if (estimated != null) {
+                setTodayGoals(g => ({ ...g, steps: estimated }));
+                setStepsFromStrava(true);
+              }
+            })
+            .catch(() => { /* keep the step count already shown */ });
         }
 
         // Opportunistic background refresh — if Apple Health access was
@@ -1247,7 +1493,7 @@ export default function HomeScreen() {
             setTodayGoals(g => ({ ...g, steps: freshStats.steps }));
             setStepsFromStrava(false);
           }
-        });
+        }).catch(() => { /* health sync is best-effort */ });
 
         const nowTime = new Date().toTimeString().slice(0, 8);
         const { data: bookingData } = await supabase
@@ -1391,12 +1637,12 @@ export default function HomeScreen() {
   }
 
   const homeNotifications: { key: string; icon: string; title: string; body: string; onPress: () => void }[] = [
-    ...(Platform.OS === 'ios' && !healthEverSynced ? [{
+    ...(Platform.OS === 'ios' && !appleHealthConnected ? [{
       key: 'watch', icon: 'watch-outline', title: 'Connect Apple Watch',
       body: 'Sync workouts and activity automatically from your Apple Watch.',
       onPress: () => router.push('/health-settings' as any),
     }] : []),
-    ...(Platform.OS === 'ios' && !healthEverSynced ? [{
+    ...(Platform.OS === 'ios' && !appleHealthConnected ? [{
       key: 'health', icon: 'heart-outline', title: 'Connect Apple Health',
       body: 'Bring in your steps, heart rate, and workouts from Apple Health.',
       onPress: () => router.push('/health-settings' as any),
@@ -1573,7 +1819,9 @@ export default function HomeScreen() {
                     displayGoal: ` /${stepsGoal}`,
                     subtitle: stepsFromStrava
                       ? 'Estimated · tap to connect Health'
-                      : (Platform.OS === 'ios' ? 'Connect Apple Health' : 'Connect Health'),
+                      : appleHealthConnected
+                        ? 'From Apple Health'
+                        : (Platform.OS === 'ios' ? 'Connect Apple Health' : 'Connect Health'),
                     onPress: () => router.push('/health-settings' as any),
                   },
                   {
@@ -1617,35 +1865,62 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* ─── Today's Plan — the single canonical plan activity for today,
-              if any. Reuses Day 3 fulfilment for its CTA and Day 4
-              completion data for its state; never duplicates the full My
-              Plan card, and never fabricates an activity on a rest day
-              (the ACP Intelligence insight above already covers that). ─── */}
-        {!isGuest && homeIntelLoaded && homeTodayActivity && (
+        {/* ─── Today's Plan — the plan activity Home features for today.
+              Beta #012: this is the still-unresolved activity dated today
+              (which may be the 2nd of the day); once every actionable
+              activity today is resolved it becomes a compact ✓/skipped
+              acknowledgement and "UP NEXT" below takes over as primary. ─── */}
+        {!isGuest && homeIntelLoaded && homePrimaryRef && (
           <View style={styles.section}>
-            <View style={styles.sectionPad}>
-              <SectionHeader title="Today's Plan" />
-            </View>
+            {!homePrimaryResolved && (
+              <View style={[styles.sectionPad, { marginBottom: 0 }]}>
+                <Eyebrow text="Suggested for today" />
+              </View>
+            )}
             <View style={styles.mealsList}>
-              <View style={styles.todayPlanCard}>
-                {homeTodayCompleted ? (
-                  <View style={styles.todayPlanCompletedRow}>
-                    <Ionicons name="checkmark-circle" size={15} color={palette.success700} />
-                    <ThemedText style={styles.todayPlanCompletedText}>
-                      {CATEGORY_LABEL[homeTodayActivity.category]} completed
-                      {homeTodaySyncSourceLabel ? ` · ${homeTodaySyncSourceLabel}` : ''}
-                    </ThemedText>
-                  </View>
-                ) : (
-                  <ThemedText style={styles.todayPlanCategory}>{CATEGORY_LABEL[homeTodayActivity.category]}</ThemedText>
+              {(() => { const hasPlanMedia = !!todayPlanMediaUrl && !homePrimaryResolved; const primary = homePrimaryRef.activity; return (
+              <View style={[styles.todayPlanCard, hasPlanMedia && styles.todayPlanCardMedia]}>
+                {hasPlanMedia && (
+                  <>
+                    <ExerciseMedia url={todayPlanMediaUrl} fit="cover" style={styles.todayPlanMedia} />
+                    <LinearGradient
+                      colors={['rgba(9,11,20,0.42)', 'rgba(9,11,20,0.82)']}
+                      style={styles.todayPlanScrim}
+                      pointerEvents="none"
+                    />
+                  </>
                 )}
-                <ThemedText style={styles.mealRowTitle}>{homeTodayActivity.title}</ThemedText>
-                <ThemedText style={styles.mealRowMeta}>
-                  {homeTodayActivity.activity} · {homeTodayActivity.duration_minutes} min
-                </ThemedText>
+                <View style={hasPlanMedia ? styles.todayPlanContentMedia : undefined}>
+                  {homePrimaryResolved ? (
+                    <View style={styles.todayPlanCompletedRow}>
+                      <Ionicons
+                        name={homePrimaryCompleted ? 'checkmark-circle' : 'remove-circle-outline'}
+                        size={15}
+                        color={homePrimaryCompleted ? palette.success700 : palette.gray300}
+                      />
+                      <ThemedText style={styles.todayPlanCompletedText}>
+                        {CATEGORY_LABEL[primary.category]} {homePrimaryCompleted ? 'completed' : 'skipped'}
+                        {homePrimarySyncLabel ? ` · ${homePrimarySyncLabel}` : ''}
+                      </ThemedText>
+                    </View>
+                  ) : (
+                    <ThemedText style={[styles.todayPlanCategory, hasPlanMedia && styles.todayPlanCategoryOnMedia]}>
+                      {[
+                        CATEGORY_LABEL[primary.category],
+                        hasPlanMedia && todayWorkoutMeta?.exerciseCount != null ? `${todayWorkoutMeta.exerciseCount} exercises` : null,
+                        hasPlanMedia && todayWorkoutMeta?.durationMinutes != null ? `${todayWorkoutMeta.durationMinutes} min` : null,
+                      ].filter(Boolean).join(' · ')}
+                    </ThemedText>
+                  )}
+                  <ThemedText style={[styles.mealRowTitle, hasPlanMedia && styles.todayPlanTitleOnMedia]}>{primary.title}</ThemedText>
+                  {!homePrimaryResolved && (
+                    <ThemedText style={[styles.mealRowMeta, hasPlanMedia && styles.todayPlanMetaOnMedia]}>
+                      {primary.activity}
+                      {hasPlanMedia && todayWorkoutMeta ? '' : ` · ${primary.duration_minutes} min`}
+                    </ThemedText>
+                  )}
 
-                {!homeTodayCompleted && todayCandidate ? (
+                {!homePrimaryResolved && todayCandidate ? (
                   // Something the user already did (e.g. a Strava walk logged
                   // today) matches this activity — surface it instead of a
                   // blind "track activity" CTA. Still requires a tap to
@@ -1654,7 +1929,7 @@ export default function HomeScreen() {
                     <ThemedText style={styles.candidateText}>
                       We found a {todayCandidate.label} from {
                         todayCandidate.source === 'strava' ? 'Strava' : todayCandidate.source === 'exercise_db' ? 'your workout history' : 'ACP'
-                      } today. Count this toward today&apos;s {homeTodayActivity.activity.toLowerCase()}?
+                      } today. Count this toward today&apos;s {primary.activity.toLowerCase()}?
                     </ThemedText>
                     <View style={styles.candidateActions}>
                       <TouchableOpacity onPress={handleConfirmTodayCandidate} activeOpacity={0.85}>
@@ -1665,20 +1940,52 @@ export default function HomeScreen() {
                       </TouchableOpacity>
                     </View>
                   </View>
-                ) : !homeTodayCompleted ? (
+                ) : !homePrimaryResolved ? (
                   <ActivityFulfilmentCard
                     userId={userId}
-                    activity={homeTodayActivity}
+                    activity={primary}
                     fulfilment={todayFulfilment ?? undefined}
                     onInfoPress={() => setShowIntelligenceInfo(true)}
+                    onDark={hasPlanMedia}
+                    gymAccessSlot="detached"
+                    planContext={homePlanId ? {
+                      planId: homePlanId,
+                      activityIndex: homePrimaryRef.activityIndex,
+                      plannedDate: primary.planned_date
+                        ?? nextDateForWeekday(primary.day, new Date())
+                        ?? new Date().toISOString().split('T')[0],
+                    } : undefined}
+                    onResolved={(r) => {
+                      setTodayWorkoutId(r.sessionId);
+                      setTodayWorkoutMeta(
+                        r.exerciseCount != null || r.durationMinutes != null
+                          ? { exerciseCount: r.exerciseCount, durationMinutes: r.durationMinutes }
+                          : null,
+                      );
+                      setTodayGymAccess(r.gymAccess);
+                    }}
                     emptyFallback={
                       <TouchableOpacity onPress={() => router.push('/weekly-plan' as any)} activeOpacity={0.7} style={{ marginTop: 10 }}>
-                        <ThemedText style={styles.todayPlanCta}>View this week&apos;s plan →</ThemedText>
+                        <ThemedText style={[styles.todayPlanCta, hasPlanMedia && styles.todayPlanTextOnMedia]}>View this week&apos;s plan →</ThemedText>
                       </TouchableOpacity>
                     }
                   />
                 ) : null}
+                </View>
               </View>
+              ); })()}
+            </View>
+          </View>
+        )}
+
+        {/* ─── Need a gym? — "where to do it", its own section, separate from
+              the Today's Plan (workout) card. Same <GymAccessList> the
+              fulfilment card uses inline, so the two look identical.
+              Navigation only — never marks the activity done. ─── */}
+        {!isGuest && homeIntelLoaded && todayGymAccess.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.mealsList}>
+              <GymAccessList matches={todayGymAccess} />
             </View>
           </View>
         )}
@@ -1694,7 +2001,11 @@ export default function HomeScreen() {
                 user's own/nutritionist-assigned meals, "Suggested"
                 otherwise — same signal the old per-block eyebrow gave. */}
             <View style={styles.sectionPad}>
-              <Eyebrow text={todayMealsAreSuggested ? 'Suggested' : "Today's plan"} />
+              <Eyebrow text={
+                !todayMealsAreSuggested
+                  ? "Today's plan"
+                  : (homeTodayActivity && !homeTodayCompleted ? 'Also suggested' : 'Suggested')
+              } />
 
               {/* Home Nutrition Integration — the WEEK's intent, independent
                   of which specific meals are listed below (plan-driven or
@@ -1717,7 +2028,7 @@ export default function HomeScreen() {
                 activeOpacity={0.85}
               >
                 <View style={{ flex: 1 }}>
-                  <ThemedText style={styles.sectionTitle}>Today&apos;s Meals</ThemedText>
+                  <ThemedText style={styles.todaysMealsTitle}>Today&apos;s Meals</ThemedText>
                   <ThemedText style={styles.mealRowMeta}>
                     {todayMeals.length} suggested {todayMeals.length === 1 ? 'meal' : 'meals'} for today
                   </ThemedText>
@@ -1726,6 +2037,93 @@ export default function HomeScreen() {
               </TouchableOpacity>
             )}
 
+          </View>
+        )}
+
+        {/* ─── UP NEXT — Beta #012. Once today's actionable work is resolved,
+              promote the chronologically next unresolved planned activity so
+              the user can book / prepare. Placed after Today's Meals: today's
+              plan + fuel come first, then "what to prepare for next".
+              Presentation only — reuses the same ActivityFulfilmentCard with
+              the activity's real future planned_date so supply/bookings are
+              for the right day (§11/§12). A scheduled next-week plan (Beta
+              #001) shows as a read-only preview linking to /next-week-plan
+              (§17). ─── */}
+        {!isGuest && homeIntelLoaded && homeUpcomingRef && (
+          <View style={styles.section}>
+            <View style={[styles.sectionPad, { marginBottom: 12 }]}>
+              <Eyebrow text="Up next" />
+              <SectionHeader
+                title={homeUpcomingRef.dateLabel}
+                onSeeAll={() => router.push((homeUpcomingRef.fromScheduled ? '/next-week-plan' : '/weekly-plan') as any)}
+                seeAllLabel="View plan"
+              />
+              {homeUpcomingRef.restTomorrow && (
+                <ThemedText style={styles.upNextRestNote}>
+                  Tomorrow is a rest day — recovery is part of your plan.
+                </ThemedText>
+              )}
+            </View>
+            <View style={styles.mealsList}>
+              {(() => { const hasUpNextMedia = !!upNextMediaUrl && !homeUpcomingRef.fromScheduled; const next = homeUpcomingRef.activity; return (
+              <View style={[styles.todayPlanCard, hasUpNextMedia && styles.todayPlanCardMedia]}>
+                {hasUpNextMedia && (
+                  <>
+                    <ExerciseMedia url={upNextMediaUrl} fit="cover" style={styles.todayPlanMedia} />
+                    <LinearGradient
+                      colors={['rgba(9,11,20,0.42)', 'rgba(9,11,20,0.82)']}
+                      style={styles.todayPlanScrim}
+                      pointerEvents="none"
+                    />
+                  </>
+                )}
+                <View style={hasUpNextMedia ? styles.todayPlanContentMedia : undefined}>
+                  <ThemedText style={[styles.todayPlanCategory, hasUpNextMedia && styles.todayPlanCategoryOnMedia]}>
+                    {CATEGORY_LABEL[next.category]}
+                  </ThemedText>
+                  <ThemedText style={[styles.mealRowTitle, hasUpNextMedia && styles.todayPlanTitleOnMedia]}>{next.title}</ThemedText>
+                  <ThemedText style={[styles.mealRowMeta, hasUpNextMedia && styles.todayPlanMetaOnMedia]}>
+                    {next.activity} · {next.duration_minutes} min
+                  </ThemedText>
+                  {homeUpcomingRef.fromScheduled ? (
+                    <TouchableOpacity onPress={() => router.push('/next-week-plan' as any)} activeOpacity={0.7} style={{ marginTop: 10 }}>
+                      <ThemedText style={styles.todayPlanCta}>Review next week&apos;s plan →</ThemedText>
+                    </TouchableOpacity>
+                  ) : (
+                    <ActivityFulfilmentCard
+                      userId={userId}
+                      activity={next}
+                      fulfilment={upcomingFulfilment ?? undefined}
+                      onInfoPress={() => setShowIntelligenceInfo(true)}
+                      onDark={hasUpNextMedia}
+                      gymAccessSlot="detached"
+                      onResolved={(r) => { setUpNextWorkoutId(r.sessionId); setUpNextGymAccess(r.gymAccess); }}
+                      planContext={homeUpcomingRef.planId ? {
+                        planId: homeUpcomingRef.planId,
+                        activityIndex: homeUpcomingRef.activityIndex,
+                        plannedDate: homeUpcomingRef.dateIso,
+                      } : undefined}
+                      emptyFallback={
+                        <TouchableOpacity onPress={() => router.push('/weekly-plan' as any)} activeOpacity={0.7} style={{ marginTop: 10 }}>
+                          <ThemedText style={[styles.todayPlanCta, hasUpNextMedia && styles.todayPlanTextOnMedia]}>View this week&apos;s plan →</ThemedText>
+                        </TouchableOpacity>
+                      }
+                    />
+                  )}
+                </View>
+              </View>
+              ); })()}
+            </View>
+          </View>
+        )}
+
+        {/* ─── Up next · Need a gym? — the upcoming activity's gym-access
+              matches, on white, below the video-backed card (never over it). ─── */}
+        {!isGuest && homeIntelLoaded && upNextGymAccess.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.mealsList}>
+              <GymAccessList matches={upNextGymAccess} />
+            </View>
           </View>
         )}
 
@@ -2107,6 +2505,7 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: fontSize['2xl'], fontWeight: '800', color: palette.ink900, letterSpacing: -0.5 },
   sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   seeAllText: { fontSize: fontSize.sm, fontWeight: '700', color: palette.blue500 },
+  todaysMealsTitle: { fontSize: fontSize.base, fontWeight: '800', color: palette.ink900, letterSpacing: -0.2 },
   todaysMealsCta: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     backgroundColor: palette.surfaceMuted,
@@ -2152,6 +2551,17 @@ const styles = StyleSheet.create({
     backgroundColor: palette.white, borderRadius: radii.xl,
     borderWidth: 1, borderColor: palette.hairline, padding: 14,
   },
+  // With an exercise-media background the whole card is the media surface:
+  // video + scrim fill it edge-to-edge, and every row (title, "YOUR WORKOUT
+  // · N min", "NEED A GYM?") sits on top in light text.
+  todayPlanCardMedia: { padding: 0, overflow: 'hidden', position: 'relative' },
+  todayPlanMedia: { ...StyleSheet.absoluteFillObject },
+  todayPlanScrim: { ...StyleSheet.absoluteFillObject },
+  todayPlanContentMedia: { padding: 14, minHeight: 148 },
+  todayPlanCategoryOnMedia: { color: 'rgba(255,255,255,0.82)', marginBottom: 100 },
+  todayPlanTitleOnMedia: { color: '#fff', fontSize: 16 },
+  todayPlanMetaOnMedia: { color: 'rgba(255,255,255,0.82)' },
+  todayPlanTextOnMedia: { color: '#fff' },
   todayPlanCategory: {
     fontSize: 11, fontWeight: '800', color: palette.gray300,
     textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4,
@@ -2159,6 +2569,7 @@ const styles = StyleSheet.create({
   todayPlanCompletedRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 4 },
   todayPlanCompletedText: { fontSize: 11, fontWeight: '800', color: palette.success700, letterSpacing: 0.5, textTransform: 'uppercase' },
   todayPlanCta: { fontSize: 13, fontWeight: '700', color: palette.blue600 },
+  upNextRestNote: { fontSize: 12.5, color: palette.gray450, marginTop: 6, lineHeight: 17 },
   // Fulfilment blocks — identical shape/copy conventions to My Plan's, so
   // "do it yourself" / "do it with ACP" read the same on both screens.
   fulfilmentBlock: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: palette.hairline },
