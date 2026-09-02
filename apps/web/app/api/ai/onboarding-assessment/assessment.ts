@@ -333,6 +333,55 @@ export function enforceTimeBudget(activities: StartingPlanActivity[], budgetMinu
   return trimmed;
 }
 
+// ── Beta Feedback #013 — experience-aware primary-strength-session length ────
+// The onboarding flow collects NO explicit "how long can one session be"
+// answer (a known, deferred gap), and the prompt/validation only bound the
+// WEEKLY sum — so an advanced user whose weekly budget was split across
+// several days could land repeatedly on ~30-minute strength sessions. This
+// deterministic backstop raises a PRIMARY strength session toward an
+// experience-appropriate floor, but ONLY within the weekly budget's own
+// headroom (an advanced user with genuinely little time still gets a short
+// session) and NEVER touches a deliberately light / support / recovery
+// strength day (that shorter duration is intentional programme structure).
+const PRIMARY_STRENGTH_FLOOR_MINUTES: Record<string, number> = {
+  intermediate: 45,
+  advanced: 55,
+  // beginner: deliberately absent — existing short beginner sessions are valid.
+};
+
+const LIGHT_STRENGTH_RE = /\b(light|support|recovery|deload|accessor|mobility|easy|technique)\b/i;
+
+/** A strength day the plan itself frames as lighter than the week's primary work. */
+export function isLightOrSupportStrength(activity: Pick<StartingPlanActivity, 'title' | 'description' | 'intensity'>): boolean {
+  if (activity.intensity === 'light') return true;
+  return LIGHT_STRENGTH_RE.test(`${activity.title ?? ''} ${activity.description ?? ''}`);
+}
+
+export function enforceStrengthSessionDuration(
+  activities: StartingPlanActivity[],
+  strengthExperience: unknown,
+  budgetMinutes: number,
+): StartingPlanActivity[] {
+  const floor = typeof strengthExperience === 'string'
+    ? PRIMARY_STRENGTH_FLOOR_MINUTES[strengthExperience]
+    : undefined;
+  if (floor == null) return activities;
+
+  const total = sumDurationMinutes(activities);
+  let headroom = Math.max(0, budgetMinutes - total);
+
+  return activities.map(a => {
+    if (a.category !== 'strength') return a;
+    if (isLightOrSupportStrength(a)) return a;
+    const current = Number.isFinite(a.duration_minutes) ? a.duration_minutes : 0;
+    if (current >= floor) return a;
+    const raise = Math.min(floor - current, headroom);
+    if (raise <= 0) return a;
+    headroom -= raise;
+    return { ...a, duration_minutes: current + raise };
+  });
+}
+
 // ── Plan dating (Day 5 Part 3) ───────────────────────────────────────────────
 // The model only ever reasons about weekday NAMES (unchanged) — every actual
 // calendar date is computed here, in code, anchored once to a fixed
@@ -586,6 +635,7 @@ USER FIT
 - Use only the given onboarding data; never invent facts.
 - Respect the stated goal, experience level, and barriers.
 - Available weekly time (given below as a maximum number of minutes) is a hard constraint — the sum of all activities' duration_minutes must not exceed it. When no preferred training days are given, prefer fewer/shorter sessions over more.
+- Session length should suit the user's strength experience within that weekly budget: a PRIMARY strength session is typically ~45-60 min for intermediate and ~55-75 min for advanced (a beginner's can be shorter). A deliberately light, support, technique or recovery strength day may be shorter and should say so in its title/description. If the weekly budget is too small to give an advanced user longer primary sessions, keep them shorter rather than exceeding the budget.
 - Strongly prefer the user's stated preferred activities. Do not introduce one they didn't mention (e.g. swimming, boxing, yoga) unless their preferences genuinely cannot support the goal at all.
 
 TRAINING SCHEDULE (only if "preferred training days" are given below)
