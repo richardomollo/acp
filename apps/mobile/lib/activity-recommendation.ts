@@ -140,6 +140,13 @@ export const SUGGESTED_WORKOUT_TYPE: Record<SupportedActivityKey, string> = {
 export function suggestedStrengthWorkoutType(structure: StrengthStructure): string {
   if (structure === 'upper') return 'acp_suggested_strength_upper';
   if (structure === 'lower') return 'acp_suggested_strength_lower';
+  // Beta #014 — `support` no longer shares 'acp_suggested_strength' with
+  // `full_body`. Two strength activities reviewed in one sitting (a
+  // full-body day + an "…support" day) previously collided on
+  // (user, 'acp_suggested_strength', today) and the second reused the
+  // first's exact workout. `full_body` keeps the original string verbatim
+  // (no migration/backfill for existing rows).
+  if (structure === 'support') return 'acp_suggested_strength_support';
   return 'acp_suggested_strength';
 }
 
