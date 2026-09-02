@@ -33,7 +33,15 @@ export type AcpEvent =
   | 'embedding_request_failed'
   | 'execution_summary_built'
   | 'coaching_memory_sync_completed'
-  | 'coaching_memory_sync_failed';
+  | 'coaching_memory_sync_failed'
+  | 'nutrition_coaching_started'
+  | 'nutrition_coaching_completed'
+  | 'nutrition_coaching_failed'
+  | 'nutrition_coaching_fallback'
+  | 'nutrition_camera_started'
+  | 'nutrition_camera_analysis_completed'
+  | 'nutrition_camera_analysis_failed'
+  | 'nutrition_camera_fallback';
 
 /** Small, non-sensitive fields only. Anything not on this list must be omitted. */
 export interface AcpEventFields {
@@ -64,6 +72,17 @@ export interface AcpEventFields {
   /** Beta Feedback #003 — this completion was an explicit user-initiated
    *  rebuild of an already-prepared future plan, not a first generation. */
   regenerated?: boolean;
+  /** Nutrition N4 — coarse coaching counts only. Never a nutrient, food,
+   *  quantity, weight, reference value or any generated text (§38). */
+  opportunityCount?: number;
+  llmUsedCount?: number;
+  droppedCount?: number;
+  /** Nutrition N5 — camera-assisted logging. Coarse only: how many textual
+   *  food candidates the vision model returned. NEVER an image, base64,
+   *  signed URL, EXIF/location, a candidate label, or any raw model output
+   *  (§11). `uncertain` is the model's own hard-to-read flag. */
+  candidateCount?: number;
+  uncertain?: boolean;
 }
 
 const SERVICE = 'acp-intelligence';
