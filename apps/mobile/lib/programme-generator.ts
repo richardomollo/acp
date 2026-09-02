@@ -7,6 +7,7 @@
 // (Day 2 section 9).
 import type { ExerciseDifficulty } from './exercise-types.ts';
 import {
+  REPS_BY_ROLE,
   type ProgrammeGoal, type GenerationContext, type TrainingStrategy,
   type WorkoutSlot, type DayOfWeek, type ExerciseRequirement,
 } from './programme-types.ts';
@@ -72,7 +73,17 @@ export function deriveDurationWeeks(goalTargetDate: string | null, startDate: Da
 
 const DEFAULT_SESSION_DURATION_MINUTES = 30;
 
-export function buildGenerationContext(profile: ProfileLike, startDate: Date): GenerationContext {
+export function buildGenerationContext(
+  profile: ProfileLike,
+  startDate: Date,
+  /**
+   * The minutes ACP Intelligence prescribed for this member's Strength
+   * activity (from starting_plan.activities[].duration_minutes). When known,
+   * it is the ceiling the generated Strength session is fitted under — the
+   * session is trimmed to the time, never generated long and relabelled.
+   */
+  prescribedStrengthMinutes?: number | null,
+): GenerationContext {
   const defaultsUsed: string[] = [];
 
   const experience = VALID_EXPERIENCE.includes(profile.experience_level as ExerciseDifficulty)
@@ -95,6 +106,8 @@ export function buildGenerationContext(profile: ProfileLike, startDate: Date): G
     experience,
     sessionsPerWeek,
     sessionDurationMinutes: DEFAULT_SESSION_DURATION_MINUTES,
+    prescribedStrengthMinutes:
+      prescribedStrengthMinutes != null && prescribedStrengthMinutes > 0 ? prescribedStrengthMinutes : null,
     equipmentLocation,
     preferredActivities: profile.preferred_activities ?? [],
     activityLevel: profile.activity_level,
@@ -194,22 +207,77 @@ const STRENGTH_DURATION_DEFAULT: Record<ExerciseDifficulty, number> = {
 };
 
 /**
- * `explicitAvailableMinutes` is a hard per-session time ceiling, used only
- * when ACP genuinely knows one. No caller passes this today — there is no
- * structured "available session minutes" field anywhere in fitness_profile
- * (only a free-text weekly `starting_point.available_time` string inside the
- * AI-assessment blob, which isn't a reliable per-session minute value) — so
- * this parameter exists so the policy correctly handles that input if it
- * ever becomes available, without inventing a fake source for it now
- * (section 4's "do not invent unavailable time data"). When supplied, it
- * caps the experience-tier default rather than downgrading the member's
- * tier — an Advanced member constrained to 45 minutes stays Advanced
- * (section 13), the duration is simply capped.
+ * SUPERSEDED as the stored `workouts.duration_minutes` source — kept only as
+ * a coarse experience-tier reference (and for existing callers/tests). The
+ * value actually stored on a generated Strength workout is now
+ * `estimateSessionMinutes()` computed from the SAME sets/reps/rest that
+ * generate its workout_exercises rows, so "N exercises · M min" is
+ * internally consistent and can't diverge from the plan card. See
+ * `fitStrengthSession()`.
  */
 export function strengthDurationMinutes(experience: ExerciseDifficulty, explicitAvailableMinutes?: number | null): number {
   const base = STRENGTH_DURATION_DEFAULT[experience];
   if (explicitAvailableMinutes != null && explicitAvailableMinutes > 0) return Math.min(base, explicitAvailableMinutes);
   return base;
+}
+
+// ─── Session-duration estimate — the single source of truth ─────────────────
+// A generated Strength session's stored duration is a computed estimate of
+// its ACTUAL prescription (the sets × reps × rest that become its
+// workout_exercises rows, via REPS_BY_ROLE), never a flat experience band.
+// This is what makes the weekly-plan card, Home card, workout-detail and ACP
+// Intelligence reasoning agree: they all resolve to this one number.
+const SECONDS_PER_REP = 3;            // ~1s concentric + ~2s eccentric
+const MOBILITY_HOLD_SECONDS = 30;    // per set when reps === 0 (a timed hold)
+const SETUP_SECONDS_PER_EXERCISE = 60; // move to the station, set up, first cue
+const WARMUP_SECONDS = 300;          // 5 min general + movement-specific warm-up
+
+type SetPrescription = { sets: number; reps: number; restSeconds: number };
+
+/** Minutes a session of these set prescriptions realistically takes (warm-up + work + inter-set rest + per-exercise setup), rounded. */
+export function estimateSessionMinutes(prescriptions: SetPrescription[]): number {
+  if (prescriptions.length === 0) return 0;
+  let seconds = WARMUP_SECONDS;
+  for (const p of prescriptions) {
+    const workPerSet = p.reps > 0 ? p.reps * SECONDS_PER_REP : MOBILITY_HOLD_SECONDS;
+    const restBetweenSets = Math.max(p.sets - 1, 0) * p.restSeconds;
+    seconds += p.sets * workPerSet + restBetweenSets + SETUP_SECONDS_PER_EXERCISE;
+  }
+  return Math.round(seconds / 60);
+}
+
+/** Concrete set prescription (REPS_BY_ROLE) for each requirement — the exact rows exercise selection will persist. */
+export function prescriptionForRequirements(reqs: ExerciseRequirement[]): SetPrescription[] {
+  return reqs.map(r => {
+    const { sets, reps, restSeconds } = REPS_BY_ROLE[r.role];
+    return { sets, reps, restSeconds };
+  });
+}
+
+/**
+ * Builds the experience-aware Strength requirement list AND its computed
+ * duration, fitted under `ceilingMinutes` when ACP Intelligence prescribed
+ * one for this activity. Trailing accessory movements are dropped one at a
+ * time until the estimate fits or the floor (base compound + core work) is
+ * reached — the session is fitted to the time, never generated long and
+ * relabelled. The returned `requirements` is what must be persisted, so the
+ * stored duration and the actual exercise rows always match.
+ */
+export function fitStrengthSession(
+  base: ExerciseRequirement[], experience: ExerciseDifficulty, ceilingMinutes?: number | null,
+): { requirements: ExerciseRequirement[]; durationMinutes: number } {
+  const ceiling = ceilingMinutes != null && ceilingMinutes > 0 ? ceilingMinutes : null;
+  let requirements = buildStrengthRequirements(base, experience);
+  let estimate = estimateSessionMinutes(prescriptionForRequirements(requirements));
+  while (ceiling != null && estimate > ceiling && requirements.length > base.length) {
+    requirements = requirements.slice(0, -1);
+    estimate = estimateSessionMinutes(prescriptionForRequirements(requirements));
+  }
+  // If the base compound+core work still overshoots a known ceiling, report
+  // the ceiling: that base work is the session ACP committed to, and the
+  // label must never claim more time than was prescribed.
+  const durationMinutes = ceiling != null ? Math.min(estimate, ceiling) : estimate;
+  return { requirements, durationMinutes };
 }
 
 // Appended, in order, beyond a base full-body requirement list to grow
@@ -239,6 +307,64 @@ const STRENGTH_EXTRA_EXERCISE_COUNT: Record<ExerciseDifficulty, number> = {
 export function buildStrengthRequirements(base: ExerciseRequirement[], experience: ExerciseDifficulty): ExerciseRequirement[] {
   const extra = STRENGTH_ACCESSORY_REQUIREMENTS.slice(0, STRENGTH_EXTRA_EXERCISE_COUNT[experience]);
   return [...base, ...extra];
+}
+
+// ─── Beta Feedback #013 — canonical strength-activity fidelity (Bug B) ──────
+// A plan activity's TITLE/DESCRIPTION carry the session's intended shape
+// ("Upper/lower support", "upper/lower split light day"). Nothing structured
+// records the split, and building an NLP system is out of scope — so this is
+// a small deterministic classifier that picks the requirement BASE, keeping
+// `full_body` as the safe default for any existing/ambiguous plan (§15/§16).
+export type StrengthStructure = 'full_body' | 'upper' | 'lower' | 'support';
+
+const SUPPORT_RE = /\b(support|light|recovery|deload|technique|accessor(?:y|ies)|easy day)\b/i;
+const UPPER_RE = /\bupper(?:[\s-]?body)?\b/i;
+const LOWER_RE = /\b(lower(?:[\s-]?body)?|leg day|legs)\b/i;
+
+export function classifyStrengthStructure(title?: string | null, description?: string | null): StrengthStructure {
+  const t = `${title ?? ''} ${description ?? ''}`;
+  if (SUPPORT_RE.test(t)) return 'support';        // "…support", "light day" → a deliberately lighter session
+  const upper = UPPER_RE.test(t);
+  const lower = LOWER_RE.test(t);
+  if (upper && !lower) return 'upper';
+  if (lower && !upper) return 'lower';
+  return 'full_body';                              // "full body", "upper/lower split", or unknown
+}
+
+/** Upper-body compound base — reuses existing StrengthMovementPattern values only. */
+export const UPPER_BODY_REQUIREMENTS: ExerciseRequirement[] = [
+  { pattern: 'horizontal_push', bodyPart: 'chest', role: 'compound' },
+  { pattern: 'horizontal_pull', bodyPart: 'back', role: 'compound' },
+  { pattern: 'vertical_push', bodyPart: 'shoulders', role: 'compound' },
+  { pattern: 'core', bodyPart: 'waist', role: 'core' },
+];
+
+/** Lower-body compound base — reuses existing StrengthMovementPattern values only. */
+export const LOWER_BODY_REQUIREMENTS: ExerciseRequirement[] = [
+  { pattern: 'squat', bodyPart: 'upper legs', muscleHint: 'quad', role: 'compound' },
+  { pattern: 'hinge', bodyPart: 'upper legs', muscleHint: 'hamstring', role: 'compound' },
+  { pattern: 'squat', bodyPart: 'upper legs', muscleHint: 'glute', role: 'accessory' },
+  { pattern: 'core', bodyPart: 'waist', role: 'core' },
+];
+
+export function strengthRequirementBase(structure: StrengthStructure): ExerciseRequirement[] {
+  if (structure === 'upper') return UPPER_BODY_REQUIREMENTS;
+  if (structure === 'lower') return LOWER_BODY_REQUIREMENTS;
+  return FULL_BODY_A_REQUIREMENTS; // full_body and support both build from the full-body base
+}
+
+/**
+ * `fitStrengthSession` for a canonical activity of a known structure. A
+ * `support` day deliberately carries NO experience-tier accessory volume
+ * (it's the week's lighter session) — everything else uses the normal
+ * experience-aware policy, still fitted under the prescribed ceiling.
+ */
+export function fitStrengthSessionForStructure(
+  structure: StrengthStructure, experience: ExerciseDifficulty, ceilingMinutes?: number | null,
+): { requirements: ExerciseRequirement[]; durationMinutes: number; structure: StrengthStructure } {
+  const volumeExperience: ExerciseDifficulty = structure === 'support' ? 'beginner' : experience;
+  const fitted = fitStrengthSession(strengthRequirementBase(structure), volumeExperience, ceilingMinutes);
+  return { ...fitted, structure };
 }
 
 const WORKOUT_TYPE_SPECS: Record<string, WorkoutTypeSpec> = {
@@ -278,6 +404,13 @@ export function buildWorkoutSlots(strategy: TrainingStrategy, context: Generatio
       // (full_body_a/b) — activity-block slots (mobility/running/walking)
       // keep the existing flat session default untouched (chunk exclusions).
       const isStrength = !spec.isActivityBlock && !!spec.requirements;
+      // Strength: requirements AND stored duration both come from
+      // fitStrengthSession — one computed estimate of the real prescription,
+      // fitted under the prescribed minutes. Activity-block slots
+      // (mobility/running/walking) keep the flat session default untouched.
+      const strength = isStrength
+        ? fitStrengthSession(spec.requirements!, context.experience, context.prescribedStrengthMinutes)
+        : null;
       slots.push({
         weekNumber: week,
         dayOfWeek: days[i] ?? days[days.length - 1],
@@ -285,8 +418,8 @@ export function buildWorkoutSlots(strategy: TrainingStrategy, context: Generatio
         title: spec.title,
         isActivityBlock: spec.isActivityBlock,
         activityDescription: spec.activityDescription,
-        requirements: isStrength ? buildStrengthRequirements(spec.requirements!, context.experience) : spec.requirements,
-        durationMinutes: isStrength ? strengthDurationMinutes(context.experience) : context.sessionDurationMinutes,
+        requirements: strength ? strength.requirements : spec.requirements,
+        durationMinutes: strength ? strength.durationMinutes : context.sessionDurationMinutes,
         sequence: i,
       });
     });

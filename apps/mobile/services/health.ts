@@ -4,6 +4,7 @@ import Constants from 'expo-constants';
 import { supabase } from '@/lib/supabase';
 import { authService } from './auth';
 import type * as HealthKitModule from '@kingstinct/react-native-healthkit';
+import { deriveAppleHealthState, type AppleHealthState } from '@/lib/connected-fitness';
 
 const STEP_COUNT = 'HKQuantityTypeIdentifierStepCount' as const;
 const ACTIVE_ENERGY = 'HKQuantityTypeIdentifierActiveEnergyBurned' as const;
@@ -17,6 +18,18 @@ const DATE_OF_BIRTH = 'HKCharacteristicTypeIdentifierDateOfBirth' as const;
 const BIOLOGICAL_SEX = 'HKCharacteristicTypeIdentifierBiologicalSex' as const;
 
 const BIOLOGICAL_SEX_LABEL = ['not set', 'female', 'male', 'other'] as const;
+
+// The read set ACP requests from Apple Health. Kept as a single list so the
+// authorization request and the connection-state check ask about exactly the
+// same types — requesting a type and later reading one you didn't request
+// crashes the app, and getRequestStatusForAuthorization must be asked about
+// the same set to answer truthfully. WorkoutTypeIdentifier is a runtime value
+// from the module, so it's appended at call time.
+const HEALTH_READ_IDENTIFIERS = [
+  STEP_COUNT, ACTIVE_ENERGY, RESTING_ENERGY, HEART_RATE,
+  BODY_FAT, BODY_MASS, HEIGHT, WAIST,
+  DATE_OF_BIRTH, BIOLOGICAL_SEX,
+] as const;
 
 // TestFlight/production builds have no visible console — surface the last
 // failure reason here so the UI can display something actionable instead of
@@ -47,12 +60,55 @@ async function loadHealthKit(): Promise<typeof HealthKitModule | null> {
   }
 }
 
-// Apple deliberately never reveals whether READ permission was granted or
-// denied (to prevent inferring sensitive conditions from the response), so
-// there's no reliable "is connected" check — we just request, then sync;
-// if denied, the sync simply returns no data and the Analytics page falls
-// back to its empty state.
-export async function ensureHealthPermission(): Promise<boolean> {
+// Apple deliberately never reveals whether a READ permission was granted or
+// denied (to prevent inferring sensitive conditions from the response). The
+// one durable, re-queryable signal iOS does expose is
+// getRequestStatusForAuthorization: whether the user has been through Apple's
+// permission sheet for our read set. ACP treats that ("unnecessary") as
+// "connected" — see lib/connected-fitness.ts for the full rationale.
+async function readRequestStatus(HealthKit: typeof HealthKitModule): Promise<number | null> {
+  try {
+    return await HealthKit.getRequestStatusForAuthorization({
+      toRead: [...HEALTH_READ_IDENTIFIERS, HealthKit.WorkoutTypeIdentifier],
+    });
+  } catch {
+    // Treated as `unknown` by deriveAppleHealthState. No health data or
+    // payloads are ever logged here.
+    console.warn('[health] getRequestStatusForAuthorization failed');
+    return null;
+  }
+}
+
+// Reconciles Apple Health connection state against actual iOS/platform state.
+// Safe to call on every screen focus and app launch — it never mutates
+// anything and never shows a permission prompt.
+export async function checkAppleHealthConnection(): Promise<AppleHealthState> {
+  const HealthKit = await loadHealthKit();
+  const signals = {
+    isIos: Platform.OS === 'ios',
+    isRealDevice: Device.isDevice,
+    isExpoGo,
+    moduleLoaded: !!HealthKit,
+    healthDataAvailable: null as boolean | null,
+    requestStatus: null as number | null,
+  };
+  if (!HealthKit) return deriveAppleHealthState(signals);
+  try {
+    signals.healthDataAvailable = await HealthKit.isHealthDataAvailableAsync();
+    if (signals.healthDataAvailable) {
+      signals.requestStatus = await readRequestStatus(HealthKit);
+    }
+  } catch {
+    console.warn('[health] connection check failed');
+  }
+  return deriveAppleHealthState(signals);
+}
+
+// Runs Apple's permission flow, then re-checks the real authorization request
+// status rather than assuming the request "succeeding" means connected — the
+// native requestAuthorization only tells us the sheet was dismissed, not what
+// the user chose. Returns the derived, truthful state.
+export async function ensureHealthPermission(): Promise<AppleHealthState> {
   lastError = null;
   const HealthKit = await loadHealthKit();
   if (!HealthKit) {
@@ -63,27 +119,29 @@ export async function ensureHealthPermission(): Promise<boolean> {
         : !Device.isDevice
           ? 'Apple Health is not available in the simulator.'
           : 'Could not load the HealthKit module.';
-    return false;
+    return 'unavailable';
   }
   try {
     const available = await HealthKit.isHealthDataAvailableAsync();
     if (!available) {
       lastError = 'Health data is not available on this device.';
-      return false;
+      return 'unavailable';
     }
-    await HealthKit.requestAuthorization({
-      toRead: [
-        STEP_COUNT, ACTIVE_ENERGY, RESTING_ENERGY, HEART_RATE,
-        BODY_FAT, BODY_MASS, HEIGHT, WAIST,
-        DATE_OF_BIRTH, BIOLOGICAL_SEX,
-        HealthKit.WorkoutTypeIdentifier,
-      ],
+    const toRead = [...HEALTH_READ_IDENTIFIERS, HealthKit.WorkoutTypeIdentifier];
+    await HealthKit.requestAuthorization({ toRead });
+    const requestStatus = await readRequestStatus(HealthKit);
+    return deriveAppleHealthState({
+      isIos: true,
+      isRealDevice: Device.isDevice,
+      isExpoGo,
+      moduleLoaded: true,
+      healthDataAvailable: true,
+      requestStatus,
     });
-    return true;
   } catch (e: any) {
     lastError = `Permission request failed: ${e?.message ?? String(e)}`;
     console.error('[health] permission request failed:', e);
-    return false;
+    return 'error';
   }
 }
 
