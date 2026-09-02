@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Circle } from 'react-native-svg';
 import { ThemedText } from '@/components/themed-text';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { palette, radii, fontSize } from '@/constants/theme';
@@ -16,6 +15,30 @@ import { isValidAssessment, sortSupportOpportunities, type AIAssessment } from '
 import { matchProfessionalProviders, type ProviderMatch } from '@/lib/professional-support';
 import { selectDailyMeals } from '@/lib/nutrition-matching';
 import { getMealCandidates } from '@/lib/meal-ranking';
+import { localISODate } from '@/lib/fulfilment';
+import { foodLogService } from '@/services/food-log-service';
+import type { FoodLogEntry, DailyNutritionSummary } from '@/lib/nutrition/food-types';
+import { summariseDay, type DayNutrition } from '@/lib/nutrition/nutrition-history';
+import { buildNutritionPatterns, type NutritionPatternEvidence } from '@/lib/nutrition/nutrition-patterns';
+import { KEY_NUTRIENTS } from '@/lib/nutrition/nutrient-display';
+import { NutrientList } from '@/components/nutrition/nutrient-list';
+import { ObservedPanel, DayEnergyStrip } from '@/components/nutrition/nutrition-observed';
+import { NutritionReferenceSection } from '@/components/nutrition/nutrition-references';
+import { nutritionReferenceService } from '@/services/nutrition-reference-service';
+import { buildNutritionReferenceComparisons, type UserReferenceContext, type NutritionReferenceComparison } from '@/lib/nutrition/nutrition-reference-engine';
+import { NutritionCoachingSection } from '@/components/nutrition/nutrition-coaching-section';
+import { getNutritionCoaching } from '@/lib/nutrition/nutrition-coaching';
+import type { CoachingValidationResult } from '@/lib/nutrition/nutrition-coaching-safety';
+import { isNutritionSavedMealsEnabled } from '@/lib/flags';
+import { prefillFromEntries } from '@/lib/nutrition/saved-meal';
+import { NutritionActivityContext } from '@/components/nutrition/nutrition-activity-context';
+import { nutritionFitnessContextService } from '@/services/nutrition-fitness-context-service';
+import type { CrossDomainNutritionObservation } from '@/lib/nutrition/nutrition-fitness-context';
+import { NutritionWhatsChanged } from '@/components/nutrition/nutrition-whats-changed';
+import { nutritionAdviceEffectivenessService } from '@/services/nutrition-advice-effectiveness-service';
+import type { NutritionAdviceEffectiveness } from '@/lib/nutrition/nutrition-advice-effectiveness';
+
+const SAVED_MEALS_ENABLED = isNutritionSavedMealsEnabled();
 
 interface TodayMealItem {
   id: string;
@@ -35,42 +58,15 @@ const SLOT_LABEL: Record<string, string> = {
   breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snack', smoothie: 'Smoothie',
 };
 
-const RING_SIZE = 168;
-const RING_STROKE = 12;
-
 const GRID_GAP = 14;
 
-function CalorieRing({ progress }: { progress: number }) {
-  const radius = (RING_SIZE - RING_STROKE) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const clamped = Math.max(0, Math.min(1, progress));
-  return (
-    <Svg width={RING_SIZE} height={RING_SIZE} style={StyleSheet.absoluteFill}>
-      <Circle
-        cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={radius}
-        stroke={palette.border} strokeWidth={RING_STROKE} fill="none"
-      />
-      <Circle
-        cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={radius}
-        stroke={palette.ink900} strokeWidth={RING_STROKE} fill="none"
-        strokeDasharray={`${circumference}, ${circumference}`}
-        strokeDashoffset={circumference * (1 - clamped)}
-        strokeLinecap="round"
-        rotation={-90}
-        origin={`${RING_SIZE / 2}, ${RING_SIZE / 2}`}
-      />
-    </Svg>
-  );
-}
-
-function MacroBar({ label, eaten, goal, unit }: { label: string; eaten: number; goal: number; unit: string }) {
-  const pct = goal > 0 ? Math.max(0, Math.min(1, eaten / goal)) : 0;
+// Nutrition N2 — factual logged total for one macro. NOT "X / Y": ACP has no
+// validated personalised nutrition target engine (N2 §6), so nothing is shown
+// as a goal/denominator.
+function MacroStat({ label, value, unit }: { label: string; value: number; unit: string }) {
   return (
     <View style={s.macroCol}>
-      <ThemedText style={s.macroValue}>{Math.round(eaten)} / {Math.round(goal)}{unit}</ThemedText>
-      <View style={s.macroTrack}>
-        <View style={[s.macroFill, { width: `${pct * 100}%` }]} />
-      </View>
+      <ThemedText style={s.macroValue}>{Math.round(value)}<ThemedText style={s.macroUnit}> {unit}</ThemedText></ThemedText>
       <ThemedText style={s.macroLabel}>{label}</ThemedText>
     </View>
   );
@@ -83,6 +79,24 @@ export default function TodayNutritionScreen() {
   const [isSuggested, setIsSuggested] = useState(false);
   const [loggedIds, setLoggedIds] = useState<Set<string>>(new Set());
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  // Nutrition N1 — the actual food log (source of truth for consumed intake),
+  // kept entirely separate from the planned-meal list / eaten toggle above.
+  const [foodLog, setFoodLog] = useState<FoodLogEntry[]>([]);
+  const [foodTotals, setFoodTotals] = useState<DailyNutritionSummary | null>(null);
+  // Nutrition N2 — today's per-nutrient completeness + recent-day evidence.
+  const [todayDay, setTodayDay] = useState<DayNutrition | null>(null);
+  const [recentDays, setRecentDays] = useState<DayNutrition[]>([]);
+  const [patterns, setPatterns] = useState<NutritionPatternEvidence | null>(null);
+  const [showAllNutrients, setShowAllNutrients] = useState(false);
+  // Nutrition N3 — reference comparison (deterministic, non-coaching).
+  const [refContext, setRefContext] = useState<UserReferenceContext | null>(null);
+  const [refComparisons, setRefComparisons] = useState<NutritionReferenceComparison[] | null>(null);
+  // Nutrition N4 — evidence-grounded coaching (deterministic cards, optional LLM rephrase).
+  const [coaching, setCoaching] = useState<CoachingValidationResult | null>(null);
+  // Nutrition N7 — deterministic fitness × nutrition context observations.
+  const [n7Observations, setN7Observations] = useState<CrossDomainNutritionObservation[]>([]);
+  // Nutrition N8 — deterministic advice-effectiveness ("What's changed").
+  const [n8Observations, setN8Observations] = useState<NutritionAdviceEffectiveness[]>([]);
   const [loading, setLoading] = useState(true);
   const [assessment, setAssessment] = useState<AIAssessment | null>(null);
   const [supportExpanded, setSupportExpanded] = useState(false);
@@ -151,6 +165,83 @@ export default function TodayNutritionScreen() {
       }
 
       const todayStr = new Date().toISOString().slice(0, 10);
+
+      // Nutrition N1 — the user's actual food log for today (local date).
+      const todayLocal = localISODate(new Date());
+      foodLogService.getDailyNutrition(session.user.id, todayLocal)
+        .then(({ summary, entries }) => {
+          if (!active) return;
+          setFoodTotals(summary); setFoodLog(entries);
+          setTodayDay(summariseDay(todayLocal, entries)); // N2 — per-nutrient completeness
+        })
+        .catch(() => { if (active) { setFoodTotals(null); setFoodLog([]); setTodayDay(null); } });
+
+      // Nutrition N2 — one bounded query for the recent window; derive the
+      // 7-day strip and the deterministic "what ACP has observed" evidence.
+      // Non-blocking: a failure here never hides today's log.
+      foodLogService.getNutritionRange(session.user.id, 7, todayLocal)
+        .then(range => {
+          if (!active) return;
+          setRecentDays(range.days);
+          const p = buildNutritionPatterns(range.entries, { windowDays: 7, endLocalDate: todayLocal });
+          setPatterns(p);
+          // N3 — resolve the user's reference context and compare, once N2's
+          // evidence for the window is available. Non-blocking: a failure
+          // here never hides Today's log, history, or observed patterns.
+          nutritionReferenceService.resolveUserReferenceContext(session.user.id)
+            .then(context => {
+              if (!active) return;
+              setRefContext(context);
+              const comparisons = buildNutritionReferenceComparisons(context, range.days, p);
+              setRefComparisons(comparisons);
+              // N4 — build deterministic coaching cards immediately, then fold
+              // in a validated LLM rephrase if it arrives in time. Fully
+              // non-blocking; a failure leaves the deterministic cards.
+              getNutritionCoaching(session.access_token ?? null, comparisons, range.entries)
+                .then(res => {
+                  if (!active) return;
+                  setCoaching(res.validated);
+                  // Nutrition N8 — record an exposure for each coaching card
+                  // that ACTUALLY renders (cards.length > 0), then load the
+                  // "What's changed" observations. Idempotent; deterministic;
+                  // no-ops when the N8 flag is off. Never blocks the screen.
+                  if (res.validated.cards.length > 0) {
+                    let tz: string | null = null;
+                    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? null; } catch { /* ignore */ }
+                    const shown = res.validated.cards
+                      .map(card => {
+                        const opportunity = res.opportunities.find(o => o.id === card.id);
+                        if (!opportunity) return null;
+                        return { opportunity, comparison: comparisons.find(c => c.nutrient === opportunity.nutrient) };
+                      })
+                      .filter((s): s is NonNullable<typeof s> => s !== null);
+                    nutritionAdviceEffectivenessService.recordExposures(session.user.id, shown, todayLocal, tz)
+                      .then(() => nutritionAdviceEffectivenessService.getEffectivenessObservations(session.user.id, todayLocal))
+                      .then(obs => { if (active) setN8Observations(obs); })
+                      .catch(() => { if (active) setN8Observations([]); });
+                  }
+                })
+                .catch(() => { if (active) setCoaching(null); });
+            })
+            .catch(() => { if (active) { setRefContext(null); setRefComparisons(null); setCoaching(null); } });
+        })
+        .catch(() => { if (active) { setRecentDays([]); setPatterns(null); } });
+
+      // Nutrition N8 — also surface effectiveness for episodes whose coaching
+      // card is no longer eligible today (the gap has closed): the exposure
+      // rows persist, so evaluate them even when no card renders this visit.
+      // getEffectivenessObservations returns the full surfaceable set, so a
+      // later resolve here or in the card path simply reflects current state.
+      nutritionAdviceEffectivenessService.getEffectivenessObservations(session.user.id, todayLocal)
+        .then(obs => { if (active) setN8Observations(obs); })
+        .catch(() => { /* leave whatever the card path set */ });
+
+      // Nutrition N7 — fitness × nutrition context. Fully self-contained,
+      // deterministic, non-blocking; no-ops entirely when the flag is off.
+      // A failure just means no N7 section — never a broken screen.
+      nutritionFitnessContextService.getObservations(session.user.id, todayLocal)
+        .then(res => { if (active) setN7Observations(res.observations); })
+        .catch(() => { if (active) setN7Observations([]); });
 
       if (planItems.length > 0) {
         if (!active) return;
@@ -275,22 +366,65 @@ export default function TodayNutritionScreen() {
     }
   };
 
-  const goal = items.reduce((acc, i) => ({
+  // "Planned" = the sum of today's plan/suggested meals. Nutrition N0 found
+  // this was mislabelled "goal" — it is NOT a nutrition target (no TDEE/macro
+  // engine exists). It stays a reference only.
+  const planned = items.reduce((acc, i) => ({
     calories: acc.calories + i.calories,
     protein: acc.protein + i.protein_g,
     carbs: acc.carbs + i.carbs_g,
     fat: acc.fat + i.fat_g,
   }), { calories: 0, protein: 0, carbs: 0, fat: 0 });
 
-  const eatenItems = items.filter(i => loggedIds.has(i.id));
-  const eaten = eatenItems.reduce((acc, i) => ({
-    calories: acc.calories + i.calories,
-    protein: acc.protein + i.protein_g,
-    carbs: acc.carbs + i.carbs_g,
-    fat: acc.fat + i.fat_g,
-  }), { calories: 0, protein: 0, carbs: 0, fat: 0 });
+  // "Logged" = what the user actually ate, from food_log_entries only
+  // (Nutrition N1). Never derived from the eaten/skipped toggle.
+  const logged = {
+    calories: foodTotals?.energyKcal ?? 0,
+    protein: foodTotals?.proteinG ?? 0,
+    carbs: foodTotals?.carbohydrateG ?? 0,
+    fat: foodTotals?.fatG ?? 0,
+  };
 
-  const remaining = Math.max(0, goal.calories - eaten.calories);
+  const foodLogBySlot: { slot: 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'other'; entries: FoodLogEntry[] }[] = [
+    ...(['breakfast', 'lunch', 'dinner', 'snack'] as const)
+      .map(slot => ({ slot, entries: foodLog.filter(e => e.mealSlot === slot) })),
+    { slot: 'other' as const, entries: foodLog.filter(e => !e.mealSlot) },
+  ].filter(g => g.entries.length > 0);
+
+  const deleteEntry = async (id: string) => {
+    setFoodLog(prev => prev.filter(e => e.id !== id));
+    try {
+      await foodLogService.deleteFoodLog(id);
+    } finally {
+      if (userId) {
+        // Refetch today AND the recent window so no derived aggregate (totals,
+        // completeness, strip, observations) is left stale (N2 §21).
+        const today = localISODate(new Date());
+        const [{ summary, entries }, range] = await Promise.all([
+          foodLogService.getDailyNutrition(userId, today),
+          foodLogService.getNutritionRange(userId, 7, today).catch(() => null),
+        ]);
+        setFoodTotals(summary); setFoodLog(entries);
+        setTodayDay(summariseDay(today, entries));
+        if (range) {
+          setRecentDays(range.days);
+          const p = buildNutritionPatterns(range.entries, { windowDays: 7, endLocalDate: today });
+          setPatterns(p);
+          if (refContext) {
+            const comparisons = buildNutritionReferenceComparisons(refContext, range.days, p);
+            setRefComparisons(comparisons);
+            // N4 — recompute deterministic coaching from the new evidence so a
+            // deleted entry never leaves a stale card (§21). Deterministic
+            // only here (no LLM re-call on a delete); the next focus refresh
+            // will re-fetch the rephrase.
+            getNutritionCoaching(null, comparisons, range.entries)
+              .then(res => setCoaching(res.validated))
+              .catch(() => { /* keep prior cards */ });
+          }
+        }
+      }
+    }
+  };
   const todayLabel = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
 
   const orderedItems = SLOT_ORDER.flatMap(slot => items.filter(i => i.slot === slot));
@@ -315,37 +449,159 @@ export default function TodayNutritionScreen() {
                 <View style={{ width: 36 }} />
               </View>
 
-              <View style={s.ringWrap}>
-                <View style={s.ringSideCol}>
-                  <ThemedText style={s.ringSideValue}>{Math.round(eaten.calories)}</ThemedText>
-                  <ThemedText style={s.ringSideLabel}>eaten</ThemedText>
-                </View>
-                <View style={s.ringCircle}>
-                  <CalorieRing progress={goal.calories > 0 ? eaten.calories / goal.calories : 0} />
-                  <ThemedText style={s.ringCenterValue}>{Math.round(remaining)}</ThemedText>
-                  <ThemedText style={s.ringCenterLabel}>kcal left</ThemedText>
-                </View>
-                <View style={s.ringSideCol}>
-                  <ThemedText style={s.ringSideValue}>{Math.round(goal.calories)}</ThemedText>
-                  <ThemedText style={s.ringSideLabel}>goal</ThemedText>
-                </View>
-              </View>
+              {/* Nutrition N2 — the canonical answer to "what have I eaten today?".
+                  Factual logged totals only; no target/goal denominator (§5/§6). */}
+              <ThemedText style={s.heroEyebrow}>Logged today</ThemedText>
+              <ThemedText style={s.heroValue}>
+                {Math.round(logged.calories)}<ThemedText style={s.heroUnit}> kcal</ThemedText>
+              </ThemedText>
 
               <View style={s.macroRow}>
-                <MacroBar label="Carbs" eaten={eaten.carbs} goal={goal.carbs} unit="g" />
-                <MacroBar label="Protein" eaten={eaten.protein} goal={goal.protein} unit="g" />
-                <MacroBar label="Fat" eaten={eaten.fat} goal={goal.fat} unit="g" />
+                <MacroStat label="Protein" value={logged.protein} unit="g" />
+                <MacroStat label="Carbs" value={logged.carbs} unit="g" />
+                <MacroStat label="Fat" value={logged.fat} unit="g" />
+                <MacroStat label="Fibre" value={foodTotals?.fibreG ?? 0} unit="g" />
               </View>
+              {foodLog.length === 0 && (
+                <ThemedText style={s.heroEmpty}>Nothing logged yet today.</ThemedText>
+              )}
             </SafeAreaView>
           </LinearGradient>
 
           <View style={s.content}>
+            {/* Nutrition N1 — the actual food log. Separate from the planned
+                meals below; this is the record of what was really eaten. */}
+            <TouchableOpacity
+              style={s.logFoodCta}
+              onPress={() => router.push('/log-food' as any)}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="add-circle" size={20} color={palette.success700} />
+              <ThemedText style={s.logFoodCtaText}>Log food</ThemedText>
+              <ThemedText style={s.logFoodCtaSub}>What did you eat?</ThemedText>
+            </TouchableOpacity>
+
+            {foodLog.length > 0 && (
+              <View style={s.loggedWrap}>
+                <ThemedText style={s.sourceNote}>Logged today</ThemedText>
+                {foodLogBySlot.map(({ slot, entries }) => (
+                  <View key={slot} style={{ marginBottom: 6 }}>
+                    <ThemedText style={s.loggedSlotLabel}>
+                      {slot === 'other' ? 'Other' : SLOT_LABEL[slot]}
+                    </ThemedText>
+                    {entries.map(e => (
+                      <View key={e.id} style={s.loggedRow}>
+                        <View style={{ flex: 1 }}>
+                          <ThemedText style={s.loggedName} numberOfLines={1}>{e.displayName}</ThemedText>
+                          <ThemedText style={s.loggedMeta}>
+                            {e.unit === 'serving' ? (e.servingLabel ?? `${e.quantity} serving`) : `${e.quantity} ${e.unit}`}
+                            {e.nutrients.energyKcal != null ? ` · ${Math.round(e.nutrients.energyKcal)} kcal` : ''}
+                          </ThemedText>
+                        </View>
+                        <TouchableOpacity onPress={() => deleteEntry(e.id)} hitSlop={10}>
+                          <Ionicons name="trash-outline" size={16} color={palette.gray300} />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                    {SAVED_MEALS_ENABLED && prefillFromEntries(entries).length >= 2 && (
+                      <TouchableOpacity
+                        style={s.saveAsMealBtn}
+                        onPress={() => router.push({
+                          pathname: '/saved-meal-edit' as any,
+                          params: { prefill: JSON.stringify(prefillFromEntries(entries)) },
+                        })}
+                      >
+                        <Ionicons name="bookmark-outline" size={13} color={palette.success700} />
+                        <ThemedText style={s.saveAsMealText}>Save these as a meal</ThemedText>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Nutrition N2 — nutrients for what was logged today, with data
+                completeness. Progressive disclosure (§16); quiet by default. */}
+            {todayDay && todayDay.hasLogs && (
+              <View style={s.section}>
+                <ThemedText style={s.sectionTitle}>Nutrients</ThemedText>
+                <NutrientList
+                  keys={showAllNutrients ? [...KEY_NUTRIENTS] : KEY_NUTRIENTS.slice(0, 6)}
+                  micros={todayDay.micros}
+                  completeness={todayDay.completeness}
+                />
+                <TouchableOpacity onPress={() => setShowAllNutrients(v => !v)} style={{ paddingVertical: 8 }}>
+                  <ThemedText style={s.link}>
+                    {showAllNutrients ? 'Show fewer' : 'View more nutrients'}
+                  </ThemedText>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Nutrition N2 — recent nutrition entry point + evidence. */}
+            {recentDays.length > 0 && (
+              <View style={s.section}>
+                <TouchableOpacity
+                  style={s.recentHeader}
+                  onPress={() => router.push('/nutrition-history' as any)}
+                  activeOpacity={0.8}
+                >
+                  <ThemedText style={s.sectionTitle}>Recent nutrition</ThemedText>
+                  <ThemedText style={s.link}>Last 7 days →</ThemedText>
+                </TouchableOpacity>
+                <DayEnergyStrip days={recentDays} />
+              </View>
+            )}
+
+            {patterns && (
+              <View style={s.section}>
+                <ObservedPanel patterns={patterns} />
+              </View>
+            )}
+
+            {/* Nutrition N3 — reference comparison. Deterministic, neutral,
+                never a recommendation. */}
+            {refContext && refComparisons && (
+              <View style={s.section}>
+                <NutritionReferenceSection context={refContext} comparisons={refComparisons} />
+              </View>
+            )}
+
+            {/* Nutrition N4 — coaching. Deterministic cards always; LLM only
+                rephrases. Renders nothing when there are no eligible
+                opportunities or the feature flag is off. */}
+            {coaching && coaching.cards.length > 0 && (
+              <View style={s.section}>
+                <NutritionCoachingSection result={coaching} />
+              </View>
+            )}
+
+            {/* Nutrition N7 — fitness × nutrition context. Deterministic
+                observations only; no LLM. Renders nothing without qualifying
+                cross-domain evidence or when the flag is off. */}
+            {n7Observations.length > 0 && (
+              <View style={s.section}>
+                <NutritionActivityContext observations={n7Observations} />
+              </View>
+            )}
+
+            {/* Nutrition N8 — advice effectiveness. Deterministic before/after
+                observation only; no LLM, no causal claim. Renders nothing
+                until an exposed coaching episode has enough subsequent logged
+                days, or when the flag is off. */}
+            {n8Observations.length > 0 && (
+              <View style={s.section}>
+                <NutritionWhatsChanged observations={n8Observations} />
+              </View>
+            )}
+
             {items.length === 0 ? (
-              <ThemedText style={s.emptyText}>No meals found for today.</ThemedText>
+              <ThemedText style={s.emptyText}>No planned meals for today.</ThemedText>
             ) : (
               <>
                 <ThemedText style={s.sourceNote}>
-                  {isSuggested ? 'Suggested meals — tap to mark as eaten' : 'From your meal plan'}
+                  {isSuggested ? 'Suggested meals (not a log — tap ✓ if you followed one)' : 'From your meal plan'}
+                  {planned.calories > 0 ? `  ·  planned ≈ ${Math.round(planned.calories)} kcal (reference, not a target)` : ''}
                 </ThemedText>
                 <View style={s.mealsList}>
                   {orderedItems.map(item => {
@@ -443,33 +699,59 @@ const s = StyleSheet.create({
   },
   headerTitle: { fontSize: 15, fontWeight: '700', color: palette.ink900 },
 
-  ringWrap: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 20, marginTop: 20,
+  // Nutrition N2 hero — factual logged totals, no goal ring.
+  heroEyebrow: {
+    fontSize: 11, fontWeight: '800', color: palette.gray450,
+    textTransform: 'uppercase', letterSpacing: 1, marginTop: 22, textAlign: 'center',
   },
-  ringSideCol: { alignItems: 'center', width: 64 },
-  ringSideValue: { fontSize: 22, fontWeight: '800', color: palette.ink900 },
-  ringSideLabel: { fontSize: 12, color: palette.gray450, marginTop: 2 },
-  ringCircle: {
-    width: RING_SIZE, height: RING_SIZE, borderRadius: RING_SIZE / 2,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  ringCenterValue: { fontSize: 32, fontWeight: '800', color: palette.ink900, paddingTop: 10 },
-  ringCenterLabel: { fontSize: 13, color: palette.gray450, marginTop: 2 },
+  // lineHeight must clear the 800-weight 40px glyph — without it Android
+  // vertically clips the digits (the "0" renders as a "U").
+  heroValue: { fontSize: 40, lineHeight: 48, fontWeight: '800', color: palette.ink900, textAlign: 'center', marginTop: 4 },
+  heroUnit: { fontSize: 16, fontWeight: '600', color: palette.gray450 },
+  heroEmpty: { fontSize: 12.5, color: palette.gray450, textAlign: 'center', marginTop: 12 },
 
   macroRow: {
     flexDirection: 'row', justifyContent: 'space-around',
-    marginTop: 28, paddingHorizontal: 24,
+    marginTop: 22, paddingHorizontal: 16,
   },
-  macroCol: { alignItems: 'center', gap: 6, width: 90 },
-  macroValue: { fontSize: 13, fontWeight: '700', color: palette.ink900 },
-  macroTrack: { width: '100%', height: 4, borderRadius: 2, backgroundColor: palette.border, overflow: 'hidden' },
-  macroFill: { height: '100%', backgroundColor: palette.ink900, borderRadius: 2 },
+  macroCol: { alignItems: 'center', gap: 4, minWidth: 68 },
+  macroValue: { fontSize: 16, fontWeight: '800', color: palette.ink900 },
+  macroUnit: { fontSize: 11, fontWeight: '600', color: palette.gray450 },
   macroLabel: { fontSize: 11.5, color: palette.gray450 },
 
   content: { paddingHorizontal: 20, paddingTop: 24 },
   emptyText: { fontSize: 13, color: palette.gray300, textAlign: 'center', marginTop: 40 },
   sourceNote: { fontSize: 12, color: palette.gray300, marginBottom: 16 },
+
+  section: { marginBottom: 22 },
+  sectionTitle: {
+    fontSize: 11, fontWeight: '800', color: palette.gray300,
+    textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8,
+  },
+  recentHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  link: { fontSize: 12.5, fontWeight: '700', color: palette.blue600 },
+
+  // Nutrition N1 — food log
+  logFoodCta: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: palette.success50, borderRadius: radii.xl,
+    paddingHorizontal: 16, paddingVertical: 14, marginBottom: 18,
+  },
+  logFoodCtaText: { fontSize: 15, fontWeight: '800', color: palette.success700 },
+  logFoodCtaSub: { fontSize: 12.5, color: palette.gray450, marginLeft: 'auto' },
+  loggedWrap: { marginBottom: 22 },
+  loggedSlotLabel: {
+    fontSize: 11, fontWeight: '800', color: palette.gray300,
+    textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 8, marginBottom: 4,
+  },
+  loggedRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: palette.hairline,
+  },
+  loggedName: { fontSize: 14, fontWeight: '700', color: palette.ink900 },
+  loggedMeta: { fontSize: 12, color: palette.gray450, marginTop: 2 },
+  saveAsMealBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 8, paddingHorizontal: 2 },
+  saveAsMealText: { fontSize: 12, fontWeight: '700', color: palette.success700 },
 
   mealsList: { gap: GRID_GAP, marginBottom: 20 },
 
