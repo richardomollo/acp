@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   AI_ASSESSMENT_MODEL, AI_REQUEST_CONFIG, ASSESSMENT_JSON_SCHEMA, SYSTEM_PROMPT,
   buildUserPrompt, validateAssessment, checkAuthorization,
-  getWeeklyMinutesBudget, enforceTimeBudget, enforceSupportLogic,
+  getWeeklyMinutesBudget, enforceTimeBudget, enforceSupportLogic, enforceStrengthSessionDuration,
   getWeekBounds, attachPlanDates, sanitizeTrainingDays,
 } from './assessment';
 import { logAcpEvent, classifyOpenAiFailure, fetchWithTimeout } from '../../../../lib/observability';
@@ -123,6 +123,17 @@ export async function POST(req: NextRequest) {
     // (canonical); falls back to the activityLevel-based proxy otherwise.
     const budget = getWeeklyMinutesBudget((onboardingAnswers as Record<string, unknown>)?.activityLevel, sportHoursPerWeek);
     assessment.starting_plan.activities = enforceTimeBudget(assessment.starting_plan.activities, budget);
+
+    // Beta Feedback #013 — an advanced/intermediate user's PRIMARY strength
+    // session should not land on a ~30-minute default when their weekly
+    // budget has room. Deterministic, budget-bounded, and never touches a
+    // deliberately light/support strength day. Runs AFTER enforceTimeBudget
+    // so it only ever spends real headroom.
+    assessment.starting_plan.activities = enforceStrengthSessionDuration(
+      assessment.starting_plan.activities,
+      (onboardingAnswers as Record<string, unknown>)?.strengthExperience,
+      budget,
+    );
 
     // Deterministic safety backstop — see enforceSupportLogic's own comment.
     // Never a second OpenAI call; only ever adds a missing high-confidence
