@@ -893,3 +893,106 @@ See the Day 10 completion report. As of 2026-08-30: **all deterministic tests
 pass, migrations are safe, RLS/privacy reviewed, kill switches in place, no P0
 findings.** The single P1 (N1) is guard-bounded known model debt, not a safety
 bypass.
+
+---
+
+## 19. N10 — whole-system release validation (2026-09-02)
+
+N10 revalidated the fitness contracts (changed by beta fixes #001–#013) plus
+the full Nutrition intelligence stack (N1–N9) **as one system**. It is a
+release gate, not a new capability.
+
+### 19.1 What was validated this pass
+
+| Area | Result |
+|---|---|
+| Full automated suites | mobile `lib/**` **1050 pass / 0 fail**; web **446 pass / 0 fail**; mobile + web `tsc --noEmit` clean |
+| From-zero migrations | `supabase db reset --local` → 8 migrations (2 baseline + 6 nutrition) apply clean, no order dependency, no duplicate object |
+| RLS — two-user, live | `rls-saved-meals`, `rls-nutrition-coaching-exposures`, `rls-strava`, **new** `rls-intelligence-core` (fitness_profile, fitness_plans, plan_activity_completions, plan_activity_execution, client_measurements, coaching_memory) — all pass; every intelligence table is `user_id = auth.uid()` owner-scoped; `coaching_memory` / `fitness_plans` reject client writes entirely; Strava token tables + `knowledge_*` are service-role-only (RLS on, 0 client policies) |
+| Service-role audit | every AI route verifies `adminSupabase.auth.getUser(accessToken)` then `checkAuthorization(user, userId)` (403 on mismatch) before any user-scoped work; no route accepts a client-supplied arbitrary `user_id` without that check |
+| Secrets | no literal API keys/secrets in tracked files; `.env*` gitignored; `apps/web/debug-mariah.mjs` (tracked dev script, service-role, person's name) → **P3 cleanup** |
+| LLM boundary | 5 web AI routes; models all `gpt-5-mini` (+ `text-embedding-3-small` for corpus only); 4 chat routes use `fetchWithTimeout` (20–45 s AbortController); every failure path (timeout / !ok / bad JSON / schema fail) returns non-2xx and the **client keeps deterministic output** (nutrition coaching, assessment, adaptation all have deterministic fallbacks). No LLM invents nutrient values, portions, completion, provider state, or causal outcomes — verified by the per-route validators + `nutrition-coaching-safety` / web banned-phrase regex |
+| NULL ≠ zero | enforced end-to-end: `scaleNutrients` (`null→null`, `0→0`), `summariseDay` per-nutrient `completeness` + `hasLogs`, `averageKnownNutrientPerLoggedDay` (known values only), N8 `classifyEpisode` (`insufficient_evidence` when before/after avg is null). Dedicated tests in `food-nutrition` / `nutrition-history` / `nutrition-patterns` |
+| Snapshot integrity | `food_log_entries` freezes a 30-nutrient snapshot at log time; `rls-saved-meals` proves a logged entry survives saved-meal deletion (`saved_meal_id → NULL`, `log_group_id` kept); `qa-n7_5b` proves a canonical nutrient/provenance revision does not move an existing log |
+| Provenance | `qa-n7_5b` 27/27 — every `foods` row classified (`direct_verified` / `standard_recipe_estimated` / `proxy_composition`); estimated dishes never shown as verified; arithmetic unchanged by confidence; NULLs stay NULL |
+| Camera | photo is base64-body-only (no client URL → no SSRF), MIME + size validated, held for the request only, never persisted to DB/storage/logs; model returns text candidate labels only → deterministic canonical match → mandatory user confirmation before any log |
+| Causal / medical copy | no causal or efficacy outcome claims in ACP Intelligence user-facing copy; N7/N8/N9 each carry a banned-phrase guard; onboarding "learns what works for you" tagline is generic product copy → **P3** |
+| Diagnostic labels | internal enums (`about_right`, `below_reference`, `toward_reference`, `standard_recipe_estimated`, …) are mapped to display strings at every render site — no raw enum leak |
+| Steps / water | **not** intelligence inputs — display-only. No N-series or adaptation code consumes them |
+| RAG | corpus is `status='approved'` only; retrieval embeds the *query* (built from coarse profile attributes), never user health/food/workout rows; `isRagEnabled()` false or any retrieval error → `knowledgeContext=''` and adaptation proceeds |
+| N9 84-day window | `shown_local_date >= today − 84` (inclusive lower bound; 85 d excluded); routine weeks bucket `[mondayOf(windowStart), currentMonday)` (current week excluded); pure UTC date-part math → no DST/timezone off-by-one |
+
+### 19.2 Findings
+
+- **P0:** none.
+- **P1:** none newly introduced. The pre-existing N1 model-debt P1 (recipe estimates for 9 Kenyan Model-B dishes) remains a **bounded P2 beta limitation** post-N7.5B — every estimated dish now carries an honest `standard_recipe_estimated` classification and a user-facing disclosure.
+- **P2 (accepted beta limitations):** estimated recipe coverage for Kenyan Model-B dishes; N1 search has no relevance ranking ("sukuma wiki" returns raw kale first); N9 taxonomy limited to nutrient-response + routine-fit + training-context (body-outcome & strength-progression deferred); N9 fixed 84-day window; no supplement tracking; no structured push/pull split; no CI gate (tests/tsc/lint run manually).
+- **P3 (polish):** `apps/web/debug-mariah.mjs` tracked dev script; `*.ipa` not in `.gitignore` (5 local build artifacts, currently untracked); repo-wide `@typescript-eslint/no-explicit-any` lint debt (~200, ungated, pre-existing — new N-series files are clean); onboarding "works for you" tagline wording.
+
+### 19.3 Device QA — still outstanding (consolidated)
+
+No physical-device QA has been performed for any ACP Intelligence surface. Unit
++ integration + local-Supabase coverage is green, but the following require a
+real iOS/Android device before a full GO and are the basis for the CONDITIONAL
+verdict:
+
+- N5 live camera capture + photo-library pick + permission-denied/resume paths
+- N7 cross-domain card render on Today Nutrition
+- N7.5/N7.5B Ugali (and the 10 other Kenyan dishes) search → provenance disclosure → log
+- N8 "What's changed" render + exposure-on-actual-render
+- N9 "What ACP is learning" render on Fitness Journey
+- Beta #013 advanced-strength canonical fidelity Home → detail → player → completion → history
+- Connected fitness behaviour gated on #009 Apple Health status semantics
+- Beta #010 immediate completion sync (no app restart), #011 session evidence, #012 Up Next
+
+### 19.4 N10 verdict
+
+**ACP INTELLIGENCE MVP RELEASE: CONDITIONAL GO** — zero P0; automated,
+security, RLS, migration, evidence-integrity and privacy checks all green;
+every intelligence capability is behind an independent kill switch with no DB
+rollback required; the only gap is physical-device validation (§19.3), which
+is bounded and flag-protected.
+
+### 19.5 N10 device QA — findings (2026-09-02)
+
+| Flow | Automated | Physical iOS | Physical Android | Status |
+|---|---|---|---|---|
+| **N5 camera capture** | ✅ | ❌ **failed → fixed, retest pending** | not run | **P1 open (flag-gated)** |
+
+**N5 camera — physical iOS failure.** On a real device the camera flow captured
+the photo but first returned the generic "Couldn't read that photo", then (after
+the taxonomy fix) "Photo analysis isn't available right now." Root cause: the app
+POSTs to `${EXPO_PUBLIC_API_URL || 'https://activecitypass.com'}/api/ai/nutrition-photo-analysis`;
+`EXPO_PUBLIC_API_URL` resolves to `http://localhost:3000` (from `apps/mobile/.env`),
+which a physical device cannot reach, and the `https://activecitypass.com`
+fallback returns **HTTP 404** for that route.
+
+**Why 404:** `apps/web/app/api/ai/nutrition-photo-analysis/` (and the N4
+`nutrition-coaching/` route) are **untracked in git** — Vercel builds from git, so
+they are not in the deployed bundle. Probe evidence: `activecitypass.com` returns
+`401` for the committed routes `/api/ai/weekly-adaptation` and
+`/api/ai/onboarding-assessment` (deployed, auth-guarded) but `404` for
+`/api/ai/nutrition-photo-analysis` and `/api/ai/nutrition-coaching`. OpenAI is
+never reached; no server flag or auth is involved. This is a
+deployment/environment-parity defect, not application logic.
+
+**Fixed (code):** `nutrition-photo-request.ts` now returns a precise
+`PhotoAnalysisFailure` taxonomy (`network` / `unavailable` / `auth` /
+`rate_limited` / `server_error` / `too_large` / `timeout` / `invalid_image` /
+`unreadable`); `photo-meal.tsx` maps these to three honest buckets — *couldn't
+identify foods* / *couldn't process that photo* / *analysis isn't available right
+now* — and never blames the photo for a service problem. `nutrition-photo.ts`
+gains a pure `mimeFromPickedAsset` that reports HEIC/HEIF honestly instead of
+silently relabelling it `image/jpeg` (latent library-pick failure). +12 tests,
+mobile suite 1062/0.
+
+**Still required for green (config, not code):** point `EXPO_PUBLIC_API_URL` at a
+reachable HTTPS deployment of the web app that actually serves
+`/api/ai/nutrition-photo-analysis`, then re-run the physical-device path
+(capture → candidates → confirm → portion → log → Today reflects it) on iOS,
+then Android.
+
+**Release-safe fallback if the web route can't be deployed before beta:**
+`ACP_NUTRITION_CAMERA_ENABLED=false` + `EXPO_PUBLIC_ACP_NUTRITION_CAMERA_ENABLED=false`.
+Camera entry points hide; manual/search food logging is unaffected. The rest of
+the ACP Intelligence product stays CONDITIONAL GO.
