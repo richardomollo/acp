@@ -163,7 +163,10 @@ export const FULL_BODY_A_REQUIREMENTS: ExerciseRequirement[] = [
   { pattern: 'core', bodyPart: 'waist', role: 'core' },
 ];
 
-const FULL_BODY_B_REQUIREMENTS: ExerciseRequirement[] = [
+// Exported (Beta #014) so a standalone canonical full-body activity can
+// alternate A/B across the week the same way the multi-week generator does,
+// instead of every full-body day resolving to the identical A programme.
+export const FULL_BODY_B_REQUIREMENTS: ExerciseRequirement[] = [
   { pattern: 'hinge', bodyPart: 'upper legs', muscleHint: 'hamstring', role: 'compound' },
   { pattern: 'vertical_push', bodyPart: 'shoulders', role: 'compound' },
   { pattern: 'horizontal_pull', bodyPart: 'back', role: 'accessory' },
@@ -347,10 +350,50 @@ export const LOWER_BODY_REQUIREMENTS: ExerciseRequirement[] = [
   { pattern: 'core', bodyPart: 'waist', role: 'core' },
 ];
 
-export function strengthRequirementBase(structure: StrengthStructure): ExerciseRequirement[] {
+// Beta #014 — a SUPPORT day is the week's deliberately lighter session and
+// must reflect that ROLE, not be a shortened copy of the full-body compound
+// day (§8). It leads with accessory-role pulls / posterior-chain / shoulder
+// work + core — reusing existing StrengthMovementPattern values only, and
+// sharing no (pattern, role) tuple with FULL_BODY_A_REQUIREMENTS so it never
+// resolves to the same exercise selection as a full-body day.
+export const SUPPORT_REQUIREMENTS: ExerciseRequirement[] = [
+  { pattern: 'horizontal_pull', bodyPart: 'back', muscleHint: 'lat', role: 'accessory' },
+  { pattern: 'hinge', bodyPart: 'upper legs', muscleHint: 'glute', role: 'accessory' },
+  { pattern: 'vertical_push', bodyPart: 'shoulders', role: 'accessory' },
+  { pattern: 'core', bodyPart: 'waist', muscleHint: 'oblique', role: 'core' },
+];
+
+/**
+ * Beta #014 — which full-body base a canonical full-body activity uses. Two
+ * full-body days in one week must not both resolve to FULL_BODY_A. `seed` is
+ * a STABLE per-activity value (its planned_date, or its index) — never a
+ * clock or RNG (§16/§17) — and both A and B are complete, valid full-body
+ * sessions, so alternating them only varies WHICH compounds, never makes a
+ * session physiologically inappropriate.
+ */
+export function strengthSeedParity(seed: string | number | null | undefined): 0 | 1 {
+  if (seed == null) return 0;
+  const digits = String(seed).replace(/\D/g, '');
+  if (digits.length === 0) {
+    // non-numeric seed (e.g. a weekday name) — fold its char codes
+    const sum = String(seed).split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+    return (sum % 2) as 0 | 1;
+  }
+  const sum = digits.split('').reduce((a, d) => a + Number(d), 0);
+  return (sum % 2) as 0 | 1;
+}
+
+export function fullBodyBaseForSeed(seed: string | number | null | undefined): ExerciseRequirement[] {
+  return strengthSeedParity(seed) === 0 ? FULL_BODY_A_REQUIREMENTS : FULL_BODY_B_REQUIREMENTS;
+}
+
+export function strengthRequirementBase(
+  structure: StrengthStructure, seed?: string | number | null,
+): ExerciseRequirement[] {
   if (structure === 'upper') return UPPER_BODY_REQUIREMENTS;
   if (structure === 'lower') return LOWER_BODY_REQUIREMENTS;
-  return FULL_BODY_A_REQUIREMENTS; // full_body and support both build from the full-body base
+  if (structure === 'support') return SUPPORT_REQUIREMENTS;
+  return fullBodyBaseForSeed(seed); // full_body — A or B by the stable per-activity seed
 }
 
 /**
@@ -358,13 +401,50 @@ export function strengthRequirementBase(structure: StrengthStructure): ExerciseR
  * `support` day deliberately carries NO experience-tier accessory volume
  * (it's the week's lighter session) — everything else uses the normal
  * experience-aware policy, still fitted under the prescribed ceiling.
+ * `seed` (Beta #014) is a stable per-activity value used only to pick the
+ * full-body A/B variant so two full-body days in a week differ.
  */
 export function fitStrengthSessionForStructure(
   structure: StrengthStructure, experience: ExerciseDifficulty, ceilingMinutes?: number | null,
+  seed?: string | number | null,
 ): { requirements: ExerciseRequirement[]; durationMinutes: number; structure: StrengthStructure } {
   const volumeExperience: ExerciseDifficulty = structure === 'support' ? 'beginner' : experience;
-  const fitted = fitStrengthSession(strengthRequirementBase(structure), volumeExperience, ceilingMinutes);
+  const fitted = fitStrengthSession(strengthRequirementBase(structure, seed), volumeExperience, ceilingMinutes);
   return { ...fitted, structure };
+}
+
+// ── Beta #014 — same-week duplication analysis (validation/tests only) ─────
+// Compares two generated strength sessions at the MOVEMENT-PRESCRIPTION
+// level (ACP owns this; exercise IDs are a downstream provider concern).
+// Per §14 this does NOT enforce "no movement may repeat" — repeated primary
+// movements across a week are intentional and support progression tracking.
+// It flags the specific bad case: an identical ORDERED movement prescription
+// for two sessions the plan says have different roles.
+export interface StrengthSessionPrescription {
+  structure: StrengthStructure;
+  requirements: ExerciseRequirement[];
+}
+function patternRoleKey(r: ExerciseRequirement): string {
+  return `${r.pattern}:${r.role}:${r.muscleHint ?? ''}`;
+}
+export function analyseStrengthSessionOverlap(
+  a: StrengthSessionPrescription, b: StrengthSessionPrescription,
+): { orderedSequenceEqual: boolean; patternOverlapRatio: number; suspicious: boolean } {
+  const ka = a.requirements.map(patternRoleKey);
+  const kb = b.requirements.map(patternRoleKey);
+  const orderedSequenceEqual = ka.length === kb.length && ka.every((k, i) => k === kb[i]);
+  const setA = new Set(ka);
+  const shared = kb.filter(k => setA.has(k)).length;
+  const patternOverlapRatio = Math.max(ka.length, kb.length) === 0
+    ? 0 : shared / Math.max(ka.length, kb.length);
+  // Prefix-identical also counts: a shorter session whose whole ordered
+  // prescription is the other's opening N movements is the "support is just
+  // a shorter full-body" bug.
+  const shorter = ka.length <= kb.length ? ka : kb;
+  const longer = ka.length <= kb.length ? kb : ka;
+  const prefixIdentical = shorter.length > 0 && shorter.every((k, i) => k === longer[i]);
+  const suspicious = a.structure !== b.structure && (orderedSequenceEqual || prefixIdentical);
+  return { orderedSequenceEqual, patternOverlapRatio, suspicious };
 }
 
 const WORKOUT_TYPE_SPECS: Record<string, WorkoutTypeSpec> = {
