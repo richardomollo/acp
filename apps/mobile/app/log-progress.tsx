@@ -14,7 +14,12 @@ import type { SupportOpportunity } from '@/lib/ai-assessment';
 import { matchProfessionalProviders, type ProviderMatch } from '@/lib/professional-support';
 import type { PrimaryGoal, PreferredActivity } from '@/lib/onboarding';
 
-const todayIso = () => new Date().toISOString().slice(0, 10);
+// Local calendar date (not UTC) — a measurement dated "today" must be today
+// in the user's timezone, not off-by-one near midnight (Beta #020 §17).
+const todayIso = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 const fmtDate = (iso: string) => {
   const d = new Date(iso + 'T00:00:00');
@@ -272,7 +277,11 @@ export default function LogProgressScreen() {
             maximumDate={new Date()}
             onChange={(_e, selected) => {
               setShowDatePicker(false);
-              if (selected) setMeasurementDate(selected.toISOString().slice(0, 10));
+              // local Y-M-D — `toISOString().slice(0,10)` would shift the day
+              // in tz east of UTC (e.g. Nairobi) (Beta #020 §17).
+              if (selected) setMeasurementDate(
+                `${selected.getFullYear()}-${String(selected.getMonth() + 1).padStart(2, '0')}-${String(selected.getDate()).padStart(2, '0')}`,
+              );
             }}
           />
         )}

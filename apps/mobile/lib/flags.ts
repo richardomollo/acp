@@ -67,3 +67,13 @@ export function isNutritionOutcomeIntelligenceEnabled(): boolean {
 export function isMarketplaceGeoGatingEnabled(): boolean {
   return process.env.EXPO_PUBLIC_LANA_MARKETPLACE_GEO_GATING_ENABLED !== 'false';
 }
+
+// Beta Feedback #020 — the weekly measurement check-in (Home card + one
+// supplemental local notification per due window). Off only when exactly
+// "false". When off: no Home check-in card, no measurement notification is
+// scheduled, and any already-scheduled one is left alone until the app
+// naturally clears it. The existing "My Goals" check-in card and all
+// progress/measurement features are unaffected either way.
+export function isMeasurementCheckinEnabled(): boolean {
+  return process.env.EXPO_PUBLIC_LANA_MEASUREMENT_CHECKIN_ENABLED !== 'false';
+}

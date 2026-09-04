@@ -13,6 +13,7 @@ import { palette, radii, fontSize, shadows } from '@/constants/theme';
 import { useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
 import { authService } from '@/services/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { type Recurrence } from '@/services/notifications';
 import { computeStreak, type Stats } from '@/services/fitnessStats';
@@ -28,6 +29,10 @@ import {
 import { getFulfilmentForActivity, nextDateForWeekday, type PlanActivityFulfilment, type MarketplaceInventoryItem, type MarketplaceMatch } from '@/lib/fulfilment';
 import { ActivityFulfilmentCard, GymAccessList } from '@/components/activity-fulfilment-card';
 import { useMarketplaceLocation } from '@/contexts/marketplace-location-context';
+import { isMeasurementCheckinEnabled } from '@/lib/flags';
+import { MeasurementCheckinCard } from '@/components/home/measurement-checkin-card';
+import { getMeasurementCheckinState, syncMeasurementCheckinNotification } from '@/services/measurement-checkin-service';
+import type { MeasurementCheckinStatus } from '@/lib/progress/measurement-checkin';
 import { ExerciseMedia } from '@/components/exercise-media';
 import {
   getCompletionProgress, findStravaCandidates, findExerciseDbCandidates, findAcpBookingCandidates, findHealthKitCandidates,
@@ -95,6 +100,7 @@ const MOODS = [
 
 const STEPS_GOAL = 8000;
 const WATER_GOAL = 8;
+const GOAL_BANNER_DISMISS_KEY = 'home:goalBannerDismissedFor';
 
 interface ActiveBooking {
   id: string;
@@ -517,8 +523,14 @@ export default function HomeScreen() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [todayMood, setTodayMood] = useState<number | null>(null);
+  // Beta #020 — weekly measurement check-in due state (in-app source of truth).
+  const [measurementCheckin, setMeasurementCheckin] = useState<MeasurementCheckinStatus | null>(null);
   const [goalStatus, setGoalStatus] = useState<'not_set' | 'incomplete' | 'complete'>('complete');
   const [goalSummary, setGoalSummary] = useState<{ goalLine: string; icon: string } | null>(null);
+  // "Your goal" banner — user can dismiss it once their goal is set; it comes
+  // back only when the goal actually changes (dismissal is stored keyed to
+  // the current goal summary).
+  const [goalBannerDismissed, setGoalBannerDismissed] = useState(false);
   const [savingMood, setSavingMood] = useState(false);
   const [activeBooking, setActiveBooking] = useState<ActiveBooking | null>(null);
   const [workoutSchedules, setWorkoutSchedules] = useState<WorkoutSchedule[]>([]);
@@ -1376,6 +1388,17 @@ export default function HomeScreen() {
           .maybeSingle();
         setTodayMood(checkinData?.mood ?? null);
 
+        // Beta #020 — weekly measurement check-in. In-app due state is the
+        // source of truth (shown regardless of notification permission); the
+        // supplemental local notification is reconciled idempotently here.
+        if (isMeasurementCheckinEnabled()) {
+          const mcState = await getMeasurementCheckinState(authSession.user.id);
+          setMeasurementCheckin(mcState.ok ? mcState.status : null); // load failure → no card (§19)
+          syncMeasurementCheckinNotification(mcState).catch(() => {});
+        } else {
+          setMeasurementCheckin(null);
+        }
+
         const { data: fitnessProfileData } = await supabase
           .from('fitness_profile')
           .select(`
@@ -1387,8 +1410,8 @@ export default function HomeScreen() {
           .eq('user_id', authSession.user.id)
           .maybeSingle();
         setCuisinePreference(fitnessProfileData?.cuisine_preference ?? null);
-        if (!fitnessProfileData?.goal) { setGoalStatus('not_set'); setGoalSummary(null); }
-        else if (!fitnessProfileData.onboarding_completed) { setGoalStatus('incomplete'); setGoalSummary(null); }
+        if (!fitnessProfileData?.goal) { setGoalStatus('not_set'); setGoalSummary(null); setGoalBannerDismissed(false); }
+        else if (!fitnessProfileData.onboarding_completed) { setGoalStatus('incomplete'); setGoalSummary(null); setGoalBannerDismissed(false); }
         else {
           const goalAnswers = {
             ...EMPTY_ANSWERS,
@@ -1412,9 +1435,15 @@ export default function HomeScreen() {
             const goalOpt = GOAL_OPTIONS.find(g => g.key === fitnessProfileData.goal);
             const { goalLine } = buildPlanSummary(goalAnswers);
             setGoalSummary({ goalLine, icon: goalOpt?.icon ?? 'flag-outline' });
+            // stays dismissed only while the goal summary is unchanged
+            try {
+              const dismissedFor = await AsyncStorage.getItem(GOAL_BANNER_DISMISS_KEY);
+              setGoalBannerDismissed(dismissedFor === goalLine);
+            } catch { setGoalBannerDismissed(false); }
           } else {
             setGoalStatus('incomplete');
             setGoalSummary(null);
+            setGoalBannerDismissed(false);
           }
         }
         // Trainer-set goal wins over the client's own, which wins over the default.
@@ -1606,8 +1635,10 @@ export default function HomeScreen() {
         setUser(null);
         setUserId(null);
         setTodayMood(null);
+        setMeasurementCheckin(null);
         setGoalStatus('complete');
         setGoalSummary(null);
+        setGoalBannerDismissed(false);
         setActiveBooking(null);
         setWorkoutSchedules([]);
         setCompletedWorkoutKeys(new Set());
@@ -1797,8 +1828,9 @@ export default function HomeScreen() {
           </TouchableOpacity>
         )}
 
-        {/* ─── Your goal (once set) — same slot as the status banner above ─── */}
-        {!isGuest && goalStatus === 'complete' && goalSummary && (
+        {/* ─── Your goal (once set) — same slot as the status banner above.
+              Dismissible; comes back only if the goal actually changes. ─── */}
+        {!isGuest && goalStatus === 'complete' && goalSummary && !goalBannerDismissed && (
           <TouchableOpacity
             style={styles.goalBanner}
             onPress={() => router.push('/fitness-goals' as any)}
@@ -1811,7 +1843,16 @@ export default function HomeScreen() {
               <ThemedText style={styles.goalBannerTitle}>Your goal</ThemedText>
               <ThemedText style={styles.goalBannerSub}>{goalSummary.goalLine}</ThemedText>
             </View>
-            <Ionicons name="chevron-forward" size={16} color={palette.blue600} />
+            <TouchableOpacity
+              onPress={() => {
+                setGoalBannerDismissed(true);
+                AsyncStorage.setItem(GOAL_BANNER_DISMISS_KEY, goalSummary.goalLine).catch(() => {});
+              }}
+              hitSlop={12}
+              accessibilityLabel="Dismiss goal banner"
+            >
+              <Ionicons name="close" size={18} color={palette.blue600} />
+            </TouchableOpacity>
           </TouchableOpacity>
         )}
 
@@ -1833,6 +1874,15 @@ export default function HomeScreen() {
               ))}
             </View>
           </View>
+        )}
+
+        {/* ─── Beta #020 — weekly measurement check-in. Sits with the other
+              check-in prompts, below the goal/account banners (critical
+              state) and above Today's Focus. Renders only when due/overdue;
+              disappears the moment a measurement is saved (Home reloads on
+              focus). Independent of notification permission. ─── */}
+        {!isGuest && measurementCheckin && (
+          <MeasurementCheckinCard status={measurementCheckin} />
         )}
 
         {/* ─── Today's Focus (filtered by date strip above) ─── */}

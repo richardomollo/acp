@@ -1,11 +1,13 @@
 import React, { useEffect } from "react";
 import { Stack, useRouter } from "expo-router";
 import * as Linking from "expo-linking";
+import * as Notifications from "expo-notifications";
 import { AuthModalProvider } from "@/contexts/auth-modal-context";
 import { MarketplaceLocationProvider } from "@/contexts/marketplace-location-context";
 import { GlobalAuthModal } from "@/components/auth-modal";
 import { UpdateBanner } from "@/components/update-banner";
 import { supabase } from "@/lib/supabase";
+import { clearMeasurementCheckinNotification } from "@/services/measurement-checkin-service";
 import * as Sentry from '@sentry/react-native';
 
 Sentry.init({
@@ -43,6 +45,7 @@ export default Sentry.wrap(function Layout() {
       if (event === 'PASSWORD_RECOVERY') {
         router.replace('/reset-password');
       } else if (event === 'SIGNED_OUT') {
+        clearMeasurementCheckinNotification().catch(() => {}); // Beta #020 — don't leave a reminder for a signed-out user
         router.replace('/login');
       }
     });
@@ -57,6 +60,23 @@ export default Sentry.wrap(function Layout() {
 
     // Handle deep link while app is already open
     const sub = Linking.addEventListener('url', ({ url }) => handleAuthDeepLink(url));
+    return () => sub.remove();
+  }, []);
+
+  useEffect(() => {
+    // Beta #020 — tapping the weekly-check-in notification opens the
+    // measurement entry screen (§23). Also handled on cold start, so a tap
+    // from a killed app still routes there once the router is ready.
+    const route = (data: unknown) => {
+      const d = data as { type?: string; url?: string } | null;
+      if (d?.type === 'measurement_checkin') router.push((d.url ?? '/log-progress') as never);
+    };
+    Notifications.getLastNotificationResponseAsync()
+      .then(r => { if (r) route(r.notification.request.content.data); })
+      .catch(() => {});
+    const sub = Notifications.addNotificationResponseReceivedListener(r => {
+      route(r.notification.request.content.data);
+    });
     return () => sub.remove();
   }, []);
 
