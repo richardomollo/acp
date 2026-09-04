@@ -86,7 +86,7 @@ export default function OnboardingSuccessScreen() {
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <ThemedText style={styles.headline}>{firstName ? `Where are you starting from, ${firstName}?` : 'Where are you starting from?'}</ThemedText>
-        <ThemedText style={styles.sub}>Help ACP Intelligence™ understand your current level so your first plan starts in the right place.</ThemedText>
+        <ThemedText style={styles.sub}>Help Lana understand your current level so your first plan starts in the right place.</ThemedText>
 
         {isWeightGoal && (
           <>

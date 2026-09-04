@@ -616,7 +616,7 @@ export default function CreateSessionScreen() {
                   <ThemedText style={styles.payoutValue}>KES {price.toLocaleString()}</ThemedText>
                 </View>
                 <View style={styles.payoutRow}>
-                  <ThemedText style={styles.payoutLabel}>ACP commission ({commission}%)</ThemedText>
+                  <ThemedText style={styles.payoutLabel}>Lana commission ({commission}%)</ThemedText>
                   <ThemedText style={styles.payoutValue}>KES {Math.round(price * commission / 100).toLocaleString()}</ThemedText>
                 </View>
                 <View style={[styles.payoutRow, styles.payoutDivider]}>

@@ -67,7 +67,7 @@ export default function Footer() {
 
           {/* Brand */}
           <div className="lg:max-w-xs">
-            <img src="/images/logo-white.png" alt="Active CityPass" className="h-8 w-auto mb-5" />
+            <img src="/images/logo-white.png" alt="Lana Health" className="h-8 w-auto mb-5" />
             <p className="text-white/40 text-sm leading-relaxed">
               Nairobi's most flexible sports &amp; wellness membership. One pass, 50+ venues, unlimited possibilities.
             </p>
@@ -111,7 +111,7 @@ export default function Footer() {
 
         {/* Bottom bar */}
         <div className="border-t border-white/10 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
-          <p className="text-white/30 text-xs">© 2026 Active CityPass. All rights reserved.</p>
+          <p className="text-white/30 text-xs">© 2026 Lana Health. All rights reserved.</p>
           <div className="flex gap-6 text-white/30 text-xs">
             <Link href="/" className="hover:text-white/60 transition-colors">Terms &amp; Conditions</Link>
             <Link href="/privacy-policy" className="hover:text-white/60 transition-colors">Privacy</Link>

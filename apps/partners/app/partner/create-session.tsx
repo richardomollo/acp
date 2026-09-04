@@ -413,7 +413,7 @@ export default function CreateSessionScreen() {
                 <ThemedText style={styles.venueLocation}>{gym.location}</ThemedText>
                 {rateFloorPct != null && (
                   <ThemedText style={styles.venueFloor}>
-                    ACP commission: {rateFloorPct}%
+                    Lana commission: {rateFloorPct}%
                   </ThemedText>
                 )}
               </View>
@@ -640,7 +640,7 @@ export default function CreateSessionScreen() {
                   <View style={styles.payoutWarning}>
                     <Ionicons name="warning-outline" size={16} color="#d97706" />
                     <ThemedText style={styles.payoutWarningText}>
-                      Commission rate not yet agreed. Contact ACP to finalise before creating sessions.
+                      Commission rate not yet agreed. Contact Lana to finalise before creating sessions.
                     </ThemedText>
                   </View>
                 ) : price <= 0 ? (
@@ -652,7 +652,7 @@ export default function CreateSessionScreen() {
                       <ThemedText style={styles.payoutValue}>KES {price.toLocaleString()}</ThemedText>
                     </View>
                     <View style={styles.payoutRow}>
-                      <ThemedText style={styles.payoutLabel}>ACP commission ({rateFloorPct}%)</ThemedText>
+                      <ThemedText style={styles.payoutLabel}>Lana commission ({rateFloorPct}%)</ThemedText>
                       <ThemedText style={styles.payoutValue}>KES {commission!.toLocaleString()}</ThemedText>
                     </View>
                     <View style={[styles.payoutRow, styles.payoutDivider]}>

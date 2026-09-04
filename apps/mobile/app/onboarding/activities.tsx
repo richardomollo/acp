@@ -29,7 +29,7 @@ export default function OnboardingActivitiesScreen() {
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <ThemedText style={styles.headline}>{firstName ? `How do you like to move, ${firstName}?` : 'How do you like to move?'}</ThemedText>
-        <ThemedText style={styles.sub}>Choose the activities you enjoy. ACP Intelligence™ will prioritise ways of moving you’re more likely to stick with.</ThemedText>
+        <ThemedText style={styles.sub}>Choose the activities you enjoy. Lana will prioritise ways of moving you’re more likely to stick with.</ThemedText>
 
         <View style={styles.chips}>
           {ACTIVITY_OPTIONS.map(o => (
@@ -48,7 +48,7 @@ export default function OnboardingActivitiesScreen() {
             (or a single day) = no preference, and ACP plans as it does today. */}
         <ThemedText style={styles.dayHeading}>Which days do you prefer to train?</ThemedText>
         <ThemedText style={styles.daySub}>
-          Optional — pick the weekdays you normally like to exercise, and ACP will build your week around them.
+          Optional — pick the weekdays you normally like to exercise, and Lana will build your week around them.
         </ThemedText>
         <View style={styles.dayRow}>
           {TRAINING_DAY_OPTIONS.map(d => {
@@ -74,7 +74,7 @@ export default function OnboardingActivitiesScreen() {
           {dayCount === 0
             ? 'No preference yet'
             : dayCount < MIN_TRAINING_DAYS
-              ? `Pick at least ${MIN_TRAINING_DAYS} days, or leave this for ACP to decide`
+              ? `Pick at least ${MIN_TRAINING_DAYS} days, or leave this for Lana to decide`
               : describeTrainingFrequency(dayCount)}
         </ThemedText>
       </ScrollView>

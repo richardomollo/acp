@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "A.City partners",
+    "name": "Lana Health Partners",
     "slug": "acitypass-partner",
     "version": "1.0.2",
     "orientation": "portrait",
@@ -20,8 +20,8 @@
           "remote-notification"
         ],
         "ITSAppUsesNonExemptEncryption": false,
-        "NSCameraUsageDescription": "Active City Pass needs access to your camera to scan member QR codes at check-in and to take photos when creating offerings.",
-        "NSPhotoLibraryUsageDescription": "Active City Pass needs access to your photo library so you can upload a profile picture for your account and so you can upload photos when creating offerings.",
+        "NSCameraUsageDescription": "Lana Health Partners needs access to your camera to scan member QR codes at check-in and to take photos when creating offerings.",
+        "NSPhotoLibraryUsageDescription": "Lana Health Partners needs access to your photo library so you can upload a profile picture for your account and so you can upload photos when creating offerings.",
         "CFBundleURLTypes": [
           {
             "CFBundleURLSchemes": [

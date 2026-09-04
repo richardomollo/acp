@@ -228,7 +228,7 @@ export default function OnboardingPlanScreen() {
                 onPress={() => setShowIntelligenceInfo(true)}
                 activeOpacity={0.7}
               >
-                <ThemedText style={styles.intelligenceText}>Recommended by ACP Intelligence™</ThemedText>
+                <ThemedText style={styles.intelligenceText}>Recommended by Lana</ThemedText>
                 <Ionicons name="information-circle-outline" size={16} color={palette.gray450} />
               </TouchableOpacity>
             )}
@@ -238,7 +238,7 @@ export default function OnboardingPlanScreen() {
         {assessmentPhase === 'loading' && (
           <Animated.View style={[styles.card, styles.loadingCard, { opacity: fade }]}>
             <ActivityIndicator color={palette.ink700} />
-            <ThemedText style={styles.loadingText}>Building your plan, powered by ACP Intelligence™</ThemedText>
+            <ThemedText style={styles.loadingText}>Lana is building your plan</ThemedText>
           </Animated.View>
         )}
 
@@ -402,10 +402,10 @@ export default function OnboardingPlanScreen() {
           onPress={() => setShowIntelligenceInfo(false)}
         >
           <View style={styles.tooltipCard}>
-            <ThemedText style={styles.tooltipTitle}>ACP Intelligence™</ThemedText>
+            <ThemedText style={styles.tooltipTitle}>Lana</ThemedText>
             <ThemedText style={styles.tooltipBody}>
-              ACP Intelligence™ is AI that personalises your fitness and nutrition plan, learns from
-              your progress, and adapts what to do next based on what works for you.
+              Lana is the coaching intelligence that personalises your fitness and nutrition plan,
+              learns from your progress, and adapts what to do next based on what works for you.
             </ThemedText>
             <TouchableOpacity style={styles.tooltipCloseBtn} onPress={() => setShowIntelligenceInfo(false)} activeOpacity={0.85}>
               <ThemedText style={styles.tooltipCloseText}>Got it</ThemedText>

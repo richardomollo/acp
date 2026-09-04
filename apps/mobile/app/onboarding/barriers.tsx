@@ -28,7 +28,7 @@ export default function OnboardingBarriersScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <ThemedText style={styles.headline}>{firstName ? `What tends to get in your way, ${firstName}?` : 'What tends to get in your way?'}</ThemedText>
         <ThemedText style={styles.sub}>
-          Knowing what makes consistency difficult helps ACP Intelligence™ build around it — and
+          Knowing what makes consistency difficult helps Lana build around it — and
           adapt when something isn&apos;t working. Choose up to {MAX_BARRIERS}.
         </ThemedText>
 

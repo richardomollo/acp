@@ -62,7 +62,7 @@ export default async function PTPendingPage() {
           </form>
         </div>
         <Link href="/" className="mt-6 inline-block text-xs text-gray-400 hover:text-gray-600">
-          ← Back to Active CityPass
+          ← Back to Lana Health
         </Link>
       </div>
     </div>

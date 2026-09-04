@@ -93,7 +93,7 @@ export function interpretProgress(snapshot: ProgressSnapshot, today: Date = new 
     state = 'INSUFFICIENT_DATA';
     headline = "Still establishing your baseline";
     supporting.length = 0;
-    supporting.push('Complete a few more workouts and update your measurements so ACP can identify meaningful trends.');
+    supporting.push('Complete a few more workouts and update your measurements so Lana can identify meaningful trends.');
   }
   // 2. A real recent adherence drop always surfaces first — even when an
   //    outcome is improving, declining consistency is the more actionable

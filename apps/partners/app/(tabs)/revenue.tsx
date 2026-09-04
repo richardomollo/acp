@@ -299,7 +299,7 @@ export default function RevenueScreen() {
         <View style={styles.balanceCard}>
           <ThemedText style={styles.balanceLabel}>Available to withdraw</ThemedText>
           <ThemedText style={styles.balanceAmount}>{fmtKes(stats.available)}</ThemedText>
-          <ThemedText style={styles.balanceNote}>After ACP commission · {fmtKes(stats.totalWithdrawn)} already withdrawn</ThemedText>
+          <ThemedText style={styles.balanceNote}>After Lana commission · {fmtKes(stats.totalWithdrawn)} already withdrawn</ThemedText>
           <TouchableOpacity
             style={[styles.withdrawBtn, stats.available <= 0 && styles.withdrawBtnDisabled]}
             onPress={openWithdrawModal}

@@ -33,7 +33,7 @@ export function evaluateHumanSupport(input: HumanSupportEvaluationInput): HumanS
   if (painCheckIns.length > 0) {
     signals.push({
       trigger: 'PAIN_REPORTED', severity: 'HIGH',
-      reason: 'You reported pain or discomfort during training. ACP won’t increase your training automatically. Consider getting appropriate professional guidance before progressing.',
+      reason: 'You reported pain or discomfort during training. Lana won’t increase your training automatically. Consider getting appropriate professional guidance before progressing.',
       evidence: { pain_reported_weeks: painCheckIns.map(c => c.weekNumber) },
     });
   }
@@ -54,7 +54,7 @@ export function evaluateHumanSupport(input: HumanSupportEvaluationInput): HumanS
   ) {
     signals.push({
       trigger: 'REPEATED_LOW_ADHERENCE', severity: 'RECOMMENDED',
-      reason: 'ACP has already adjusted your plan to make it easier to sustain, but consistency has stayed low. A trainer can add accountability and help find what fits your routine.',
+      reason: 'Lana has already adjusted your plan to make it easier to sustain, but consistency has stayed low. A trainer can add accountability and help find what fits your routine.',
       evidence: { adherence_rate: progress.behavioural.adherenceRate, adaptation_weeks: volumeOrRegressAdaptations.map(a => a.weekNumber) },
     });
   }
@@ -73,7 +73,7 @@ export function evaluateHumanSupport(input: HumanSupportEvaluationInput): HumanS
   if (nonKeepAdaptations.length >= REPEATED_ADAPTATION_MIN) {
     signals.push({
       trigger: 'REPEATED_ADAPTATION', severity: 'RECOMMENDED',
-      reason: 'ACP has adjusted your plan several times recently. A trainer can take a closer look at what would work best for you.',
+      reason: 'Lana has adjusted your plan several times recently. A trainer can take a closer look at what would work best for you.',
       evidence: { adaptation_weeks: nonKeepAdaptations.map(a => a.weekNumber) },
     });
   }

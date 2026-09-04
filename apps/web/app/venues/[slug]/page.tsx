@@ -28,14 +28,14 @@ export async function generateMetadata({ params }: Props): Promise<import("next"
   const title = gym.name;
   const description =
     gym.description ??
-    `Book sessions at ${gym.name} in ${gym.area ?? "Nairobi"} with Active CityPass.`;
+    `Book sessions at ${gym.name} in ${gym.area ?? "Nairobi"} with Lana Health.`;
   const canonicalSlug = gym.slug ?? gym.id;
 
   return {
     title,
     description,
     openGraph: {
-      title: `${title} | Active CityPass`,
+      title: `${title} | Lana Health`,
       description,
       url: `https://activecitypass.com/venues/${canonicalSlug}`,
       ...(gym.image_url

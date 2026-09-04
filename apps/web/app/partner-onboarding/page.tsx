@@ -200,7 +200,7 @@ export default function PartnerOnboardingPage() {
         id: `gymSession-${gym.id}`,
         eyebrow: gym.name,
         title: "Create your first session",
-        subtitle: "A bookable class or slot customers can find on Active CityPass. You can add more or fine-tune this one anytime from your dashboard.",
+        subtitle: "A bookable class or slot customers can find on Lana Health. You can add more or fine-tune this one anytime from your dashboard.",
         canContinue: !!(sessionForm.name.trim() && sessionForm.category && sessionForm.date && sessionForm.time && sessionForm.drop_in_price),
         onContinue: async () => {
           setLoading(true);
@@ -502,7 +502,7 @@ export default function PartnerOnboardingPage() {
                 {total === 0 ? "You're all set!" : "Your profile is complete!"}
               </h2>
               <p className="text-gray-500 mb-8">
-                Your profile is live on Active CityPass. You can keep refining it anytime from your dashboard.
+                Your profile is live on Lana Health. You can keep refining it anytime from your dashboard.
               </p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 {gyms.length > 0 && (

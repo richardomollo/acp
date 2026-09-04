@@ -21,7 +21,7 @@ export function NutritionWhatsChanged({ observations }: { observations: Nutritio
   return (
     <View style={s.wrap}>
       <ThemedText style={s.sectionTitle}>What&apos;s changed</ThemedText>
-      <ThemedText style={s.sectionSub}>How your logs have moved since ACP showed a suggestion — an observation, not a verdict.</ThemedText>
+      <ThemedText style={s.sectionSub}>How your logs have moved since Lana showed a suggestion — an observation, not a verdict.</ThemedText>
 
       {observations.map(o => (
         <View key={o.exposureId} style={s.card}>

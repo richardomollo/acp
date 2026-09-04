@@ -248,7 +248,7 @@ export function ActivityFulfilmentCard({
           {fulfilment.marketplaceMatches.length > 0 && (
             <View style={s.block}>
               <View style={s.headerRow}>
-                <ThemedText style={[s.header, { marginBottom: 0 }]}>DO IT WITH ACP</ThemedText>
+                <ThemedText style={[s.header, { marginBottom: 0 }]}>DO IT WITH LANA</ThemedText>
                 <TouchableOpacity onPress={onInfoPress} hitSlop={8} activeOpacity={0.7}>
                   <Ionicons name="information-circle-outline" size={12} color={palette.gray300} />
                 </TouchableOpacity>
@@ -265,7 +265,7 @@ export function ActivityFulfilmentCard({
                   <View style={{ flex: 1 }}>
                     <ThemedText style={s.title}>{m.title}</ThemedText>
                     <ThemedText style={s.meta}>
-                      {m.isAlternateDay ? 'Available on ACP · ' : ''}
+                      {m.isAlternateDay ? 'Available on Lana · ' : ''}
                       {new Date(m.date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long' })}
                       {m.startTime ? ` · ${m.startTime.slice(0, 5)}` : ''}
                       {m.priceKes != null ? ` · KES ${m.priceKes.toLocaleString()}` : ''}
@@ -338,7 +338,7 @@ export function GymAccessList({ matches }: { matches: MarketplaceMatch[] }) {
             <ThemedText style={sLight.title}>{m.title}</ThemedText>
             <ThemedText style={sLight.meta}>
               {m.partnerName ? `${m.partnerName} · ` : ''}
-              {m.isAlternateDay ? 'Available on ACP · ' : ''}
+              {m.isAlternateDay ? 'Available on Lana · ' : ''}
               {new Date(m.date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long' })}
               {m.startTime ? ` · ${m.startTime.slice(0, 5)}` : ''}
               {m.priceKes != null ? ` · KES ${m.priceKes.toLocaleString()}` : ''}

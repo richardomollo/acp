@@ -5,11 +5,11 @@ import ExperiencesClient from "./ExperiencesClient";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Experiences | Active CityPass",
+  title: "Experiences | Lana Health",
   description:
     "Discover full-day retreats, hikes, and wellness experiences across Kenya — yoga at Mt Longonot, meditation retreats, nature hikes and more.",
   openGraph: {
-    title: "Experiences | Active CityPass",
+    title: "Experiences | Lana Health",
     description:
       "Discover full-day retreats, hikes, and wellness experiences across Kenya.",
     url: "https://activecitypass.com/experiences",

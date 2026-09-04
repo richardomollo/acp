@@ -84,7 +84,7 @@ export default function CommissionRateScreen() {
 
         {commission != null ? (
           <View style={styles.rateCard}>
-            <ThemedText style={styles.rateLabel}>ACP Commission</ThemedText>
+            <ThemedText style={styles.rateLabel}>Lana Commission</ThemedText>
             <ThemedText style={styles.rateValue}>{commission}%</ThemedText>
             <ThemedText style={styles.rateSubLabel}>
               You receive {100 - commission}% of each booking
@@ -98,7 +98,7 @@ export default function CommissionRateScreen() {
                   <ThemedText style={styles.breakdownValue}>KES {dropIn.toLocaleString()}</ThemedText>
                 </View>
                 <View style={styles.breakdownRow}>
-                  <ThemedText style={styles.breakdownLabel}>ACP commission ({commission}%)</ThemedText>
+                  <ThemedText style={styles.breakdownLabel}>Lana commission ({commission}%)</ThemedText>
                   <ThemedText style={styles.breakdownValue}>
                     KES {Math.round(dropIn * commission / 100).toLocaleString()}
                   </ThemedText>
@@ -115,7 +115,7 @@ export default function CommissionRateScreen() {
             <Ionicons name="alert-circle-outline" size={40} color="#ff9500" />
             <ThemedText style={styles.noRateTitle}>Commission not yet agreed</ThemedText>
             <ThemedText style={styles.noRateText}>
-              Contact ACP to finalise your commission rate before creating sessions.
+              Contact Lana to finalise your commission rate before creating sessions.
             </ThemedText>
           </View>
         )}
@@ -126,10 +126,10 @@ export default function CommissionRateScreen() {
             <ThemedText style={styles.infoTitle}>How it works</ThemedText>
           </View>
           <ThemedText style={styles.infoText}>
-            ACP takes a commission on each booking made through the platform. Your payout is calculated automatically and paid out monthly.
+            Lana takes a commission on each booking made through the platform. Your payout is calculated automatically and paid out monthly.
           </ThemedText>
           <ThemedText style={styles.infoText}>
-            Commission rates are negotiated directly with the ACP team and apply to all sessions at this venue.
+            Commission rates are negotiated directly with the Lana team and apply to all sessions at this venue.
           </ThemedText>
         </View>
 
@@ -138,7 +138,7 @@ export default function CommissionRateScreen() {
           onPress={() => Linking.openURL('mailto:hello@activecitypass.com?subject=Commission%20Rate%20Enquiry')}
         >
           <Ionicons name="mail-outline" size={20} color="#fff" />
-          <ThemedText style={styles.contactButtonText}>Contact ACP to Negotiate</ThemedText>
+          <ThemedText style={styles.contactButtonText}>Contact Lana to Negotiate</ThemedText>
         </TouchableOpacity>
       </ScrollView>
     </View>

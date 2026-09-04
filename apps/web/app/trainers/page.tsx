@@ -5,13 +5,13 @@ import TrainersClient from "./TrainersClient";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Personal Trainers | Active CityPass",
+  title: "Personal Trainers | Lana Health",
   description:
-    "Find certified personal trainers in Nairobi — weight loss, strength training, HIIT, yoga, boxing and more. Book 1-on-1 or group sessions with Active CityPass.",
+    "Find certified personal trainers in Nairobi — weight loss, strength training, HIIT, yoga, boxing and more. Book 1-on-1 or group sessions with Lana Health.",
   openGraph: {
-    title: "Personal Trainers | Active CityPass",
+    title: "Personal Trainers | Lana Health",
     description:
-      "Find certified personal trainers in Nairobi. Book sessions with Active CityPass.",
+      "Find certified personal trainers in Nairobi. Book sessions with Lana Health.",
     url: "https://activecitypass.com/trainers",
   },
 };

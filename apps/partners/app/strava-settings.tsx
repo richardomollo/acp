@@ -101,7 +101,7 @@ export default function StravaSettingsScreen() {
               <>
                 <ThemedText style={s.title}>Strava Connected ✓</ThemedText>
                 <ThemedText style={s.desc}>
-                  Your activities are syncing with Active City Pass.
+                  Your activities are syncing with Lana Health.
                 </ThemedText>
                 {status.lastSyncedAt && (
                   <ThemedText style={s.metaText}>
@@ -142,7 +142,7 @@ export default function StravaSettingsScreen() {
                 <ThemedText style={s.title}>Connect Strava</ThemedText>
                 <ThemedText style={s.desc}>
                   Connect your Strava account to automatically bring your runs, walks and
-                  rides into Active City Pass.
+                  rides into Lana Health.
                 </ThemedText>
 
                 <TouchableOpacity

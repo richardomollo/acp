@@ -29,7 +29,7 @@ function decliningExercise(progress: ProgressSnapshot): ExercisePerformanceTrend
   return progress.performance.exerciseTrends.find(t => t.direction === 'decreased');
 }
 
-const HOLD_REASON = 'ACP already adjusted this week — giving it more time before changing anything further.';
+const HOLD_REASON = 'Lana already adjusted this week — giving it more time before changing anything further.';
 
 /**
  * Ordered, documented priority cascade (section 8). Each rule is checked in
@@ -60,19 +60,19 @@ export function evaluateAdaptation(context: AdaptationContext): AdaptationResult
   // 1. Safety first — pain overrides everything else, unconditionally.
   // Never diagnoses the cause; never autonomously increases load this week.
   if (checkIn.painReported) {
-    return result([{ type: 'KEEP', reason: "You reported pain or discomfort. ACP won't increase training load automatically this week." }]);
+    return result([{ type: 'KEEP', reason: "You reported pain or discomfort. Lana won't increase training load automatically this week." }]);
   }
 
   // 2. No usable evidence anywhere — never invent adaptation confidence.
   const hasAnyEvidence = progress.dataQuality.hasEnoughBehaviouralData || progress.dataQuality.hasEnoughPerformanceData || progress.dataQuality.hasEnoughOutcomeData;
   if (!hasAnyEvidence) {
-    return result([{ type: 'INSUFFICIENT_EVIDENCE', reason: 'ACP needs a little more training data before making changes.' }]);
+    return result([{ type: 'INSUFFICIENT_EVIDENCE', reason: 'Lana needs a little more training data before making changes.' }]);
   }
 
   // 3. An explicit availability change is a direct request, not an inference
   //    — it always gets a reschedule regardless of any other signal.
   if (checkIn.scheduleChanged) {
-    return result([{ type: 'RESCHEDULE', reason: "Your availability changed, so ACP adjusted which days future workouts fall on." }]);
+    return result([{ type: 'RESCHEDULE', reason: "Your availability changed, so Lana adjusted which days future workouts fall on." }]);
   }
 
   // 4. Adherence problems before progression — never make training harder
@@ -81,7 +81,7 @@ export function evaluateAdaptation(context: AdaptationContext): AdaptationResult
     if (alreadyAdaptedThisWeek) return result([{ type: 'KEEP', reason: HOLD_REASON }]);
     return result([{
       type: 'CHANGE_VOLUME',
-      reason: `You completed only ${progress.behavioural.recentCompleted} of your last ${progress.behavioural.recentPlanned} planned workouts. Rather than making training harder, ACP reduced next week's session length to make the plan easier to sustain.`,
+      reason: `You completed only ${progress.behavioural.recentCompleted} of your last ${progress.behavioural.recentPlanned} planned workouts. Rather than making training harder, Lana reduced next week's session length to make the plan easier to sustain.`,
     }]);
   }
 
@@ -101,7 +101,7 @@ export function evaluateAdaptation(context: AdaptationContext): AdaptationResult
   //    a real, evidenced substitution trigger (never random variety).
   if (declining && !improving) {
     if (alreadyAdaptedThisWeek) return result([{ type: 'KEEP', reason: HOLD_REASON }]);
-    return result([{ type: 'SUBSTITUTE', reason: `Your ${declining.exerciseName} performance has been trending down, so ACP will swap in a comparable alternative next week.` }]);
+    return result([{ type: 'SUBSTITUTE', reason: `Your ${declining.exerciseName} performance has been trending down, so Lana will swap in a comparable alternative next week.` }]);
   }
 
   const strongAdherence = rate != null && rate >= ADHERENCE_STRONG;

@@ -23,7 +23,7 @@ export function ObservedPanel({ patterns }: { patterns: NutritionPatternEvidence
   if (patterns.tier === 'daily_observation' || patterns.observations.length === 0) return null;
   return (
     <View style={s.panel}>
-      <ThemedText style={s.eyebrow}>What ACP has observed</ThemedText>
+      <ThemedText style={s.eyebrow}>What Lana has noticed</ThemedText>
       <ThemedText style={s.basis}>
         {TIER_LABEL[patterns.tier]} · based on {patterns.loggedDayCount} logged {patterns.loggedDayCount === 1 ? 'day' : 'days'}
       </ThemedText>

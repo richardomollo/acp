@@ -213,7 +213,7 @@ export function routineFitObservation(weeks: readonly OutcomeWeekEvidence[]): Ou
     confidence,
     title: 'Your training routine',
     body: 'Your most consistent recent weeks have largely matched your preferred training days.',
-    why: `Across ${withPrefs.length} observed ${plural(withPrefs.length, 'week')}, ${consistent.length} had at least ${OUTCOME_GATES.consistentWeekSessions} completed sessions. In ${aligned.length} of those ${consistent.length}, most completed sessions fell on the weekdays you said you prefer to train. This is an observed alignment, not a rule ACP has applied.`,
+    why: `Across ${withPrefs.length} observed ${plural(withPrefs.length, 'week')}, ${consistent.length} had at least ${OUTCOME_GATES.consistentWeekSessions} completed sessions. In ${aligned.length} of those ${consistent.length}, most completed sessions fell on the weekdays you said you prefer to train. This is an observed alignment, not a rule Lana has applied.`,
   };
 }
 

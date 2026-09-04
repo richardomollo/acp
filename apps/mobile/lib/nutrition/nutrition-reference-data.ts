@@ -127,7 +127,7 @@ export const POPULATION_REFERENCES: readonly NutritionReferenceDefinition[] = [
   {
     nutrient: 'ironMg', kind: 'population_reference', referenceType: 'exact', value: 16, unit: 'mg',
     population: { minAgeYears: 18, sex: 'female' }, source: efsaPRI(),
-    unsupportedReason: 'EFSA’s iron reference for women depends on menopausal status (16 mg/d pre-menopausal vs 11 mg/d post-menopausal), which ACP does not currently capture.',
+    unsupportedReason: 'EFSA’s iron reference for women depends on menopausal status (16 mg/d pre-menopausal vs 11 mg/d post-menopausal), which Lana does not currently capture.',
   },
   // Magnesium — PRI, males ≥18y = 350 mg/d; females ≥18y = 300 mg/d.
   {

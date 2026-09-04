@@ -402,7 +402,7 @@ export default function WorkoutHubScreen() {
 
           {/* ── Your Programme (ACP Intelligence™) ── */}
           <View style={s.bodyPartHeader}>
-            <ThemedText style={s.bodyPartEyebrow}>ACP INTELLIGENCE™</ThemedText>
+            <ThemedText style={s.bodyPartEyebrow}>LANA</ThemedText>
             <ThemedText style={s.bodyPartTitle}>Your Programme</ThemedText>
           </View>
           <TouchableOpacity
@@ -573,7 +573,7 @@ export default function WorkoutHubScreen() {
                   <Ionicons name="sparkles-outline" size={22} color={palette.blue500} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <ThemedText style={s.createCtaTitle}>ACP builds your workouts for you</ThemedText>
+                  <ThemedText style={s.createCtaTitle}>Lana builds your workouts for you</ThemedText>
                   <ThemedText style={s.createCtaSub}>See My Plan for your personalized strength recommendation</ThemedText>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color={palette.gray300} />

@@ -82,7 +82,7 @@ function ageEligibility(age: ContextField<number>): { ok: true } | { ok: false; 
     return { ok: false, availability: { status: 'insufficient_context', reason: 'Your age is not on file, and adult nutrition references cannot be applied without it.' } };
   }
   if (age.value < ADULT_MIN_AGE) {
-    return { ok: false, availability: { status: 'not_applicable', reason: 'These references are for adults (18+). ACP does not apply adult nutrition references to users under 18.' } };
+    return { ok: false, availability: { status: 'not_applicable', reason: 'These references are for adults (18+). Lana does not apply adult nutrition references to users under 18.' } };
   }
   return { ok: true };
 }

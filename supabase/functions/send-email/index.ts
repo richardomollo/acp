@@ -2,7 +2,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { Resend } from 'npm:resend'
 
 const resend = new Resend(Deno.env.get('RESEND_API_KEY'))
-const FROM = 'Active CityPass <noreply@activecitypass.com>'
+const FROM = 'Lana Health <noreply@activecitypass.com>'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -54,7 +54,7 @@ function guestBookingConfirmation(d: any) {
     </div>
     ${d.remainderAmount > 0 ? `<p style="${p}">Remember to bring <strong>KES ${Number(d.remainderAmount).toLocaleString()}</strong> to pay the balance at the venue.</p>` : ''}
     ${signupCta(d.email)}
-    <div style="${foot}">Active CityPass | Nairobi, Kenya<br>
+    <div style="${foot}">Lana Health | Nairobi, Kenya<br>
       <a href="mailto:info@activecitypass.com" style="color:#aaa;">info@activecitypass.com</a></div>
   `)
 }
@@ -75,7 +75,7 @@ function guestExperienceConfirmation(d: any) {
     </div>
     ${d.remainderAmount > 0 ? `<p style="${p}">Remember to bring <strong>KES ${Number(d.remainderAmount).toLocaleString()}</strong> to pay the balance at the venue.</p>` : ''}
     ${signupCta(d.email)}
-    <div style="${foot}">Active CityPass | Nairobi, Kenya<br>
+    <div style="${foot}">Lana Health | Nairobi, Kenya<br>
       <a href="mailto:info@activecitypass.com" style="color:#aaa;">info@activecitypass.com</a></div>
   `)
 }
@@ -96,7 +96,7 @@ function guestPtConfirmation(d: any) {
       <p style="margin:0;font-size:14px;color:#666;">${locationLine}</p>
     </div>
     ${signupCta(d.email)}
-    <div style="${foot}">Active CityPass | Nairobi, Kenya<br>
+    <div style="${foot}">Lana Health | Nairobi, Kenya<br>
       <a href="mailto:info@activecitypass.com" style="color:#aaa;">info@activecitypass.com</a></div>
   `)
 }
@@ -115,7 +115,7 @@ function bookingConfirmation(d: any) {
     </div>
     <a href="https://activecitypass.com/bookings" style="${btn}">View My Bookings</a>
     <p style="${p}">Need to cancel? Do so anytime from your bookings page — your deposit is refunded immediately.</p>
-    <div style="${foot}">Active CityPass | Nairobi, Kenya<br>
+    <div style="${foot}">Lana Health | Nairobi, Kenya<br>
       <a href="mailto:info@activecitypass.com" style="color:#aaa;">info@activecitypass.com</a></div>
   `)
 }
@@ -131,33 +131,33 @@ function newBooking(d: any) {
       <p style="margin:0 0 5px;font-size:14px;color:#555;">⏰ <strong>Time:</strong> ${d.sessionTime}</p>
     </div>
     <a href="https://activecitypass.com/partner-dashboard" style="${btn}">View Dashboard</a>
-    <div style="${foot}">Active CityPass | Nairobi, Kenya</div>
+    <div style="${foot}">Lana Health | Nairobi, Kenya</div>
   `)
 }
 
 function welcome(d: any) {
   return wrap(`
-    <h1 style="${h1}">Welcome to FitPass Partner Platform! 🎉</h1>
+    <h1 style="${h1}">Welcome to Lana Health Partners! 🎉</h1>
     <p style="${p}">Hi ${d.businessName},</p>
     <p style="${p}">We're thrilled to have you join Kenya's fastest-growing fitness community.</p>
     <a href="https://activecitypass.com/partner-dashboard" style="${btn}">Go to Dashboard</a>
-    <div style="${foot}">Active CityPass | Nairobi, Kenya</div>
+    <div style="${foot}">Lana Health | Nairobi, Kenya</div>
   `)
 }
 
 function customerWelcome(d: any) {
   return wrap(`
-    <h1 style="${h1}">Welcome to Active CityPass! 🎉</h1>
+    <h1 style="${h1}">Welcome to Lana Health! 🎉</h1>
     <p style="${p}">Hi ${d.name},</p>
-    <p style="${p}">Your account is ready. Active CityPass is Nairobi's flexible sports & wellness membership — one pass, 50+ venues, and a growing set of communities and clubs to move with.</p>
+    <p style="${p}">Your account is ready. Lana Health is Nairobi's flexible sports & wellness membership — one pass, 50+ venues, and a growing set of communities and clubs to move with.</p>
     <div style="${card}">
       <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#333;">Here's where to start</p>
       <p style="margin:0 0 5px;font-size:14px;color:#555;">🏋️ Browse gyms, studios and classes</p>
       <p style="margin:0 0 5px;font-size:14px;color:#555;">🤝 Join a running crew, cycling club or yoga circle</p>
       <p style="margin:0;font-size:14px;color:#555;">📅 Book your first session in a couple of taps</p>
     </div>
-    <a href="https://activecitypass.com/sessions" style="${btn}">Explore Active CityPass →</a>
-    <div style="${foot}">Active CityPass | Nairobi, Kenya<br>
+    <a href="https://activecitypass.com/sessions" style="${btn}">Explore Lana Health →</a>
+    <div style="${foot}">Lana Health | Nairobi, Kenya<br>
       <a href="mailto:info@activecitypass.com" style="color:#aaa;">info@activecitypass.com</a></div>
   `)
 }
@@ -166,7 +166,7 @@ function communityWelcome(d: any) {
   return wrap(`
     <h1 style="${h1}">Welcome to ${d.communityName}! 🎉</h1>
     <p style="${p}">Hi ${d.name},</p>
-    <p style="${p}">You're in! You've joined <strong>${d.communityName}</strong> on Active CityPass — get ready to meet your people and show up together.</p>
+    <p style="${p}">You're in! You've joined <strong>${d.communityName}</strong> on Lana Health — get ready to meet your people and show up together.</p>
     <div style="${card}">
       <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#333;">What you can do now</p>
       <p style="margin:0 0 5px;font-size:14px;color:#555;">📅 RSVP to upcoming community events</p>
@@ -174,7 +174,7 @@ function communityWelcome(d: any) {
       <p style="margin:0;font-size:14px;color:#555;">👋 See who else is in the club</p>
     </div>
     <a href="${d.communityUrl}" style="${btn}">Go to ${d.communityName} →</a>
-    <div style="${foot}">Active CityPass | Nairobi, Kenya<br>
+    <div style="${foot}">Lana Health | Nairobi, Kenya<br>
       <a href="mailto:info@activecitypass.com" style="color:#aaa;">info@activecitypass.com</a></div>
   `)
 }
@@ -210,7 +210,7 @@ function communityEngagementReminder(d: any) {
     ${eventsBlock}
     ${challengesBlock}
     <a href="https://activecitypass.com/community" style="${btn}">Open Communities →</a>
-    <div style="${foot}">Active CityPass | Nairobi, Kenya<br>
+    <div style="${foot}">Lana Health | Nairobi, Kenya<br>
       <a href="mailto:info@activecitypass.com" style="color:#aaa;">info@activecitypass.com</a></div>
   `)
 }
@@ -220,7 +220,7 @@ function payoutProcessing(d: any) {
     <h1 style="${h1}">Payout Processing 💰</h1>
     <p style="${p}">Hi ${d.businessName},</p>
     <p style="${p}">Your payout of <strong>KES ${d.amount}</strong> is being processed and will arrive within 1–3 business days.</p>
-    <div style="${foot}">Active CityPass | Nairobi, Kenya</div>
+    <div style="${foot}">Lana Health | Nairobi, Kenya</div>
   `)
 }
 
@@ -229,7 +229,7 @@ function payoutReceived(d: any) {
     <h1 style="${h1}">Payout Received! ✅</h1>
     <p style="${p}">Hi ${d.businessName},</p>
     <p style="${p}">Your payout of <strong>KES ${d.amount}</strong> has been sent to your bank account.</p>
-    <div style="${foot}">Active CityPass | Nairobi, Kenya</div>
+    <div style="${foot}">Lana Health | Nairobi, Kenya</div>
   `)
 }
 
@@ -237,9 +237,9 @@ function firstPayout(d: any) {
   return wrap(`
     <h1 style="${h1}">Your First Payout! 🎉</h1>
     <p style="${p}">Hi ${d.businessName},</p>
-    <p style="${p}">Congratulations — you've just received your first payout of <strong>KES ${d.amount}</strong> from Active CityPass!</p>
+    <p style="${p}">Congratulations — you've just received your first payout of <strong>KES ${d.amount}</strong> from Lana Health!</p>
     <a href="https://activecitypass.com/partner-dashboard" style="${btn}">View Dashboard</a>
-    <div style="${foot}">Active CityPass | Nairobi, Kenya</div>
+    <div style="${foot}">Lana Health | Nairobi, Kenya</div>
   `)
 }
 
@@ -254,14 +254,14 @@ function partnerSetupIncomplete(d: any) {
   return wrap(`
     <h1 style="${h1}">Your listing isn't finished yet</h1>
     <p style="${p}">Hi ${d.businessName},</p>
-    <p style="${p}">Your Active CityPass listing has been live for a while, but it's still missing a couple of things that keep customers from booking with you.</p>
+    <p style="${p}">Your Lana Health listing has been live for a while, but it's still missing a couple of things that keep customers from booking with you.</p>
     <div style="${card}">
       <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#333;">What's left</p>
       ${steps.join('')}
     </div>
     <a href="${d.dashboardUrl}" style="${btn}">Finish Your Listing →</a>
     <p style="${p}">Questions? Just reply to this email or reach us at <a href="mailto:info@activecitypass.com" style="color:#000;font-weight:600;">info@activecitypass.com</a>.</p>
-    <div style="${foot}">Active CityPass | Nairobi, Kenya<br>
+    <div style="${foot}">Lana Health | Nairobi, Kenya<br>
       <a href="mailto:info@activecitypass.com" style="color:#aaa;">info@activecitypass.com</a></div>
   `)
 }
@@ -270,7 +270,7 @@ function partnerApplicationReceived(d: any) {
   return wrap(`
     <h1 style="${h1}">We've received your application!</h1>
     <p style="${p}">Hi ${d.name},</p>
-    <p style="${p}">Thanks for applying to join Active CityPass as a <strong>${d.partnerType}</strong>. We're excited to have you on board!</p>
+    <p style="${p}">Thanks for applying to join Lana Health as a <strong>${d.partnerType}</strong>. We're excited to have you on board!</p>
     <div style="${card}">
       <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#333;">What happens next</p>
       <p style="margin:0 0 5px;font-size:14px;color:#555;">✅ Our team will review your application within <strong>24–48 hours</strong></p>
@@ -278,7 +278,7 @@ function partnerApplicationReceived(d: any) {
       <p style="margin:0;font-size:14px;color:#555;">✅ Once approved, you'll get instant access to your partner dashboard</p>
     </div>
     <p style="${p}">In the meantime, if you have any questions feel free to reach out to us at <a href="mailto:info@activecitypass.com" style="color:#000;font-weight:600;">info@activecitypass.com</a>.</p>
-    <div style="${foot}">Active CityPass | Nairobi, Kenya<br>
+    <div style="${foot}">Lana Health | Nairobi, Kenya<br>
       <a href="mailto:info@activecitypass.com" style="color:#aaa;">info@activecitypass.com</a></div>
   `)
 }
@@ -286,7 +286,7 @@ function partnerApplicationReceived(d: any) {
 function partnerApplicationAlert(d: any) {
   return wrap(`
     <h1 style="${h1}">New Partner Application</h1>
-    <p style="${p}">A new partner has submitted an application on Active CityPass.</p>
+    <p style="${p}">A new partner has submitted an application on Lana Health.</p>
     <div style="${card}">
       <p style="margin:0 0 8px;font-size:14px;font-weight:700;color:#333;">Applicant details</p>
       <p style="margin:0 0 5px;font-size:14px;color:#555;">👤 <strong>Name:</strong> ${d.applicantName}</p>
@@ -296,7 +296,7 @@ function partnerApplicationAlert(d: any) {
       <p style="margin:0;font-size:14px;color:#555;">🏷️ <strong>Type:</strong> ${d.partnerType}</p>
     </div>
     <a href="https://supabase.com/dashboard/project/kdmhmkwzanqnwehcddvr/editor" style="${btn}">Review in Supabase →</a>
-    <div style="${foot}">Active CityPass | Nairobi, Kenya</div>
+    <div style="${foot}">Lana Health | Nairobi, Kenya</div>
   `)
 }
 
@@ -304,7 +304,7 @@ function communityApplicationReceived(d: any) {
   return wrap(`
     <h1 style="${h1}">We've received your community application!</h1>
     <p style="${p}">Hi ${d.name},</p>
-    <p style="${p}">Thanks for submitting <strong>${d.communityName}</strong> to Active CityPass. We're excited to have you on board!</p>
+    <p style="${p}">Thanks for submitting <strong>${d.communityName}</strong> to Lana Health. We're excited to have you on board!</p>
     <div style="${card}">
       <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#333;">What happens next</p>
       <p style="margin:0 0 5px;font-size:14px;color:#555;">✅ Our team will review your community within <strong>24–48 hours</strong></p>
@@ -312,7 +312,7 @@ function communityApplicationReceived(d: any) {
       <p style="margin:0;font-size:14px;color:#555;">✅ Once approved, you can create events and invite members</p>
     </div>
     <p style="${p}">In the meantime, if you have any questions feel free to reach out to us at <a href="mailto:info@activecitypass.com" style="color:#000;font-weight:600;">info@activecitypass.com</a>.</p>
-    <div style="${foot}">Active CityPass | Nairobi, Kenya<br>
+    <div style="${foot}">Lana Health | Nairobi, Kenya<br>
       <a href="mailto:info@activecitypass.com" style="color:#aaa;">info@activecitypass.com</a></div>
   `)
 }
@@ -320,7 +320,7 @@ function communityApplicationReceived(d: any) {
 function communityApplicationAlert(d: any) {
   return wrap(`
     <h1 style="${h1}">New Community Application</h1>
-    <p style="${p}">A new community has been submitted for review on Active CityPass.</p>
+    <p style="${p}">A new community has been submitted for review on Lana Health.</p>
     <div style="${card}">
       <p style="margin:0 0 8px;font-size:14px;font-weight:700;color:#333;">Community details</p>
       <p style="margin:0 0 5px;font-size:14px;color:#555;">🏷️ <strong>Name:</strong> ${d.communityName}</p>
@@ -331,7 +331,7 @@ function communityApplicationAlert(d: any) {
       <p style="margin:0;font-size:14px;color:#555;">📞 <strong>Phone:</strong> ${d.ownerPhone || 'Not provided'}</p>
     </div>
     <a href="https://supabase.com/dashboard/project/kdmhmkwzanqnwehcddvr/editor" style="${btn}">Review in Supabase →</a>
-    <div style="${foot}">Active CityPass | Nairobi, Kenya</div>
+    <div style="${foot}">Lana Health | Nairobi, Kenya</div>
   `)
 }
 
@@ -342,16 +342,16 @@ function partnerApproved(d: any) {
     : `<p style="margin:0;font-size:14px;color:#555;">✅ Nothing left to do — your profile is fully set up!</p>`
 
   return wrap(`
-    <h1 style="${h1}">You're approved! Welcome to Active CityPass 🎉</h1>
+    <h1 style="${h1}">You're approved! Welcome to Lana Health 🎉</h1>
     <p style="${p}">Hi ${d.name},</p>
-    <p style="${p}">Great news — your application as a <strong>${d.partnerType}</strong> has been approved. Your profile is now live on Active CityPass!</p>
+    <p style="${p}">Great news — your application as a <strong>${d.partnerType}</strong> has been approved. Your profile is now live on Lana Health!</p>
     <div style="${card}">
       <p style="margin:0 0 8px;font-size:14px;font-weight:700;color:#333;">A few more things to finish your profile</p>
       ${taskListHtml}
     </div>
     <a href="${d.onboardingUrl}" style="${btn}">Complete Your Profile →</a>
     <p style="${p}">Need help getting set up? Email us at <a href="mailto:info@activecitypass.com" style="color:#000;font-weight:600;">info@activecitypass.com</a> and we'll guide you through.</p>
-    <div style="${foot}">Active CityPass | Nairobi, Kenya<br>
+    <div style="${foot}">Lana Health | Nairobi, Kenya<br>
       <a href="mailto:info@activecitypass.com" style="color:#aaa;">info@activecitypass.com</a></div>
   `)
 }
@@ -360,10 +360,10 @@ function trainerInvite(d: any) {
   return wrap(`
     <h1 style="${h1}">You've been added as a trainer 💪</h1>
     <p style="${p}">Hi ${d.trainerName},</p>
-    <p style="${p}"><strong>${d.gymName}</strong> has added you as a trainer on Active CityPass. Set a password to finish setting up your account and start managing your assigned classes and students.</p>
+    <p style="${p}"><strong>${d.gymName}</strong> has added you as a trainer on Lana Health. Set a password to finish setting up your account and start managing your assigned classes and students.</p>
     <a href="${d.signupUrl}" style="${btn}">Set Up Your Account →</a>
     <p style="${p}">Questions? Email us at <a href="mailto:info@activecitypass.com" style="color:#000;font-weight:600;">info@activecitypass.com</a>.</p>
-    <div style="${foot}">Active CityPass | Nairobi, Kenya<br>
+    <div style="${foot}">Lana Health | Nairobi, Kenya<br>
       <a href="mailto:info@activecitypass.com" style="color:#aaa;">info@activecitypass.com</a></div>
   `)
 }
@@ -372,11 +372,11 @@ function partnerRejected(d: any) {
   return wrap(`
     <h1 style="${h1}">Update on your application</h1>
     <p style="${p}">Hi ${d.name},</p>
-    <p style="${p}">Thank you for your interest in joining Active CityPass. After reviewing your application, we're unfortunately unable to approve it at this time.</p>
+    <p style="${p}">Thank you for your interest in joining Lana Health. After reviewing your application, we're unfortunately unable to approve it at this time.</p>
     ${d.rejectionReason ? `<div style="${card}"><p style="margin:0 0 4px;font-size:13px;font-weight:700;color:#333;">Reason</p><p style="margin:0;font-size:14px;color:#555;">${d.rejectionReason}</p></div>` : ''}
     <p style="${p}">This doesn't mean the door is permanently closed — we encourage you to reach out to us at <a href="mailto:info@activecitypass.com" style="color:#000;font-weight:600;">info@activecitypass.com</a> if you have questions or would like to discuss your application further.</p>
     <p style="${p}">We appreciate your time and hope to work with you in the future.</p>
-    <div style="${foot}">Active CityPass | Nairobi, Kenya<br>
+    <div style="${foot}">Lana Health | Nairobi, Kenya<br>
       <a href="mailto:info@activecitypass.com" style="color:#aaa;">info@activecitypass.com</a></div>
   `)
 }
@@ -397,7 +397,7 @@ function bookingCancellation(d: any) {
       <p style="margin:0;font-size:14px;color:#a03020;">This booking was cancelled within the 24-hour cancellation window, so no refund is available.</p>
     </div>`}
     <a href="https://activecitypass.com/sessions" style="${btn}">Book Another Class</a>
-    <div style="${foot}">Active CityPass | Nairobi, Kenya<br>
+    <div style="${foot}">Lana Health | Nairobi, Kenya<br>
       <a href="mailto:info@activecitypass.com" style="color:#aaa;">info@activecitypass.com</a></div>
   `)
 }
@@ -409,7 +409,7 @@ function partnerBookingCancelledByCustomer(d: any) {
     <p style="${p}"><strong>${d.customerName}</strong> has cancelled their booking for <strong>${d.sessionName}</strong> on ${d.sessionDate} at ${d.sessionTime}.</p>
     <p style="${p}">The spot has been freed up and is available to other members.</p>
     <a href="https://activecitypass.com/partner-dashboard" style="${btn}">View Dashboard</a>
-    <div style="${foot}">Active CityPass | Nairobi, Kenya</div>
+    <div style="${foot}">Lana Health | Nairobi, Kenya</div>
   `)
 }
 
@@ -425,7 +425,7 @@ function partnerCancellation(d: any) {
     </div>` : ''}
     <p style="${p}">We apologise for the inconvenience. Browse other available classes below.</p>
     <a href="https://activecitypass.com/sessions" style="${btn}">Find Another Class</a>
-    <div style="${foot}">Active CityPass | Nairobi, Kenya<br>
+    <div style="${foot}">Lana Health | Nairobi, Kenya<br>
       <a href="mailto:info@activecitypass.com" style="color:#aaa;">info@activecitypass.com</a></div>
   `)
 }
@@ -438,7 +438,7 @@ function withdrawalRequest(d: any) {
     : `🏦 <strong>Bank:</strong> ${d.bankName} &nbsp;·&nbsp; Account: ${d.accountNumber}`
   return wrap(`
     <h1 style="${h1}">New Withdrawal Request 💰</h1>
-    <p style="${p}">A partner has submitted a withdrawal request on Active CityPass.</p>
+    <p style="${p}">A partner has submitted a withdrawal request on Lana Health.</p>
     <div style="${card}">
       <p style="margin:0 0 8px;font-size:14px;font-weight:700;color:#333;">Request details</p>
       <p style="margin:0 0 5px;font-size:14px;color:#555;">🏢 <strong>Partner:</strong> ${d.partnerEmail}</p>
@@ -448,7 +448,7 @@ function withdrawalRequest(d: any) {
       <p style="margin:0;font-size:14px;color:#555;">🕐 <strong>Requested:</strong> ${d.requestedAt}</p>
     </div>
     <a href="https://supabase.com/dashboard/project/kdmhmkwzanqnwehcddvr/editor" style="${btn}">Process in Supabase →</a>
-    <div style="${foot}">Active CityPass | Nairobi, Kenya</div>
+    <div style="${foot}">Lana Health | Nairobi, Kenya</div>
   `)
 }
 
@@ -464,7 +464,7 @@ function bookingRescheduled(d: any) {
     </div>
     <p style="font-size:13px;color:#aaa;margin:8px 0;">Previously: ${d.oldSessionDate} at ${d.oldSessionTime}</p>
     <a href="https://activecitypass.com/bookings" style="${btn}">View My Bookings</a>
-    <div style="${foot}">Active CityPass | Nairobi, Kenya<br>
+    <div style="${foot}">Lana Health | Nairobi, Kenya<br>
       <a href="mailto:info@activecitypass.com" style="color:#aaa;">info@activecitypass.com</a></div>
   `)
 }
@@ -493,7 +493,7 @@ function bookingReminder(d: any) {
       <p style="margin:0;font-size:13px;color:#666;">Check-in code</p>
       <p style="margin:4px 0 0;font-family:monospace;font-size:26px;font-weight:700;letter-spacing:4px;color:#000;">${d.confirmationCode}</p>
     </div>` : `<a href="https://activecitypass.com/bookings" style="${btn}">View My Bookings</a>`}
-    <div style="${foot}">Active CityPass | Nairobi, Kenya<br>
+    <div style="${foot}">Lana Health | Nairobi, Kenya<br>
       <a href="mailto:info@activecitypass.com" style="color:#aaa;">info@activecitypass.com</a></div>
   `)
 }
@@ -502,9 +502,9 @@ function feedbackRequest(d: any) {
   return wrap(`
     <h1 style="${h1}">How was ${d.activityName}? 🙌</h1>
     <p style="${p}">Hi ${d.name || 'there'},</p>
-    <p style="${p}">Thanks for joining ${d.activityName}. Got a minute to tell us how it went? It only takes 30 seconds and helps us make Active CityPass better.</p>
+    <p style="${p}">Thanks for joining ${d.activityName}. Got a minute to tell us how it went? It only takes 30 seconds and helps us make Lana Health better.</p>
     <a href="${d.link}" style="${btn}">Leave Feedback</a>
-    <div style="${foot}">Active CityPass | Nairobi, Kenya<br>
+    <div style="${foot}">Lana Health | Nairobi, Kenya<br>
       <a href="mailto:info@activecitypass.com" style="color:#aaa;">info@activecitypass.com</a></div>
   `)
 }
@@ -519,7 +519,7 @@ function programmeInstalmentReminder(d: any) {
       <p style="margin:0;font-size:14px;color:#666;">Due ${d.dueDate}</p>
     </div>
     <p style="${p}">Pay via the app or at the venue before the due date to keep your programme active.</p>
-    <div style="${foot}">Active CityPass | Nairobi, Kenya<br>
+    <div style="${foot}">Lana Health | Nairobi, Kenya<br>
       <a href="mailto:info@activecitypass.com" style="color:#aaa;">info@activecitypass.com</a></div>
   `)
 }
@@ -558,11 +558,11 @@ serve(async (req) => {
         break
       case 'welcome':
         html = welcome(data)
-        subject = 'Welcome to FitPass Partner Platform!'
+        subject = 'Welcome to Lana Health Partners!'
         break
       case 'customer_welcome':
         html = customerWelcome(data)
-        subject = 'Welcome to Active CityPass! 🎉'
+        subject = 'Welcome to Lana Health! 🎉'
         break
       case 'community_welcome':
         html = communityWelcome(data)
@@ -586,11 +586,11 @@ serve(async (req) => {
         break
       case 'partner_setup_incomplete':
         html = partnerSetupIncomplete(data)
-        subject = `${data.businessName}, your Active CityPass listing isn't finished yet`
+        subject = `${data.businessName}, your Lana Health listing isn't finished yet`
         break
       case 'partner_application_received':
         html = partnerApplicationReceived(data)
-        subject = 'We\'ve received your Active CityPass partner application'
+        subject = 'We\'ve received your Lana Health partner application'
         break
       case 'partner_application_alert':
         html = partnerApplicationAlert(data)
@@ -606,11 +606,11 @@ serve(async (req) => {
         break
       case 'partner_approved':
         html = partnerApproved(data)
-        subject = 'You\'re approved! Welcome to Active CityPass 🎉'
+        subject = 'You\'re approved! Welcome to Lana Health 🎉'
         break
       case 'partner_rejected':
         html = partnerRejected(data)
-        subject = 'Update on your Active CityPass partner application'
+        subject = 'Update on your Lana Health partner application'
         break
       case 'trainer_invite':
         html = trainerInvite(data)

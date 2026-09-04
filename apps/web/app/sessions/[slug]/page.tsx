@@ -42,7 +42,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title,
     description,
     openGraph: {
-      title: `${title} | Active CityPass`,
+      title: `${title} | Lana Health`,
       description,
       url: `https://activecitypass.com/sessions/${canonicalSlug}`,
       ...(image ? { images: [{ url: image, width: 1200, height: 630, alt: title }] } : {}),

@@ -218,9 +218,9 @@ export function summarizeWorkoutSession(ev: WorkoutSessionEvidence): WorkoutSess
   if (!fullyCompleted) {
     coachingLine = `You logged ${ev.completedExerciseCount} of ${ev.plannedExerciseCount} exercises. A partial session still counts — pick the rest up next time.`;
   } else if (ev.perceivedDifficulty === 'difficult') {
-    coachingLine = `You finished the full session and it felt hard. If that keeps happening, ACP will ease the next one — one session on its own doesn’t change your plan.`;
+    coachingLine = `You finished the full session and it felt hard. If that keeps happening, Lana will ease the next one — one session on its own doesn’t change your plan.`;
   } else if (ev.perceivedDifficulty === 'easy') {
-    coachingLine = `You finished the full session and it felt easy. If a few more feel the same, ACP may add a little challenge next time.`;
+    coachingLine = `You finished the full session and it felt easy. If a few more feel the same, Lana may add a little challenge next time.`;
   } else if (ev.perceivedDifficulty === 'about_right') {
     coachingLine = `You finished the full session and it felt about right — nicely matched. Keep going.`;
   } else {

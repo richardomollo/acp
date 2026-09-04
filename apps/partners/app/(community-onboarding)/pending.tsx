@@ -86,7 +86,7 @@ export default function CommunityOnboardingPending() {
 
       <View style={styles.content}>
         <View style={styles.logoContainer}>
-          <ThemedText style={styles.logo}>A.CityPass</ThemedText>
+          <ThemedText style={styles.logo}>Lana Health</ThemedText>
           <View style={styles.badge}><ThemedText style={styles.badgeText}>Communities</ThemedText></View>
         </View>
 

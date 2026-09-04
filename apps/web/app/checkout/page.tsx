@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import CheckoutClient from "./CheckoutClient";
 
-export const metadata: Metadata = { title: "Checkout | Active CityPass" };
+export const metadata: Metadata = { title: "Checkout | Lana Health" };
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,

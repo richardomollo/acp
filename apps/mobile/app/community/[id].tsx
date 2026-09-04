@@ -129,7 +129,7 @@ export default function CommunityDetailScreen() {
   const handleShare = async () => {
     if (!community) return;
     const url = `https://activecitypass.com/community/${community.slug ?? community.id}`;
-    const message = `Join "${community.name}" on Active CityPass\n\n${url}`;
+    const message = `Join "${community.name}" on Lana Health\n\n${url}`;
     try {
       await Share.share({ message, url: Platform.OS === 'ios' ? url : undefined, title: community.name });
     } catch { /* cancelled */ }

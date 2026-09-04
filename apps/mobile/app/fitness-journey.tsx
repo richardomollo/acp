@@ -16,7 +16,7 @@ import { interpretProgress } from '@/lib/progress-interpreter';
 import type { ProgressSnapshot, ProgressInterpretation } from '@/lib/progress-types';
 import { getHumanSupportInsight, dismissHumanSupportInsight, type HumanSupportInsight } from '@/services/human-support-service';
 import { nutritionOutcomeIntelligenceService } from '@/services/nutrition-outcome-intelligence-service';
-import { NutritionWhatAcpIsLearning } from '@/components/nutrition/nutrition-what-acp-is-learning';
+import { NutritionWhatLanaIsLearning } from '@/components/nutrition/nutrition-what-lana-is-learning';
 import type { OutcomeObservation } from '@/lib/nutrition/nutrition-outcome-intelligence';
 import { localISODate } from '@/lib/fulfilment';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -462,7 +462,7 @@ export default function FitnessJourneyScreen() {
             {/* charts/stats stay below as supporting detail. ── */}
             {progressInsight && progressSnapshot && (
               <View style={s.progressCard}>
-                <ThemedText style={s.progressEyebrow}>ACP INTELLIGENCE™</ThemedText>
+                <ThemedText style={s.progressEyebrow}>LANA</ThemedText>
                 <ThemedText style={s.progressHeadline}>{progressInsight.headline}</ThemedText>
                 {progressInsight.supporting.map((line, i) => (
                   <ThemedText key={i} style={s.progressSupporting}>{line}</ThemedText>
@@ -572,8 +572,8 @@ export default function FitnessJourneyScreen() {
               <StatCard value={`${nutrition.avgHydration}L`} label="Avg Hydration" icon="water-outline" color={palette.success700} />
             </View>
 
-            {/* ── What ACP is learning (Nutrition N9) — longitudinal, observational ── */}
-            <NutritionWhatAcpIsLearning observations={outcomeObservations} />
+            {/* ── What Lana is learning (Nutrition N9) — longitudinal, observational ── */}
+            <NutritionWhatLanaIsLearning observations={outcomeObservations} />
 
             {(startingWeight || goalWeight || measurements[0]?.weight_kg) && (
               <View style={s.weightProgressCard}>

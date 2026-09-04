@@ -54,7 +54,7 @@ const GOAL_LABEL: Record<string, string> = {
 function messageForResult(result: GenerateProgrammeResult): string | null {
   switch (result.status) {
     case 'trainer_programme_active':
-      return 'You have an active programme from your trainer — ACP won’t replace it.';
+      return 'You have an active programme from your trainer — Lana won’t replace it.';
     case 'unsupported_goal':
       return "We don't yet generate a structured programme for this goal. You can still build your own workouts from Workout Hub.";
     case 'not_authorized':
@@ -135,7 +135,7 @@ export default function MyProgrammeScreen() {
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
             <ThemedText style={s.headerTitle}>Your Programme</ThemedText>
-            <ThemedText style={s.headerSub}>ACP Intelligence™</ThemedText>
+            <ThemedText style={s.headerSub}>Lana</ThemedText>
           </View>
         </SafeAreaView>
 
@@ -154,7 +154,7 @@ export default function MyProgrammeScreen() {
                 <Ionicons name="sparkles-outline" size={40} color={palette.blue500} />
                 <ThemedText style={s.emptyTitle}>Get your personalised programme</ThemedText>
                 <ThemedText style={s.emptySub}>
-                  ACP Intelligence™ will build a structured, multi-week programme from your goal and profile.
+                  Lana will build a structured, multi-week programme from your goal and profile.
                 </ThemedText>
                 <TouchableOpacity
                   style={[s.primaryBtn, generating && { opacity: 0.6 }]}
@@ -195,7 +195,7 @@ export default function MyProgrammeScreen() {
                     <Ionicons name="sparkles-outline" size={18} color={palette.blue500} />
                     <View style={{ flex: 1 }}>
                       <ThemedText style={s.checkinCtaTitle}>Weekly check-in ready</ThemedText>
-                      <ThemedText style={s.checkinCtaSub}>Tell ACP how last week felt so it can adjust next week</ThemedText>
+                      <ThemedText style={s.checkinCtaSub}>Tell Lana how last week felt so it can adjust next week</ThemedText>
                     </View>
                     <Ionicons name="chevron-forward" size={16} color={palette.gray300} />
                   </TouchableOpacity>

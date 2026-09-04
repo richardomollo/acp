@@ -307,9 +307,9 @@ export default function UserLoginPage() {
               ))}
             </div>
             <p className="text-white/50 text-sm italic leading-relaxed mb-2">
-              "Gym on Monday, yoga on Wednesday, spa on Friday — all through Active CityPass. I've never been this consistent."
+              "Gym on Monday, yoga on Wednesday, spa on Friday — all through Lana Health. I've never been this consistent."
             </p>
-            <p className="text-white/30 text-xs font-semibold">Amara N. — Active CityPass member</p>
+            <p className="text-white/30 text-xs font-semibold">Amara N. — Lana Health member</p>
           </div>
         </div>
 
@@ -345,7 +345,7 @@ export default function UserLoginPage() {
                 </div>
 
                 <h2 className="font-black text-black text-2xl mb-1">Create your account</h2>
-                <p className="text-gray-500 text-sm mb-8">Join thousands of Nairobians moving with ACP.</p>
+                <p className="text-gray-500 text-sm mb-8">Join thousands of Nairobians moving with Lana.</p>
 
                 {error && <div className="bg-red-50 text-red-600 p-3 rounded-xl text-sm mb-4">{error}</div>}
 

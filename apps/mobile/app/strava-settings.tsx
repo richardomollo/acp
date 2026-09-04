@@ -104,8 +104,8 @@ export default function StravaSettingsScreen() {
                 <ThemedText style={s.title}>Strava connected ✓</ThemedText>
                 <ThemedText style={s.desc}>
                   Supported activities you record on Strava — runs, walks and rides —
-                  are added to your Active City Pass activity history and can count
-                  towards your plan progress. ACP only reads activities; it never
+                  are added to your Lana Health activity history and can count
+                  towards your plan progress. Lana only reads activities; it never
                   starts or changes your Strava recordings.
                 </ThemedText>
                 {status.lastSyncedAt && (
@@ -146,9 +146,9 @@ export default function StravaSettingsScreen() {
               <>
                 <ThemedText style={s.title}>Connect Strava</ThemedText>
                 <ThemedText style={s.desc}>
-                  Connect Strava so ACP can recognise supported activities you record —
+                  Connect Strava so Lana can recognise supported activities you record —
                   runs, walks and rides — and use them to update your activity progress.
-                  ACP only reads your activities; it never starts or changes your Strava
+                  Lana only reads your activities; it never starts or changes your Strava
                   recordings.
                 </ThemedText>
 

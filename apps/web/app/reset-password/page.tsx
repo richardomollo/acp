@@ -88,7 +88,7 @@ export default function ResetPasswordPage() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <Link href="/">
-            <img src="/images/logo.png" alt="Active CityPass" className="h-12 w-auto mx-auto mb-6" />
+            <img src="/images/logo.png" alt="Lana Health" className="h-12 w-auto mx-auto mb-6" />
           </Link>
           <h1 className="text-2xl font-bold text-gray-900">Set a new password</h1>
           <p className="text-gray-500 text-sm mt-1">Choose a strong password for your account.</p>

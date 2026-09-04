@@ -604,7 +604,7 @@ export default function PartnerSignupPage() {
       title: isSecondBusiness
         ? (isPureExperience ? "Now, what's your experience called?" : "Now, what's your venue called?")
         : (isPureExperience ? "What's your experience called?" : "What's your venue called?"),
-      subtitle: "This is the name customers will see on Active CityPass.",
+      subtitle: "This is the name customers will see on Lana Health.",
       canContinue: formData.gymName.trim().length > 0,
       content: (
         <input
@@ -699,7 +699,7 @@ export default function PartnerSignupPage() {
         id: "ptBio",
         eyebrow: ptEyebrow,
         title: isSecondBusiness ? "Now, tell us about yourself as a trainer" : "Tell us about yourself as a trainer",
-        subtitle: "This is what customers will see when browsing trainers on Active CityPass — make it personal.",
+        subtitle: "This is what customers will see when browsing trainers on Lana Health — make it personal.",
         canContinue: formData.ptBio.trim().length > 0,
         content: (
           <textarea

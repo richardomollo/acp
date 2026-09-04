@@ -13,7 +13,7 @@ export default function CommunityShareBar({
 }) {
   const [copied, setCopied] = useState(false);
   const url = `${typeof window !== "undefined" ? window.location.origin : "https://activecitypass.com"}/community/${communityId}`;
-  const text = `Join "${name}" — a ${category} community on Active CityPass`;
+  const text = `Join "${name}" — a ${category} community on Lana Health`;
   const encodedUrl = encodeURIComponent(url);
   const encodedText = encodeURIComponent(text);
 

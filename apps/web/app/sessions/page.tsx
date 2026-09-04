@@ -5,11 +5,11 @@ import { supabase } from "../lib/supabase";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Discover | Active CityPass",
+  title: "Discover | Lana Health",
   description:
     "Browse gyms, book fitness classes, discover wellness experiences, and connect with personal trainers across Nairobi.",
   openGraph: {
-    title: "Discover | Active CityPass",
+    title: "Discover | Lana Health",
     description:
       "Browse gyms, book fitness classes, discover wellness experiences and find personal trainers across Nairobi.",
     url: "https://activecitypass.com/sessions",

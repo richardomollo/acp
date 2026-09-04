@@ -17,6 +17,7 @@ import { supabase } from '@/lib/supabase';
 import { GoogleSignInButton, isGoogleSignInSupported } from '@/components/google-signin-button';
 import { AppleSignInButton } from '@/components/apple-signin-button';
 import { getPostAuthDestination } from '@/lib/onboarding-auth';
+import { LinearGradient } from 'expo-linear-gradient';
 import { palette, radii, fontSize } from '@/constants/theme';
 
 export default function SignUpScreen() {
@@ -96,6 +97,13 @@ export default function SignUpScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
+      {/* Same top fade as the Home screen */}
+      <LinearGradient
+        colors={[palette.blue100, 'rgba(208,224,255,0)']}
+        style={styles.topFadeBg}
+        pointerEvents="none"
+      />
+
       <ScrollView
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
@@ -104,11 +112,11 @@ export default function SignUpScreen() {
         {/* Logo */}
         <View style={styles.logoCenter}>
           <Image
-            source={require('@/assets/images/icon.png')}
+            source={require('@/assets/images/lana-wordmark.png')}
             style={styles.bigLogo}
             resizeMode="contain"
           />
-          <Text style={styles.brandName}>Active CityPass</Text>
+          <Text style={styles.brandName}>Lana Health</Text>
         </View>
 
         {/* Hero */}
@@ -221,6 +229,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: palette.white,
   },
+  topFadeBg: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 460,
+  },
   scroll: {
     flexGrow: 1,
     paddingHorizontal: 24,
@@ -233,15 +248,15 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   bigLogo: {
-    width: 100,
-    height: 100,
-    borderRadius: radii.lg,
-    marginBottom: 12,
+    width: 150,
+    height: 93,
   },
   brandName: {
-    fontSize: fontSize.xl,
-    fontWeight: '800',
-    letterSpacing: 0.4,
+    fontWeight: '700',
+    color: palette.ink700,
+    fontSize: fontSize.sm,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
   },
 
   headline: {

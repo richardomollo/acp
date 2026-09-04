@@ -77,7 +77,7 @@ export default function Header() {
 
           {/* Logo */}
           <Link href={user ? "/sessions" : "/"} className="flex-shrink-0">
-            <img src="/images/logo.png" alt="Active CityPass" className="h-8 w-auto" />
+            <img src="/images/logo.png" alt="Lana Health" className="h-8 w-auto" />
           </Link>
 
           {/* Search */}

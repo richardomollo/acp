@@ -175,7 +175,7 @@ export default function LogProgressScreen() {
       // behavioural evidence; saving one never triggers regeneration.
       Alert.alert(
         'Progress updated',
-        'ACP Intelligence™ will use your measurements alongside your activity progress at your next review.',
+        'Lana will use your measurements alongside your activity progress at your next review.',
         [{ text: 'OK', onPress: () => router.back() }],
       );
     } catch (err: any) {
@@ -207,7 +207,7 @@ export default function LogProgressScreen() {
 
       <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
         <ThemedText style={s.introBody}>
-          Regular check-ins help ACP Intelligence™ understand how your body is changing alongside your plan.
+          Regular check-ins help Lana understand how your body is changing alongside your plan.
         </ThemedText>
 
         {/* Same "Want extra support?" card language ACP Intelligence™ uses
@@ -221,7 +221,7 @@ export default function LogProgressScreen() {
           <ThemedText style={s.supportRowValue}>Professional measurements</ThemedText>
           <ThemedText style={s.supportBody}>
             {trainerSupport
-              ? 'A professional can take precise, consistent measurements — useful given the barriers you mentioned. ACP Intelligence™ has suggested trainers below who can help.'
+              ? 'A professional can take precise, consistent measurements — useful given the barriers you mentioned. Lana has suggested trainers below who can help.'
               : 'Prefer a professional assessment? Book a full body assessment session instead of logging it yourself.'}
           </ThemedText>
 

@@ -1,4 +1,4 @@
-// ACP Intelligence™ — Nutrition N9. "What ACP is learning" — longitudinal
+// Lana — Nutrition N9. "What Lana is learning" — longitudinal
 // outcome observations on the Fitness Journey screen.
 //
 // Every line is an OBSERVED, REPEATED association across recent weeks —
@@ -18,13 +18,13 @@ const CONFIDENCE_LABEL: Record<OutcomeConfidence, string> = {
   strong: 'Consistent pattern',
 };
 
-export function NutritionWhatAcpIsLearning({ observations }: { observations: OutcomeObservation[] }) {
+export function NutritionWhatLanaIsLearning({ observations }: { observations: OutcomeObservation[] }) {
   const [openId, setOpenId] = useState<string | null>(null);
   if (observations.length === 0) return null;
 
   return (
     <View style={s.wrap}>
-      <ThemedText style={s.sectionTitle}>What ACP is learning</ThemedText>
+      <ThemedText style={s.sectionTitle}>What Lana is learning</ThemedText>
       <ThemedText style={s.sectionSub}>
         Patterns that have tended to coincide with your progress across recent weeks. These are observations, not conclusions about cause.
       </ThemedText>

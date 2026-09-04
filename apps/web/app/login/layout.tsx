@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Sign In",
-  description: "Sign in to your Active CityPass account to book sessions and manage your bookings.",
+  description: "Sign in to your Lana Health account to book sessions and manage your bookings.",
   robots: { index: false, follow: false },
 };
 

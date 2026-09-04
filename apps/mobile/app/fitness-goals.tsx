@@ -443,7 +443,7 @@ export default function FitnessGoalsScreen() {
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <ThemedText style={s.headerTitle}>My Goals</ThemedText>
-          <ThemedText style={s.headerSub}>What ACP Intelligence™ uses to personalise your plan</ThemedText>
+          <ThemedText style={s.headerSub}>What Lana uses to personalise your plan</ThemedText>
         </View>
       </SafeAreaView>
 
@@ -452,7 +452,7 @@ export default function FitnessGoalsScreen() {
       ) : (
         <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
           <ThemedText style={s.sectionTitle}>My Primary Goal</ThemedText>
-          <ThemedText style={s.sectionSub}>The main thing you want ACP Intelligence™ to help you achieve.</ThemedText>
+          <ThemedText style={s.sectionSub}>The main thing you want Lana to help you achieve.</ThemedText>
           <View style={s.goalsGrid}>
             {GOALS.map(g => {
               const active = goal === g.key;
@@ -540,7 +540,7 @@ export default function FitnessGoalsScreen() {
           {checkInDue ? (
             <View style={s.progressCard}>
               <ThemedText style={s.weekLabel}>Time for your weekly check-in?</ThemedText>
-              <ThemedText style={s.weekCaption}>Update your measurements so ACP Intelligence™ can track your progress over time.</ThemedText>
+              <ThemedText style={s.weekCaption}>Update your measurements so Lana can track your progress over time.</ThemedText>
               <TouchableOpacity style={s.updateProgressBtn} onPress={() => router.push('/log-progress' as any)} activeOpacity={0.85}>
                 <ThemedText style={s.updateProgressBtnText}>Update progress →</ThemedText>
               </TouchableOpacity>
@@ -563,7 +563,7 @@ export default function FitnessGoalsScreen() {
               evidence first, then the behavioural "ACP noticed" pattern. */}
           {outcomeInsight && (
             <View style={s.progressCard}>
-              <ThemedText style={s.insightEyebrow}>ACP Intelligence™</ThemedText>
+              <ThemedText style={s.insightEyebrow}>Lana</ThemedText>
               <ThemedText style={s.weekLabel}>{outcomeInsight.headline}</ThemedText>
               <ThemedText style={s.weekCaption}>{outcomeInsight.body}</ThemedText>
             </View>
@@ -571,7 +571,7 @@ export default function FitnessGoalsScreen() {
 
           {coachingInsight && (
             <View style={s.progressCard}>
-              <ThemedText style={s.insightEyebrow}>ACP noticed</ThemedText>
+              <ThemedText style={s.insightEyebrow}>Lana noticed</ThemedText>
               <ThemedText style={s.weekLabel}>{coachingInsight.headline}</ThemedText>
               <ThemedText style={s.weekCaption}>{coachingInsight.body}</ThemedText>
             </View>
@@ -579,9 +579,9 @@ export default function FitnessGoalsScreen() {
 
           {!outcomeInsight && !coachingInsight && !!weeklyProgress && (
             <View style={s.progressCard}>
-              <ThemedText style={s.insightEyebrow}>ACP Intelligence™</ThemedText>
+              <ThemedText style={s.insightEyebrow}>Lana</ThemedText>
               <ThemedText style={s.weekLabel}>Building your picture</ThemedText>
-              <ThemedText style={s.weekCaption}>Keep logging your progress and completing sessions — ACP needs a little more data before identifying a clear trend.</ThemedText>
+              <ThemedText style={s.weekCaption}>Keep logging your progress and completing sessions — Lana needs a little more data before identifying a clear trend.</ThemedText>
             </View>
           )}
 
@@ -608,7 +608,7 @@ export default function FitnessGoalsScreen() {
           {barriers.length > 0 && (
             <>
               <ThemedText style={[s.sectionTitle, { marginTop: 28 }]}>What I&apos;m Working Around</ThemedText>
-              <ThemedText style={s.sectionSub}>ACP uses this to shape your plan and support.</ThemedText>
+              <ThemedText style={s.sectionSub}>Lana uses this to shape your plan and support.</ThemedText>
               <View style={s.chipWrap}>
                 {BARRIER_OPTIONS.filter(b => barriers.includes(b.key)).map(b => (
                   <TouchableOpacity
@@ -654,7 +654,7 @@ export default function FitnessGoalsScreen() {
           <ThemedText style={s.sectionSub}>
             {trainingDays.length >= MIN_TRAINING_DAYS
               ? `${describeTrainingFrequency(trainingDays.length)} · ${formatTrainingDaysLabel(trainingDays)}`
-              : 'Tell ACP which weekdays you prefer to train, and it builds your week around them.'}
+              : 'Tell Lana which weekdays you prefer to train, and it builds your week around them.'}
           </ThemedText>
           <View style={s.dayRow}>
             {TRAINING_DAY_OPTIONS.map(d => {
@@ -678,8 +678,8 @@ export default function FitnessGoalsScreen() {
           </View>
           <ThemedText style={s.scheduleNote}>
             {trainingDays.length === 1
-              ? `Pick at least ${MIN_TRAINING_DAYS} days, or none to let ACP decide.`
-              : 'Changes apply the next time ACP prepares your plan — your current week stays as it is.'}
+              ? `Pick at least ${MIN_TRAINING_DAYS} days, or none to let Lana decide.`
+              : 'Changes apply the next time Lana prepares your plan — your current week stays as it is.'}
           </ThemedText>
 
           {/* Beta Feedback #003 — a future plan is already prepared and no
@@ -702,7 +702,7 @@ export default function FitnessGoalsScreen() {
           )}
 
           <ThemedText style={[s.sectionTitle, { marginTop: 28 }]}>Cuisine Preference</ThemedText>
-          <ThemedText style={s.sectionSub}>ACP uses this to rank meal suggestions — it never hides a meal just for being a different cuisine.</ThemedText>
+          <ThemedText style={s.sectionSub}>Lana uses this to rank meal suggestions — it never hides a meal just for being a different cuisine.</ThemedText>
           <View style={s.chipWrap}>
             {CUISINE_PICKER_OPTIONS.map(c => {
               const selected = cuisinePreferences.includes(c.key);
@@ -732,7 +732,7 @@ export default function FitnessGoalsScreen() {
               <ThemedText style={s.modalTransition}>{GOAL_LABEL[goal] ?? goal} → {pendingGoal.label}</ThemedText>
             )}
             <ThemedText style={s.modalBody}>
-              ACP Intelligence™ will use your new goal to update your plan and recommendations. Your progress so far won&apos;t be lost.
+              Lana will use your new goal to update your plan and recommendations. Your progress so far won&apos;t be lost.
             </ThemedText>
             <TouchableOpacity
               style={[s.modalPrimaryBtn, changingGoal && { opacity: 0.7 }]}

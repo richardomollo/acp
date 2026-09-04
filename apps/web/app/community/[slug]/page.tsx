@@ -36,7 +36,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!community) return { title: "Community" };
 
   const title = community.name;
-  const description = community.description ?? `Join ${community.name}, a ${CATEGORY_LABEL[community.category] ?? community.category} community on Active CityPass.`;
+  const description = community.description ?? `Join ${community.name}, a ${CATEGORY_LABEL[community.category] ?? community.category} community on Lana Health.`;
   const canonicalSlug = community.slug ?? slug;
   const img = community.cover_url ?? community.logo_url;
 
@@ -44,7 +44,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title,
     description,
     openGraph: {
-      title: `${title} | Active CityPass`,
+      title: `${title} | Lana Health`,
       description,
       url: `https://activecitypass.com/community/${canonicalSlug}`,
       ...(img ? { images: [{ url: img, width: 1200, height: 630, alt: title }] } : {}),

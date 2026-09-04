@@ -5,23 +5,11 @@ import {
   View,
   Image,
   Text,
-  Dimensions,
-  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import Constants from 'expo-constants';
 import { useAuthModal } from '@/contexts/auth-modal-context';
 import { getPostAuthDestination } from '@/lib/onboarding-auth';
 import { palette, radii, fontSize } from '@/constants/theme';
-
-const SCREEN_HEIGHT = Dimensions.get('window').height;
-const HERO_HEIGHT = SCREEN_HEIGHT * 0.5;
-const HERO_IMAGE = require('@/assets/images/pt.jpeg');
-// A plain synchronous constant rather than useSafeAreaInsets() — the latter
-// depends on SafeAreaProvider's context being populated, which on some
-// first-render timings resolves to 0 and silently stops the hero from
-// actually reaching the top of the screen.
-const STATUS_BAR_HEIGHT = Constants.statusBarHeight || (Platform.OS === 'ios' ? 47 : 24);
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -41,26 +29,20 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.choiceContainer}>
-      <View style={[styles.heroImageWrap, { top: -STATUS_BAR_HEIGHT, height: HERO_HEIGHT + STATUS_BAR_HEIGHT }]}>
-        <Image
-          source={HERO_IMAGE}
-          style={styles.heroImage}
-          resizeMode="cover"
-        />
-      </View>
+      {/* Same top fade as the Home screen */}
       <LinearGradient
-        colors={['transparent', 'rgba(255,255,255,0.75)', palette.white]}
-        locations={[0, 0.55, 1]}
-        style={[styles.heroFade, { top: -STATUS_BAR_HEIGHT, height: HERO_HEIGHT + STATUS_BAR_HEIGHT }]}
+        colors={[palette.blue100, 'rgba(208,224,255,0)']}
+        style={styles.topFadeBg}
+        pointerEvents="none"
       />
 
       <View style={styles.choiceCenter}>
         <Image
-          source={require('@/assets/images/icon.png')}
+          source={require('@/assets/images/lana-wordmark.png')}
           style={styles.bigLogo}
           resizeMode="contain"
         />
-        <Text style={styles.brandName}>Active CityPass</Text>
+        <Text style={styles.brandName}>Lana Health</Text>
         <Text style={styles.title}>Your goals. Your plan. Your active healthy life.</Text>
         <Text style={styles.subtitle}>Science-backed wellness, fitness, nutrition and experiences</Text>
       </View>
@@ -101,27 +83,12 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
     justifyContent: 'space-between',
   },
-  heroImageWrap: {
+  topFadeBg: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    height: HERO_HEIGHT,
-    backgroundColor: palette.surfaceMuted,
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    overflow: 'hidden',
-  },
-  heroImage: {
-    width: '100%',
-    height: '100%',
-  },
-  heroFade: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: HERO_HEIGHT,
+    height: 460,
   },
   choiceCenter: {
     flex: 1,
@@ -129,16 +96,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   bigLogo: {
-    width: 100,
-    height: 100,
-    borderRadius: radii.lg,
+    width: 150,
+    height: 63,
     marginBottom: 12,
   },
   brandName: {
-    fontSize: fontSize.xl,
-    fontWeight: '800',
-    letterSpacing: 0.4,
     marginBottom: 22,
+    fontWeight: '700',
+    color: palette.ink700,
+    fontSize: fontSize.sm,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
   },
   title: {
     fontSize: fontSize['4xl'],

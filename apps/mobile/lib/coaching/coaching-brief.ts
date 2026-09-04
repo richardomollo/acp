@@ -116,7 +116,7 @@ export function buildWeeklyCoachingBrief(input: WeeklyCoachingBriefInput): Weekl
   const execPattern = pickExecutionNoticed(coachingMemory);
   if (execPattern) {
     return {
-      headline: 'ACP noticed a pattern',
+      headline: 'Lana noticed a pattern',
       observation: execPattern.headline,
       guidance: "This week's plan takes that into account — focus on completing each session as planned.",
       evidence: [],
@@ -127,7 +127,7 @@ export function buildWeeklyCoachingBrief(input: WeeklyCoachingBriefInput): Weekl
   const pattern = pickHomeInsight(coachingMemory);
   if (pattern) {
     return {
-      headline: 'ACP noticed a pattern',
+      headline: 'Lana noticed a pattern',
       observation: pattern.headline,
       guidance: "This week's plan leans into what has been working for you.",
       evidence: pattern.body ? [{ text: pattern.body, provenance: { source: 'memory', detail: 'pattern' } }] : [],

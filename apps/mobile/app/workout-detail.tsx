@@ -502,7 +502,7 @@ export default function WorkoutDetailScreen() {
             <View style={s.trackCard}>
               <ThemedText style={s.trackTitle}>TRACK YOUR {cardioNoun.toUpperCase()}</ThemedText>
               <ThemedText style={s.trackBody}>
-                Record it with Strava or your watch as you normally would. ACP picks up the
+                Record it with Strava or your watch as you normally would. Lana picks up the
                 completed activity — open My Plan afterwards to confirm it against this session.
               </ThemedText>
 

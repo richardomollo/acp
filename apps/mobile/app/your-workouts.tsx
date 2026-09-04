@@ -185,7 +185,7 @@ export default function YourWorkoutsScreen() {
             <Ionicons name="barbell-outline" size={32} color={palette.gray300} />
           </View>
           <ThemedText style={s.emptyText}>No workouts yet</ThemedText>
-          <ThemedText style={s.emptySub}>ACP builds your workouts for you — check My Plan for your personalized recommendation.</ThemedText>
+          <ThemedText style={s.emptySub}>Lana builds your workouts for you — check My Plan for your personalized recommendation.</ThemedText>
         </View>
       ) : (
         <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>

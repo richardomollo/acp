@@ -406,7 +406,7 @@ export default function PartnerDashboard() {
       <aside className="hidden md:flex w-56 bg-[#050040] flex-col fixed inset-y-0 left-0 z-20">
         <div className="p-5 border-b border-white/10 flex-shrink-0">
           <Link href="/">
-            <img src="/images/logo-white.png" alt="Active CityPass" className="h-8 w-auto" />
+            <img src="/images/logo-white.png" alt="Lana Health" className="h-8 w-auto" />
           </Link>
           <p className="text-white/40 text-[11px] font-medium mt-1.5 tracking-wide">Partner Portal</p>
         </div>
@@ -509,7 +509,7 @@ export default function PartnerDashboard() {
 
         {/* Mobile top bar */}
         <header className="md:hidden bg-[#050040] px-4 py-3 flex items-center justify-between sticky top-0 z-10 flex-shrink-0">
-          <img src="/images/logo-white.png" alt="Active CityPass" className="h-7 w-auto" />
+          <img src="/images/logo-white.png" alt="Lana Health" className="h-7 w-auto" />
           <div className="flex items-center gap-3">
             {hasPTRole && (
               <Link href="/pt-dashboard" className="text-white/60 text-xs font-medium hover:text-white transition-colors flex items-center gap-1">

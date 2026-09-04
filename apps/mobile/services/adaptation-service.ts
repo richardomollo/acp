@@ -124,8 +124,8 @@ async function applyChangeVolume(workouts: { id: string; duration_minutes: numbe
   }
 }
 
-const INTENSITY_UP_NOTE = 'ACP progression: aim for the top of your rep range, or add slight resistance where possible.';
-const INTENSITY_DOWN_NOTE = 'ACP adjustment: ease off slightly — prioritise good form over pushing hard this week.';
+const INTENSITY_UP_NOTE = "Lana's progression note: aim for the top of your rep range, or add slight resistance where possible.";
+const INTENSITY_DOWN_NOTE = "Lana's adjustment note: ease off slightly — prioritise good form over pushing hard this week.";
 
 async function applyChangeIntensity(workoutIds: string[], direction: 'up' | 'down') {
   if (workoutIds.length === 0) return;
@@ -188,13 +188,13 @@ export interface EvaluateAndApplyResult {
 
 const DECISION_MEMBER_HEADLINE: Record<string, string> = {
   KEEP: 'Your plan stays the same',
-  PROGRESS: 'ACP progressed next week',
-  REGRESS: 'ACP made next week more manageable',
-  CHANGE_VOLUME: 'ACP simplified next week',
-  CHANGE_INTENSITY: 'ACP adjusted next week’s intensity',
-  RESCHEDULE: 'ACP updated your schedule',
-  SUBSTITUTE: 'ACP swapped an exercise',
-  INSUFFICIENT_EVIDENCE: 'ACP needs a bit more data',
+  PROGRESS: 'Lana progressed next week',
+  REGRESS: 'Lana made next week more manageable',
+  CHANGE_VOLUME: 'Lana simplified next week',
+  CHANGE_INTENSITY: 'Lana adjusted next week’s intensity',
+  RESCHEDULE: 'Lana updated your schedule',
+  SUBSTITUTE: 'Lana swapped an exercise',
+  INSUFFICIENT_EVIDENCE: 'Lana needs a bit more data',
 };
 
 export async function evaluateAndApplyAdaptation(userId: string, programId: string, weekNumber: number): Promise<EvaluateAndApplyResult | { error: string }> {
@@ -264,7 +264,7 @@ export async function evaluateAndApplyAdaptation(userId: string, programId: stri
 
   const memberMessage = evaluation.canApplyAutomatically
     ? primary.reason
-    : `${primary.reason} Your trainer can review this with you — ACP won't modify a trainer-created programme automatically.`;
+    : `${primary.reason} Your trainer can review this with you — Lana won't modify a trainer-created programme automatically.`;
 
   return { decisions: evaluation.decisions, applied, memberMessage };
 }

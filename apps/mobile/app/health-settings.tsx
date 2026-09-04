@@ -91,10 +91,10 @@ export default function HealthSettingsScreen() {
             <>
               <ThemedText style={s.title}>Apple Health connected</ThemedText>
               <ThemedText style={s.desc}>
-                ACP can use the Apple Health data you chose to share — activity and
+                Lana can use the Apple Health data you chose to share — activity and
                 workouts you record show up in your trends, and count towards
                 activities in your plan. Change what you share anytime in
-                Settings › Health › Data Access &amp; Devices › Active City Pass.
+                Settings › Health › Data Access &amp; Devices › Lana Health.
               </ThemedText>
               <View style={s.statusPill}>
                 <Ionicons name="checkmark" size={15} color={palette.success700} />
@@ -115,10 +115,10 @@ export default function HealthSettingsScreen() {
             <>
               <ThemedText style={s.title}>Connect Apple Health</ThemedText>
               <ThemedText style={s.desc}>
-                With your permission, Active City Pass reads activity and workout data
+                With your permission, Lana Health reads activity and workout data
                 from Apple Health — steps, energy, heart rate, workouts and body
                 measurements. You choose exactly what to share in Apple&apos;s permission
-                screen. ACP uses it to show your trends and to recognise activity
+                screen. Lana uses it to show your trends and to recognise activity
                 you&apos;ve completed.
               </ThemedText>
 

@@ -989,7 +989,7 @@ export default function MyPlanScreen() {
           {generating && (
             <View style={styles.generatingBanner}>
               <ActivityIndicator size="small" color={palette.ink700} />
-              <ThemedText style={styles.generatingText}>Building your plan, powered by ACP Intelligence™</ThemedText>
+              <ThemedText style={styles.generatingText}>Lana is building your plan</ThemedText>
             </View>
           )}
 
@@ -999,7 +999,7 @@ export default function MyPlanScreen() {
               onPress={() => setShowIntelligenceInfo(true)}
               activeOpacity={0.7}
             >
-              <ThemedText style={styles.intelligenceText}>Recommended by ACP Intelligence™</ThemedText>
+              <ThemedText style={styles.intelligenceText}>Recommended by Lana</ThemedText>
               <Ionicons name="information-circle-outline" size={16} color={palette.gray450} />
             </TouchableOpacity>
           )}
@@ -1015,7 +1015,7 @@ export default function MyPlanScreen() {
           {generatingReview && (
             <View style={styles.generatingBanner}>
               <ActivityIndicator size="small" color={palette.ink700} />
-              <ThemedText style={styles.generatingText}>Reviewing your week, powered by ACP Intelligence™</ThemedText>
+              <ThemedText style={styles.generatingText}>Lana is reviewing your week</ThemedText>
             </View>
           )}
 
@@ -1290,7 +1290,7 @@ export default function MyPlanScreen() {
                         {!doneRecord && candidate && (
                           <View style={styles.candidateBanner}>
                             <ThemedText style={styles.candidateText}>
-                              We found a {candidate.label} from {candidate.source === 'strava' ? 'Strava' : candidate.source === 'exercise_db' ? 'your workout history' : 'ACP'} on {new Date(candidate.occurredDate + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long' })}. Count this toward {a.day}&apos;s {a.activity.toLowerCase()}?
+                              We found a {candidate.label} from {candidate.source === 'strava' ? 'Strava' : candidate.source === 'exercise_db' ? 'your workout history' : 'Lana'} on {new Date(candidate.occurredDate + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long' })}. Count this toward {a.day}&apos;s {a.activity.toLowerCase()}?
                             </ThemedText>
                             <View style={styles.candidateActions}>
                               <TouchableOpacity onPress={() => handleConfirmCandidate(candidate)} activeOpacity={0.85}>
@@ -1327,7 +1327,7 @@ export default function MyPlanScreen() {
                   {overallProgress ? (
                     <>
                       <ThemedText style={styles.rowLabel}>
-                        {overallProgress.weeksUsed} {overallProgress.weeksUsed === 1 ? 'week' : 'weeks'} with ACP
+                        {overallProgress.weeksUsed} {overallProgress.weeksUsed === 1 ? 'week' : 'weeks'} with Lana
                       </ThemedText>
                       <ThemedText style={styles.rowValue}>{overallProgress.completed} of {overallProgress.planned} activities completed</ThemedText>
                       <ThemedText style={styles.aiBody}>{Math.round(overallProgress.completionRate * 100)}% consistency</ThemedText>
@@ -1361,7 +1361,7 @@ export default function MyPlanScreen() {
                   {learningInsights.length > 0 && (
                     <>
                       <View style={styles.divider} />
-                      <ThemedText style={[styles.rowLabel, { marginBottom: 10 }]}>What ACP is learning</ThemedText>
+                      <ThemedText style={[styles.rowLabel, { marginBottom: 10 }]}>What Lana is learning</ThemedText>
                       {learningInsights.map(insight => (
                         <View key={`${insight.memory_type}:${insight.subject}`} style={{ marginBottom: 10 }}>
                           <ThemedText style={styles.dayTitle}>{insight.user_message}</ThemedText>
@@ -1625,10 +1625,10 @@ export default function MyPlanScreen() {
           onPress={() => setShowIntelligenceInfo(false)}
         >
           <View style={styles.tooltipCard}>
-            <ThemedText style={styles.tooltipTitle}>ACP Intelligence™</ThemedText>
+            <ThemedText style={styles.tooltipTitle}>Lana</ThemedText>
             <ThemedText style={styles.tooltipBody}>
-              ACP Intelligence™ is AI that personalises your fitness and nutrition plan, learns from
-              your progress, and adapts what to do next based on what works for you.
+              Lana is the coaching intelligence that personalises your fitness and nutrition plan,
+              learns from your progress, and adapts what to do next based on what works for you.
             </ThemedText>
             <TouchableOpacity style={styles.tooltipCloseBtn} onPress={() => setShowIntelligenceInfo(false)} activeOpacity={0.85}>
               <ThemedText style={styles.tooltipCloseText}>Got it</ThemedText>
@@ -1653,7 +1653,7 @@ export default function MyPlanScreen() {
             <ThemedText style={styles.tooltipBody}>
               Your plan runs Monday to Sunday. &ldquo;This week&rdquo; is the plan you&apos;re
               following now; on its last day you can prepare next week&apos;s. Once a week
-              ends it becomes &ldquo;Last week&rdquo;, and ACP Intelligence™ reviews it to
+              ends it becomes &ldquo;Last week&rdquo;, and Lana reviews it to
               shape the week ahead.
             </ThemedText>
             <TouchableOpacity style={styles.tooltipCloseBtn} onPress={() => setShowWeekInfo(false)} activeOpacity={0.85}>

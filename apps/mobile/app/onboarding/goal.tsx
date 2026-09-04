@@ -13,9 +13,9 @@ import { palette, radii, fontSize } from '@/constants/theme';
 
 const DATA_POINTS: { icon: string; title: string; desc: string }[] = [
   { icon: 'flag-outline', title: 'What you tell us', desc: 'Your goals, starting point, schedule, preferences and what tends to get in your way.' },
-  { icon: 'trending-up-outline', title: 'What ACP learns', desc: 'What you complete and how your plan fits your routine — real progress that helps ACP learn what works for you.' },
+  { icon: 'trending-up-outline', title: 'What Lana learns', desc: 'What you complete and how your plan fits your routine — real progress that helps Lana learn what works for you.' },
   { icon: 'people-outline', title: 'Real support, when it helps', desc: 'Nutritionists, personal trainers, classes, sessions, or communities tailored to you — recommended, never forced.' },
-  { icon: 'sync-outline', title: 'Adapts with you', desc: 'Your plan evolves as ACP learns what works for you, while keeping your goals and preferences at the centre.' },
+  { icon: 'sync-outline', title: 'Adapts with you', desc: 'Your plan evolves as Lana learns what works for you, while keeping your goals and preferences at the centre.' },
 ];
 
 export default function OnboardingGoalScreen() {
@@ -144,11 +144,11 @@ export default function OnboardingGoalScreen() {
         <>
           <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
             <ThemedText style={styles.headline}>
-              {firstName ? `${firstName}, meet ACP Intelligence™` : 'Meet ACP Intelligence™'}
+              {firstName ? `${firstName}, meet Lana` : 'Meet Lana'}
             </ThemedText>
             <ThemedText style={styles.tagline}>Your AI coach that learns what works for you.</ThemedText>
             <ThemedText style={styles.sub}>
-              Tell ACP Intelligence™ what you want to achieve and where you&apos;re starting. It
+              Tell Lana what you want to achieve and where you&apos;re starting. It
               will build your plan, learn from your progress, adapt as you go, and recommend
               nutritionists, personal trainers, classes, sessions, or communities tailored to you
               — recommended, never forced.
@@ -174,7 +174,7 @@ export default function OnboardingGoalScreen() {
         <>
           <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
             <ThemedText style={styles.headline}>What would you like to work towards?</ThemedText>
-            <ThemedText style={styles.sub}>Choose your main goal. ACP Intelligence™ will use this as the starting point for your plan.</ThemedText>
+            <ThemedText style={styles.sub}>Choose your main goal. Lana will use this as the starting point for your plan.</ThemedText>
 
             <View style={styles.list}>
               {GOAL_OPTIONS.map(g => (

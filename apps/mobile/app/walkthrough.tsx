@@ -8,12 +8,12 @@ import {
   Image,
   StatusBar,
   Animated,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { palette, radii, fontSize } from '@/constants/theme';
 
 const { width, height } = Dimensions.get('window');
@@ -21,55 +21,45 @@ const { width, height } = Dimensions.get('window');
 export const WALKTHROUGH_KEY = 'walkthrough_complete';
 
 // Beta Feedback #008 — the walkthrough now tells one progressive story:
-// ACP starts with the PERSON (goal → personalised plan), turns that plan
+// Lana starts with the PERSON (goal → personalised plan), turns that plan
 // into action (marketplace supply as a fulfilment layer, not the headline),
 // and adapts as the user does. No "membership", "pass" or venue-count claims.
 const SLIDES = [
   {
     id: '1',
-    eyebrow: 'Welcome to Active CityPass',
-    headline: 'Fitness built\naround you',
-    body: 'Tell us what you want to achieve. ACP creates a personalised plan around your goals, experience, schedule and preferences.',
+    eyebrow: 'Welcome to Lana Health',
+    headline: 'Fitness built around you',
+    body: 'Tell us what you want to achieve. Lana creates a personalised plan around your goals, experience, schedule and preferences.',
   },
   {
     id: '2',
     eyebrow: 'Your week, planned',
-    headline: 'Know what to do —\nand when',
+    headline: 'Know what to do and when',
     body: 'Get a realistic weekly plan for strength, cardio, recovery and the activities you enjoy, built around the time you actually have.',
   },
   {
     id: '3',
     eyebrow: 'Move your way',
-    headline: 'Your plan. Your choice\nof where to do it.',
-    body: 'Train on your own, book an open gym, join a class or get support from a professional — ACP helps you turn your plan into action.',
+    headline: 'Your plan. Your choice of\nwhere to do it.',
+    body: 'Train on your own, book an open gym, join a class or get support from a professional — Lana helps you turn your plan into action.',
   },
   {
     id: '4',
     eyebrow: 'It learns with you',
-    headline: 'A plan that changes\nas you do',
-    body: "ACP notices what you complete, skip or find hard, and adapts next week to fit your real life — not a fixed programme you're expected to keep up with.",
+    headline: 'A plan that changes as you do',
+    body: "Lana notices what you complete, skip or find hard, and adapts next week to fit your real life — not a fixed programme you're expected to keep up with.",
   },
   {
     id: '5',
     eyebrow: 'Your first step',
-    headline: 'Start with\nyour goal',
-    body: "Answer a few questions about what you want, where you're starting and the time you have — ACP builds your first week right away.",
+    headline: 'Start with your goal',
+    body: "Answer a few questions about what you want, where you're starting and the time you have — Lana builds your first week right away.",
   },
 ];
 
-const COLLAGE_H = height * 0.42;
-
-// Web collage: col 0 = ref + yoga, col 1 = desktop + plts (offset down)
-const COLLAGE_COLS = [
-  [
-    { src: require('@/assets/images/ref.jpeg'),  alt: 'Fitness' },
-    { src: require('@/assets/images/yoga.jpg'),  alt: 'Yoga' },
-  ],
-  [
-    { src: require('@/assets/images/desktop.jpg'), alt: 'Gym' },
-    { src: require('@/assets/images/plts.webp'),   alt: 'Pilates' },
-  ],
-];
+// Shorter devices (iPhone SE/8 and minis) get tighter vertical spacing so
+// the last slide's two stacked buttons don't collide with the body text.
+const SHORT = height < 750;
 
 export default function Walkthrough() {
   const router = useRouter();
@@ -105,6 +95,13 @@ export default function Walkthrough() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor={palette.white} />
 
+      {/* Same top fade as the Home screen */}
+      <LinearGradient
+        colors={[palette.blue100, 'rgba(208,224,255,0)']}
+        style={styles.topFadeBg}
+        pointerEvents="none"
+      />
+
       {/* Header */}
       <View style={styles.header}>
         <Image
@@ -112,30 +109,20 @@ export default function Walkthrough() {
           style={styles.logoIcon}
           resizeMode="contain"
         />
-        <Text style={styles.logoText}>Active CityPass</Text>
+        <Text style={styles.logoText}>LANA HEALTH</Text>
         <TouchableOpacity onPress={finish} style={styles.skipBtn}>
           <Text style={styles.skipText}>Skip</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Image collage — fixed across all slides */}
-      <View style={styles.collage}>
-        {COLLAGE_COLS.map((col, colIdx) => (
-          <View
-            key={colIdx}
-            style={[styles.collageCol, colIdx === 1 && styles.collageColOffset]}
-          >
-            {col.map((item, rowIdx) => (
-              <View key={rowIdx} style={styles.cellOuter}>
-                <Image
-                  source={item.src}
-                  style={styles.cellImg}
-                  resizeMode="cover"
-                />
-              </View>
-            ))}
-          </View>
-        ))}
+      {/* Lana Health wordmark — fixed across all slides. Transparent so it
+          sits on the same background as the rest of the screen (like Home). */}
+      <View style={styles.markWrap}>
+        <Image
+          source={require('@/assets/images/lana-wordmark.png')}
+          style={styles.mark}
+          resizeMode="contain"
+        />
       </View>
 
       {/* Animated slide content */}
@@ -198,6 +185,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: palette.white,
   },
+  topFadeBg: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 460,
+  },
 
   // Header
   header: {
@@ -215,10 +209,11 @@ const styles = StyleSheet.create({
   },
   logoText: {
     flex: 1,
-    fontSize: fontSize.base,
     fontWeight: '700',
     color: palette.ink700,
-    letterSpacing: -0.2,
+    fontSize: fontSize.xs,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
   },
   skipBtn: {
     paddingVertical: 4,
@@ -230,37 +225,23 @@ const styles = StyleSheet.create({
     color: palette.gray300,
   },
 
-  // Collage
-  collage: {
-    flexDirection: 'row',
-    gap: 8,
-    marginHorizontal: 16,
-    marginTop: 100,
-    height: COLLAGE_H,
+  // Lana Health mark — sits low, roughly centred on the page
+  markWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: SHORT ? height * 0.1 : height * 0.2,
+    height: 250,
   },
-  collageCol: {
-    flex: 1,
-    flexDirection: 'column',
-    gap: 8,
-  },
-  collageColOffset: {
-    marginTop: Platform.OS === 'ios' ? 20 : 18,
-  },
-  cellOuter: {
-    flex: 1,
-    borderRadius: radii.lg,
-    overflow: 'hidden',
-  },
-  cellImg: {
-    width: '100%',
-    height: '100%',
+  mark: {
+    width: 250,
+    height: 250,
   },
 
   // Slide content
   slideContent: {
     flex: 1,
     paddingHorizontal: 24,
-    paddingTop: 22,
+    paddingTop: SHORT ? 12 : 22,
     justifyContent: 'flex-start',
   },
   eyebrow: {
@@ -359,6 +340,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: palette.ink900,
     alignItems: 'center',
+    marginBottom: 30,
   },
   secondaryBtnText: {
     color: palette.ink900,

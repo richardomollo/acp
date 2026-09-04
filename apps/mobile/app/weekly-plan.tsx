@@ -504,10 +504,10 @@ export default function WeeklyPlanScreen() {
           onPress={() => setShowIntelligenceInfo(false)}
         >
           <View style={s.intelligenceTooltipCard}>
-            <ThemedText style={s.intelligenceTooltipTitle}>ACP Intelligence™</ThemedText>
+            <ThemedText style={s.intelligenceTooltipTitle}>Lana</ThemedText>
             <ThemedText style={s.intelligenceTooltipBody}>
-              ACP Intelligence™ is AI that personalises your fitness and nutrition plan, learns from
-              your progress, and adapts what to do next based on what works for you.
+              Lana is the coaching intelligence that personalises your fitness and nutrition plan,
+              learns from your progress, and adapts what to do next based on what works for you.
             </ThemedText>
             <TouchableOpacity style={s.intelligenceTooltipCloseBtn} onPress={() => setShowIntelligenceInfo(false)} activeOpacity={0.85}>
               <ThemedText style={s.intelligenceTooltipCloseText}>Got it</ThemedText>

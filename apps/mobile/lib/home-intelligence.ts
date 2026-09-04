@@ -59,7 +59,7 @@ export function getHomeIntelligenceInsight(params: HomeIntelligenceParams): Home
   if (!assessment) {
     return {
       headline: 'Build your personal plan',
-      body: 'ACP Intelligence™ can turn your goal into a first-week plan you can act on.',
+      body: 'Lana can turn your goal into a first-week plan you can act on.',
       ctaLabel: 'Build your personal plan →',
       ctaTarget: '/my-plan',
     };

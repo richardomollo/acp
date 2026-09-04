@@ -70,7 +70,7 @@ describe('buildPlanExplanation (Why this plan?)', () => {
     const [sched] = reasons.filter(r => r.type === 'schedule');
     assert.ok(sched);
     assert.match(sched.title, /days you prefer to train/i);
-    assert.match(sched.explanation, /you told acp you prefer training monday to friday/i);
+    assert.match(sched.explanation, /you told lana you prefer training monday to friday/i);
     assert.equal(sched.provenance.source, 'profile');
     assert.equal(sched.provenance.detail, 'training_schedule');
     assert.ok(!/optimal|acp determined|best for you/i.test(sched.explanation));

@@ -101,7 +101,7 @@ export function buildPlanExplanation(input: PlanExplanationInput): PlanExplanati
       candidates.push({
         type: 'adherence',
         title: 'Learns from last week',
-        explanation: `You completed ${lastWeek.completed} of ${lastWeek.planned} activities last week, so ACP has kept your programme stable rather than adding more.`,
+        explanation: `You completed ${lastWeek.completed} of ${lastWeek.planned} activities last week, so Lana has kept your programme stable rather than adding more.`,
         provenance: { source: 'behaviour', detail: 'completion', values: { completed: lastWeek.completed, planned: lastWeek.planned } },
       });
     } else if (rate >= 0.5) {
@@ -165,14 +165,14 @@ export function buildPlanExplanation(input: PlanExplanationInput): PlanExplanati
     candidates.push({
       type: 'schedule',
       title: 'Built around the days you prefer to train',
-      explanation: `You told ACP you prefer training ${describePreferredDays(trainingDays)}, so this week's activities are organised around those days.`,
+      explanation: `You told Lana you prefer training ${describePreferredDays(trainingDays)}, so this week's activities are organised around those days.`,
       provenance: { source: 'profile', detail: 'training_schedule', values: { preferredDays: trainingDays.length, planDays: planWeekdays.size } },
     });
   } else if (availableTime) {
     candidates.push({
       type: 'schedule',
       title: 'Fits your schedule',
-      explanation: `You told ACP you have around ${availableTime} available each week, and this plan stays within that with ${activities.length} session${activities.length === 1 ? '' : 's'}.`,
+      explanation: `You told Lana you have around ${availableTime} available each week, and this plan stays within that with ${activities.length} session${activities.length === 1 ? '' : 's'}.`,
       provenance: { source: 'profile', detail: 'available_time', values: { sessions: activities.length, minutes: totalMinutes } },
     });
   }

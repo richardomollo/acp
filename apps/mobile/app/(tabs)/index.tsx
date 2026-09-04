@@ -19,7 +19,8 @@ import { computeStreak, type Stats } from '@/services/fitnessStats';
 import { syncHealthData, checkAppleHealthConnection } from '@/services/health';
 import { estimateTodayStepsFromStrava, getStravaStatus } from '@/services/strava';
 import { buildPlanSummary, GOAL_OPTIONS, EMPTY_ANSWERS, isStep2Complete } from '@/lib/onboarding';
-import { isValidAssessment, CATEGORY_LABEL, type AIAssessment } from '@/lib/ai-assessment';
+import { isValidAssessment, CATEGORY_LABEL, type AIAssessment, type ActivityCategory } from '@/lib/ai-assessment';
+import { hydrateWorkoutExerciseMedia } from '@/services/activity-recommendation-service';
 import {
   selectMealsForNutritionFocus, nutritionFocusTagLabel, selectDailyMeals,
   type FoodCandidate, type DailyMealCandidates,
@@ -42,6 +43,18 @@ import {
 const { width } = Dimensions.get('window');
 const RAIL_CARD_W = Math.round(width * 0.5);
 const EDITORIAL_W = Math.round(width * 0.48);
+
+// Today's Plan / Up next background — the real per-exercise MuscleWiki clip
+// is preferred, but it's frozen null on any workout generated while the
+// provider was down. Rather than fall back to a bare white card, use a
+// category-appropriate bundled image so the card always reads as intentional.
+const CATEGORY_FALLBACK_MEDIA: Record<ActivityCategory, number> = {
+  strength: require('@/assets/images/desktop.jpg'),
+  cardio: require('@/assets/images/ref.jpeg'),
+  recovery: require('@/assets/images/yoga.jpg'),
+  mobility: require('@/assets/images/yoga.jpg'),
+  sport: require('@/assets/images/ref.jpeg'),
+};
 
 interface Gym {
   id: string;
@@ -443,10 +456,10 @@ function GuestHero({ onSearch }: { onSearch: () => void }) {
   return (
     <View style={styles.guestHero}>
       <ThemedText style={styles.guestHeadline}>
-        Active City Pass — Get active, wherever you want.
+        Lana Health — your plan for staying active and healthy.
       </ThemedText>
       <ThemedText style={styles.guestSub}>
-        Find gyms, studios, classes, coaches and experiences across Nairobi — and, once you join, a plan built around your goals to tie it together.
+        Set a goal and Lana builds a personalised plan to move, eat, connect and track your progress — then adapts it around your real life. Gyms, studios, classes, coaches and experiences across Nairobi help you follow it through.
       </ThemedText>
       <TouchableOpacity style={styles.guestSearchBtn} onPress={onSearch} activeOpacity={0.8}>
         <Ionicons name="search" size={16} color={palette.gray300} />
@@ -471,8 +484,8 @@ const FOR_EVERYONE = [
 // ACP"). It describes what's on this screen today; no membership/pass
 // framing, no overclaimed intelligence.
 const HOME_TOUR: TourStep[] = [
-  { icon: 'today-outline', title: 'Today, at a glance', description: "Your home shows what ACP has planned for you today — your session, your meals, and where you're at with the week." },
-  { icon: 'sparkles-outline', title: 'What ACP notices', description: 'As you complete, skip or log things, ACP shares short, plain observations here — and uses them to shape your next plan.' },
+  { icon: 'today-outline', title: 'Today, at a glance', description: "Your home shows what Lana has planned for you today — your session, your meals, and where you're at with the week." },
+  { icon: 'sparkles-outline', title: 'What Lana notices', description: 'As you complete, skip or log things, Lana shares short, plain observations here — and uses them to shape your next plan.' },
 ];
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
@@ -792,8 +805,8 @@ export default function HomeScreen() {
   const homeInsight = homeReviewReady
     ? {
         headline: 'Your weekly review is ready',
-        body: 'See what ACP Intelligence™ learned from last week and get your next plan.',
-        ctaLabel: 'See what ACP Intelligence™ learned →',
+        body: 'See what Lana learned from last week and get your next plan.',
+        ctaLabel: 'See what Lana learned →',
         ctaTarget: '/my-plan',
       }
     : homeIntelLoaded
@@ -875,22 +888,30 @@ export default function HomeScreen() {
       .find(u => !!u) ?? null;
   }, []);
 
+  // A stored gif_url is preferred; on a miss, try a one-off backfill of the
+  // workout's MuscleWiki exercises (rows frozen null while the proxy was
+  // down) and use whatever that recovers. Both are non-blocking and
+  // decorative — a total miss just leaves the plain/category-fallback card.
   useEffect(() => {
     if (!todayWorkoutId) { setTodayPlanMediaUrl(null); return; }
     let active = true;
-    fetchFirstExerciseMedia(todayWorkoutId)
-      .then(url => { if (active) setTodayPlanMediaUrl(url); })
-      .catch(() => { /* media is decorative — a lookup failure just leaves the plain card */ });
+    (async () => {
+      let url = await fetchFirstExerciseMedia(todayWorkoutId).catch(() => null);
+      if (!url) url = await hydrateWorkoutExerciseMedia(todayWorkoutId).catch(() => null);
+      if (active) setTodayPlanMediaUrl(url);
+    })();
     return () => { active = false; };
   }, [todayWorkoutId, fetchFirstExerciseMedia]);
 
-  // Beta #012 — same background-media lookup for the "Up next" card.
+  // Beta #012 — same background-media lookup (+ backfill) for the "Up next" card.
   useEffect(() => {
     if (!upNextWorkoutId) { setUpNextMediaUrl(null); return; }
     let active = true;
-    fetchFirstExerciseMedia(upNextWorkoutId)
-      .then(url => { if (active) setUpNextMediaUrl(url); })
-      .catch(() => { /* media is decorative — a lookup failure just leaves the plain card */ });
+    (async () => {
+      let url = await fetchFirstExerciseMedia(upNextWorkoutId).catch(() => null);
+      if (!url) url = await hydrateWorkoutExerciseMedia(upNextWorkoutId).catch(() => null);
+      if (active) setUpNextMediaUrl(url);
+    })();
     return () => { active = false; };
   }, [upNextWorkoutId, fetchFirstExerciseMedia]);
 
@@ -1878,11 +1899,17 @@ export default function HomeScreen() {
               </View>
             )}
             <View style={styles.mealsList}>
-              {(() => { const hasPlanMedia = !!todayPlanMediaUrl && !homePrimaryResolved; const primary = homePrimaryRef.activity; return (
+              {(() => {
+              const primary = homePrimaryRef.activity;
+              const planFallbackMedia = CATEGORY_FALLBACK_MEDIA[primary.category];
+              const hasPlanMedia = (!!todayPlanMediaUrl || !!planFallbackMedia) && !homePrimaryResolved;
+              return (
               <View style={[styles.todayPlanCard, hasPlanMedia && styles.todayPlanCardMedia]}>
                 {hasPlanMedia && (
                   <>
-                    <ExerciseMedia url={todayPlanMediaUrl} fit="cover" style={styles.todayPlanMedia} />
+                    {todayPlanMediaUrl
+                      ? <ExerciseMedia url={todayPlanMediaUrl} fit="cover" style={styles.todayPlanMedia} />
+                      : <Image source={planFallbackMedia} style={styles.todayPlanMedia} resizeMode="cover" />}
                     <LinearGradient
                       colors={['rgba(9,11,20,0.42)', 'rgba(9,11,20,0.82)']}
                       style={styles.todayPlanScrim}
@@ -1928,7 +1955,7 @@ export default function HomeScreen() {
                   <View style={styles.candidateBanner}>
                     <ThemedText style={styles.candidateText}>
                       We found a {todayCandidate.label} from {
-                        todayCandidate.source === 'strava' ? 'Strava' : todayCandidate.source === 'exercise_db' ? 'your workout history' : 'ACP'
+                        todayCandidate.source === 'strava' ? 'Strava' : todayCandidate.source === 'exercise_db' ? 'your workout history' : 'Lana'
                       } today. Count this toward today&apos;s {primary.activity.toLowerCase()}?
                     </ThemedText>
                     <View style={styles.candidateActions}>
@@ -2065,11 +2092,17 @@ export default function HomeScreen() {
               )}
             </View>
             <View style={styles.mealsList}>
-              {(() => { const hasUpNextMedia = !!upNextMediaUrl && !homeUpcomingRef.fromScheduled; const next = homeUpcomingRef.activity; return (
+              {(() => {
+              const next = homeUpcomingRef.activity;
+              const upNextFallbackMedia = CATEGORY_FALLBACK_MEDIA[next.category];
+              const hasUpNextMedia = (!!upNextMediaUrl || !!upNextFallbackMedia) && !homeUpcomingRef.fromScheduled;
+              return (
               <View style={[styles.todayPlanCard, hasUpNextMedia && styles.todayPlanCardMedia]}>
                 {hasUpNextMedia && (
                   <>
-                    <ExerciseMedia url={upNextMediaUrl} fit="cover" style={styles.todayPlanMedia} />
+                    {upNextMediaUrl
+                      ? <ExerciseMedia url={upNextMediaUrl} fit="cover" style={styles.todayPlanMedia} />
+                      : <Image source={upNextFallbackMedia} style={styles.todayPlanMedia} resizeMode="cover" />}
                     <LinearGradient
                       colors={['rgba(9,11,20,0.42)', 'rgba(9,11,20,0.82)']}
                       style={styles.todayPlanScrim}
@@ -2345,10 +2378,10 @@ export default function HomeScreen() {
       <Modal visible={showIntelligenceInfo} transparent animationType="fade" onRequestClose={() => setShowIntelligenceInfo(false)}>
         <TouchableOpacity style={styles.intelligenceTooltipOverlay} activeOpacity={1} onPress={() => setShowIntelligenceInfo(false)}>
           <View style={styles.intelligenceTooltipCard}>
-            <ThemedText style={styles.intelligenceTooltipTitle}>ACP Intelligence™</ThemedText>
+            <ThemedText style={styles.intelligenceTooltipTitle}>Lana</ThemedText>
             <ThemedText style={styles.intelligenceTooltipBody}>
-              ACP Intelligence™ is AI that personalises your fitness and nutrition plan, learns from
-              your progress, and adapts what to do next based on what works for you.
+              Lana is the coaching intelligence that personalises your fitness and nutrition plan,
+              learns from your progress, and adapts what to do next based on what works for you.
             </ThemedText>
             <TouchableOpacity style={styles.intelligenceTooltipCloseBtn} onPress={() => setShowIntelligenceInfo(false)} activeOpacity={0.85}>
               <ThemedText style={styles.intelligenceTooltipCloseText}>Got it</ThemedText>

@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Active CityPass",
+    "name": "Lana Health",
     "slug": "acitypass",
     "version": "1.0.7",
     "orientation": "portrait",
@@ -19,8 +19,8 @@
       "bundleIdentifier": "com.activecitypass.app",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSPhotoLibraryUsageDescription": "Active City Pass needs access to your photo library so you can upload a profile picture and choose meal photos to help log what you ate.",
-        "NSCameraUsageDescription": "Active City Pass uses your camera to take a profile photo and to photograph meals so you can log what you ate.",
+        "NSPhotoLibraryUsageDescription": "Lana Health needs access to your photo library so you can upload a profile picture and choose meal photos to help log what you ate.",
+        "NSCameraUsageDescription": "Lana Health uses your camera to take a profile photo and to photograph meals so you can log what you ate.",
         "CFBundleURLTypes": [
           {
             "CFBundleURLSchemes": [
@@ -37,8 +37,17 @@
     },
     "android": {
       "package": "com.activecitypass.app",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "category": ["BROWSABLE", "DEFAULT"],
+          "data": [
+            { "scheme": "com.googleusercontent.apps.663151808102-87vm95r2fa0rk84os1qimav5mku7ah2a" }
+          ]
+        }
+      ],
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#ffffff",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -57,12 +66,12 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
+          "image": "./assets/images/lana-wordmark.png",
+          "imageWidth": 300,
           "resizeMode": "contain",
-          "backgroundColor": "#050040",
+          "backgroundColor": "#ffffff",
           "dark": {
-            "backgroundColor": "#000000"
+            "backgroundColor": "#ffffff"
           }
         }
       ],
@@ -72,8 +81,8 @@
       [
         "@kingstinct/react-native-healthkit",
         {
-          "NSHealthShareUsageDescription": "Active City Pass reads your steps, active and resting energy, heart rate, workouts, and body measurements (weight, height, body fat, waist) from Apple Health to show them in your Analytics page.",
-          "NSHealthUpdateUsageDescription": "Active City Pass does not write data to Apple Health.",
+          "NSHealthShareUsageDescription": "Lana Health reads your steps, active and resting energy, heart rate, workouts, and body measurements (weight, height, body fat, waist) from Apple Health to show them in your Analytics page.",
+          "NSHealthUpdateUsageDescription": "Lana Health does not write data to Apple Health.",
           "background": false
         }
       ],
@@ -81,8 +90,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Active City Pass lets you choose a meal photo to help log what you ate. The photo is analysed once and not stored.",
-          "cameraPermission": "Active City Pass lets you photograph a meal to help log what you ate. The photo is analysed once and not stored."
+          "photosPermission": "Lana Health lets you choose a meal photo to help log what you ate. The photo is analysed once and not stored.",
+          "cameraPermission": "Lana Health lets you photograph a meal to help log what you ate. The photo is analysed once and not stored."
         }
       ],
       [

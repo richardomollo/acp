@@ -21,25 +21,25 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     .eq(col, id)
     .single();
 
-  if (!programme) return { title: "Programme | Active CityPass" };
+  if (!programme) return { title: "Programme | Lana Health" };
 
   const gym = Array.isArray(programme.gyms) ? programme.gyms[0] : (programme.gyms as any);
-  const title = `${programme.title} — ${programme.programme_weeks}-Week Programme at ${gym?.name ?? "Active CityPass"}`;
+  const title = `${programme.title} — ${programme.programme_weeks}-Week Programme at ${gym?.name ?? "Lana Health"}`;
   const description = programme.description ??
     `Join ${programme.title}, a ${programme.programme_weeks}-week programme at ${gym?.name ?? "this venue"}. From KES ${Number(programme.programme_price_kes).toLocaleString()}.`;
 
   return {
-    title: `${title} | Active CityPass`,
+    title: `${title} | Lana Health`,
     description,
     openGraph: {
-      title: `${title} | Active CityPass`,
+      title: `${title} | Lana Health`,
       description,
       url: `https://activecitypass.com/gym-programmes/${id}`,
       ...(programme.image_url ? { images: [{ url: programme.image_url, width: 1200, height: 630, alt: title }] } : {}),
     },
     twitter: {
       card: "summary_large_image",
-      title: `${title} | Active CityPass`,
+      title: `${title} | Lana Health`,
       description,
       ...(programme.image_url ? { images: [programme.image_url] } : {}),
     },

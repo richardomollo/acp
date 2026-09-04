@@ -141,7 +141,7 @@ export function GlobalAuthModal() {
               <>
                 <View style={styles.logoRow}>
                   <Image source={require('@/assets/images/icon.png')} style={styles.logoIcon} resizeMode="contain" />
-                  <ThemedText style={styles.logoText}>Active CityPass</ThemedText>
+                  <ThemedText style={styles.logoText}>Lana Health</ThemedText>
                 </View>
                 <ThemedText style={styles.headline}>Create your account</ThemedText>
                 <ThemedText style={styles.subheadline}>Access gyms, studios & wellness across Nairobi</ThemedText>

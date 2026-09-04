@@ -285,7 +285,7 @@ export default function NutritionHubScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <ThemedText style={s.createCtaTitle}>Recent nutrition</ThemedText>
-              <ThemedText style={s.createCtaSub}>Your last 7–14 logged days and what ACP has observed</ThemedText>
+              <ThemedText style={s.createCtaSub}>Your last 7–14 logged days and what Lana has noticed</ThemedText>
             </View>
             <Ionicons name="chevron-forward" size={18} color={palette.gray300} />
           </TouchableOpacity>

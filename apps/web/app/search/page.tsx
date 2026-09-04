@@ -9,7 +9,7 @@ type Props = {
 
 export async function generateMetadata({ searchParams }: Props): Promise<import("next").Metadata> {
   const { q } = await searchParams;
-  return { title: q ? `Search: ${q} | Active CityPass` : "Search | Active CityPass" };
+  return { title: q ? `Search: ${q} | Lana Health` : "Search | Lana Health" };
 }
 
 function ResultRow({

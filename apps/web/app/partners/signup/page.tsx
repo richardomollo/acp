@@ -32,7 +32,7 @@ const BENEFITS = [
       </svg>
     ),
     title: "Reach New Clients",
-    body: "Tap into thousands of active, health-conscious Nairobians searching for their next session, PT, class, or experience. Most Active CityPass users are first-time visitors to the partners they book.",
+    body: "Tap into thousands of active, health-conscious Nairobians searching for their next session, PT, class, or experience. Most Lana Health users are first-time visitors to the partners they book.",
   },
   {
     icon: (
@@ -84,7 +84,7 @@ const BENEFITS = [
       </svg>
     ),
     title: "Build Lasting Relationships",
-    body: "Convert Active CityPass visitors into long-term clients. Whether you run a studio, coach one-on-one, or host experiences — our platform helps you showcase what makes you different.",
+    body: "Convert Lana Health visitors into long-term clients. Whether you run a studio, coach one-on-one, or host experiences — our platform helps you showcase what makes you different.",
   },
 ];
 
@@ -92,7 +92,7 @@ const STEPS = [
   { n: "01", title: "Apply Online", body: "Tell us about yourself — your name, location, what you offer, and who it's for. Takes about 5 minutes." },
   { n: "02", title: "Get Approved", body: "Our team reviews your profile within 24–48 hours and works with you to agree your commission rate." },
   { n: "03", title: "List What You Offer", body: "Add group classes, PT sessions, coaching slots, open access hours, or one-off experiences — on your own schedule." },
-  { n: "04", title: "Start Earning", body: "Clients book through Active CityPass. You get paid per confirmed visit — no long-term contracts, no lock-in." },
+  { n: "04", title: "Start Earning", body: "Clients book through Lana Health. You get paid per confirmed visit — no long-term contracts, no lock-in." },
 ];
 
 const TESTIMONIALS = [
@@ -107,7 +107,7 @@ const TESTIMONIALS = [
     role: "Studio Manager, Zen Flow Yoga — Karen",
   },
   {
-    quote: "Our Saturday slots used to run at 60% capacity. Now they're routinely full. Active CityPass members are exactly our target demographic.",
+    quote: "Our Saturday slots used to run at 60% capacity. Now they're routinely full. Lana Health members are exactly our target demographic.",
     name: "David Ouma",
     role: "Director, AquaFit Nairobi — Kilimani",
   },
@@ -115,16 +115,16 @@ const TESTIMONIALS = [
 
 const FAQS = [
   {
-    q: "Who can partner with Active CityPass?",
+    q: "Who can partner with Lana Health?",
     a: "Anyone offering sports, fitness, or wellness services in Nairobi. That includes gyms, yoga and pilates studios, swimming pools, spas, dance studios, martial arts gyms, climbing walls, kids' activity centres — and individual personal trainers, coaches, and fitness experience providers. If you help people move and feel better, you're a fit.",
   },
   {
     q: "How does payment work?",
-    a: "Clients pay Active CityPass at the time of booking. We pay you per confirmed visit at your agreed rate. Payouts are processed monthly, directly to your M-Pesa or bank account.",
+    a: "Clients pay Lana Health at the time of booking. We pay you per confirmed visit at your agreed rate. Payouts are processed monthly, directly to your M-Pesa or bank account.",
   },
   {
     q: "Will this affect my existing clients?",
-    a: "No. You control exactly what you list — specific sessions, time slots, or experiences. Active CityPass only fills availability you've already made available, so your existing clients and regulars are never displaced.",
+    a: "No. You control exactly what you list — specific sessions, time slots, or experiences. Lana Health only fills availability you've already made available, so your existing clients and regulars are never displaced.",
   },
   {
     q: "I'm a personal trainer — can I list my PT sessions?",
@@ -184,7 +184,7 @@ export default function PartnersLandingPage() {
                Grow Your Fitness Business. Fill More Sessions. Pay Only When You Earn.
               </h1>
               <p className="text-lg text-gray-500 mb-8 leading-relaxed max-w-2xl">
-               Join Active CityPass to reach thousands of active Nairobians, fill empty slots, and let us handle discovery, bookings, payments, and support—so you can focus on coaching and delivering exceptional fitness experiences.
+               Join Lana Health to reach thousands of active Nairobians, fill empty slots, and let us handle discovery, bookings, payments, and support—so you can focus on coaching and delivering exceptional fitness experiences.
               </p>
               <div className="flex flex-wrap gap-3 justify-center">
                 <Link href="/partner-signup"
@@ -255,7 +255,7 @@ export default function PartnersLandingPage() {
             Everything you need to grow
           </h2>
           <p className="text-gray-500 max-w-xl mx-auto">
-            Active CityPass handles discovery, payments, and customer support — so you can focus on delivering great sessions, classes, and experiences.
+            Lana Health handles discovery, payments, and customer support — so you can focus on delivering great sessions, classes, and experiences.
           </p>
         </div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -342,7 +342,7 @@ export default function PartnersLandingPage() {
             Ready to grow with us?
           </h2>
           <p className="text-gray-500 mb-8 leading-relaxed">
-            Join gyms, personal trainers, coaches, studios, and wellness venues already growing on Active CityPass.
+            Join gyms, personal trainers, coaches, studios, and wellness venues already growing on Lana Health.
             Application is free and takes 5 minutes.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">

@@ -100,7 +100,7 @@ export default function PTOnboardingPending() {
       <View style={styles.content}>
         {/* Logo */}
         <View style={styles.logoContainer}>
-          <ThemedText style={styles.logo}>A.CityPass</ThemedText>
+          <ThemedText style={styles.logo}>Lana Health</ThemedText>
           <View style={styles.badge}>
             <ThemedText style={styles.badgeText}>Trainers</ThemedText>
           </View>

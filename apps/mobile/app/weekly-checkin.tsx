@@ -91,7 +91,7 @@ export default function WeeklyCheckInScreen() {
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
             <ThemedText style={s.headerTitle}>Weekly Check-In</ThemedText>
-            <ThemedText style={s.headerSub}>ACP Intelligence™</ThemedText>
+            <ThemedText style={s.headerSub}>Lana</ThemedText>
           </View>
         </SafeAreaView>
 

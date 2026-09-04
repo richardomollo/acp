@@ -22,7 +22,7 @@ export default function PartnerHeader() {
 
           {/* Logo + badge */}
           <Link href="/partners/signup" className="flex items-center gap-2 flex-shrink-0">
-            <img src="/images/logo-white.png" alt="Active CityPass" className="h-8 w-auto" />
+            <img src="/images/logo-white.png" alt="Lana Health" className="h-8 w-auto" />
             <span className="hidden sm:inline-block text-xs font-medium text-white/40 border border-white/20 rounded px-1.5 py-0.5">
               for Partners
             </span>

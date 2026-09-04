@@ -504,7 +504,7 @@ export default function NextWeekPlanScreen() {
               {preparing ? (
                 <View style={styles.generatingBanner}>
                   <ActivityIndicator size="small" color={palette.ink700} />
-                  <ThemedText style={styles.generatingText}>Preparing next week, powered by ACP Intelligence™</ThemedText>
+                  <ThemedText style={styles.generatingText}>Lana is preparing next week</ThemedText>
                 </View>
               ) : (
                 <TouchableOpacity style={styles.primaryBtn} onPress={handlePrepareNextWeek} activeOpacity={0.85}>
