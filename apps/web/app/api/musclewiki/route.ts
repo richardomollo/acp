@@ -17,6 +17,28 @@ import { NextRequest, NextResponse } from "next/server";
 const BASE = "https://api.musclewiki.com";
 const REQUEST_TIMEOUT_MS = 8000;
 
+// Beta #017 — MuscleWiki was returning HTTP 429 (upstream rate-limit on the
+// API key) on the real device path, so EVERY workout generation fell through
+// to the client's Tier-5 fallback. The exercise catalogue is effectively
+// static, and one generation fans out to ~20+ upstream calls (3 tiers ×
+// ~8 requirements) — multiplied across users. A short-TTL in-memory cache
+// (per warm lambda) + a CDN s-maxage header collapse that to a trickle.
+// Cache only SUCCESSFUL responses; errors (incl. 429) are never cached so
+// recovery is immediate.
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h — catalogue data, not user data
+const cache = new Map<string, { at: number; body: unknown }>();
+function cacheGet(key: string): unknown | undefined {
+  const hit = cache.get(key);
+  if (!hit) return undefined;
+  if (Date.now() - hit.at > CACHE_TTL_MS) { cache.delete(key); return undefined; }
+  return hit.body;
+}
+function cacheSet(key: string, body: unknown) {
+  if (cache.size > 500) cache.clear(); // crude bound — this is a best-effort warm-lambda cache
+  cache.set(key, { at: Date.now(), body });
+}
+const CDN_CACHE_HEADER = { "Cache-Control": "public, s-maxage=21600, stale-while-revalidate=86400" };
+
 export async function GET(req: NextRequest) {
   const apiKey = process.env.MUSCLEWIKI_API_KEY;
   if (!apiKey) {
@@ -35,6 +57,12 @@ export async function GET(req: NextRequest) {
     if (v) upstream.set(key, v);
   }
   const qs = upstream.toString();
+
+  const cacheKey = `${path}?${qs}`;
+  const cached = cacheGet(cacheKey);
+  if (cached !== undefined) {
+    return NextResponse.json(cached, { headers: { ...CDN_CACHE_HEADER, "X-MW-Cache": "hit" } });
+  }
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -62,7 +90,8 @@ export async function GET(req: NextRequest) {
 
   try {
     const data = await res.json();
-    return NextResponse.json(data);
+    cacheSet(cacheKey, data); // only successful, well-formed responses are cached
+    return NextResponse.json(data, { headers: { ...CDN_CACHE_HEADER, "X-MW-Cache": "miss" } });
   } catch (e) {
     console.error("MuscleWiki proxy malformed response", e);
     return NextResponse.json({ error: "MuscleWiki returned a malformed response" }, { status: 502 });

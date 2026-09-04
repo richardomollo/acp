@@ -58,15 +58,18 @@ describe('selectExerciseForRequirement', () => {
     globalThis.fetch = mockSearchResponse([]);
     const result = await selectExerciseForRequirement(requirement({ bodyPart: 'legs-t4', muscleHint: 'no-match-t4' }), 'home', 'beginner', new Set());
     assert.equal(result.fallbackUsed, true);
-    assert.equal(result.exercise.id, 'fallback-squat');
-    assert.equal(result.exercise.equipment, 'bodyweight');
+    // Beta #017 — the curated fallback id is `fallback-<pattern>-<slug>`.
+    assert.ok(result.exercise.id.startsWith('fallback-squat'), result.exercise.id);
+    assert.equal(result.exercise.provider, 'acp');
+    assert.equal(result.exercise.equipment, 'bodyweight'); // home context → bodyweight movement
   });
 
   test('never throws when the provider errors — falls back instead', async () => {
     globalThis.fetch = (async () => { throw new Error('network down'); }) as any;
     const result = await selectExerciseForRequirement(requirement({ bodyPart: 'chest-t5', pattern: 'horizontal_push', muscleHint: 'no-match-t5' }), 'home', 'beginner', new Set());
     assert.equal(result.fallbackUsed, true);
-    assert.equal(result.exercise.id, 'fallback-horizontal_push');
+    assert.ok(result.exercise.id.startsWith('fallback-horizontal_push'), result.exercise.id);
+    assert.equal(result.exercise.provider, 'acp');
   });
 
   test('sets/reps/rest come from the requirement role, not the exercise itself', async () => {

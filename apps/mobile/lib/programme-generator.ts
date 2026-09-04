@@ -368,6 +368,22 @@ export function fitStrengthSession(
     requirements = requirements.slice(0, -1);
     estimate = estimateForReqs(requirements, experience);
   }
+
+  // Beta #016 — requirement-layer guard: no two requirements identical on
+  // (pattern, role, muscleHint, bodyPart) — they would resolve to the same
+  // exercise. Distinct-hint repeats of a pattern are still allowed (they
+  // resolve to different exercises); the selection layer holds the hard
+  // intra-session uniqueness invariant when the provider can't deliver
+  // enough distinct candidates.
+  const seenReq = new Set<string>();
+  requirements = requirements.filter(r => {
+    const k = `${r.pattern}|${r.role}|${r.muscleHint ?? ''}|${r.bodyPart}`;
+    if (seenReq.has(k)) return false;
+    seenReq.add(k);
+    return true;
+  });
+  estimate = estimateForReqs(requirements, experience);
+
   const durationMinutes = ceiling != null ? Math.min(estimate, ceiling) : estimate;
   return { requirements, durationMinutes };
 }
@@ -563,9 +579,27 @@ function growSupportToWindow(base: ExerciseRequirement[], ceilingMinutes: number
  * fitted under the prescribed ceiling. `seed` (Beta #014) picks the
  * full-body A/B variant.
  */
+// Beta #016 §8 — a canonical title can call for a conditioning tail
+// ("…plus short conditioning", "strength + finisher", "metcon"). ACP has NO
+// canonical representation of a conditioning block (no cardio/interval
+// movement pattern in the strength requirement model) — documented gap. The
+// only safe thing this flag does today is stop #015B from PADDING the
+// strength portion with extra accessory movements to backfill the minutes
+// the plan intended for conditioning; the UI then shows the honest (shorter)
+// strength estimate rather than a squat/core session masquerading as
+// "strength + conditioning". Building a conditioning engine is out of scope.
+const CONDITIONING_RE = /\b(conditioning|metcon|finisher|circuit|interval|amrap|emom|wod)\b/i;
+export function titleImpliesConditioning(title?: string | null, description?: string | null): boolean {
+  return CONDITIONING_RE.test(`${title ?? ''} ${description ?? ''}`);
+}
+
 export function fitStrengthSessionForStructure(
   structure: StrengthStructure, experience: ExerciseDifficulty, ceilingMinutes?: number | null,
   seed?: string | number | null,
+  // Beta #016 §8 — when the canonical activity calls for a conditioning tail
+  // ACP can't model, don't let #015B pad the strength portion to fill the
+  // whole window with accessory strength work.
+  opts?: { skipPrimaryFill?: boolean },
 ): { requirements: ExerciseRequirement[]; durationMinutes: number; structure: StrengthStructure } {
   const volumeExperience: ExerciseDifficulty = structure === 'support' ? 'beginner' : experience;
   let base = strengthRequirementBase(structure, seed);
@@ -573,7 +607,7 @@ export function fitStrengthSessionForStructure(
   // Beta #015B — a PRIMARY session grows structure-appropriate volume toward
   // its canonical window (support is exempt — #015). #013's advanced floor
   // is now actually delivered by the generated content, not just the label.
-  const fillStructure = structure === 'support' ? undefined : structure;
+  const fillStructure = structure === 'support' || opts?.skipPrimaryFill ? undefined : structure;
   const fitted = fitStrengthSession(base, volumeExperience, ceilingMinutes, fillStructure);
   return { ...fitted, structure };
 }
