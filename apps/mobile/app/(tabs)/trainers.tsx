@@ -10,6 +10,8 @@ import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { palette, radii, fontSize } from '@/constants/theme';
 import { SearchTrigger, SearchModal, SearchResultRow, SearchEmpty } from '@/components/search-trigger-modal';
+import { useMarketplaceLocation } from '@/contexts/marketplace-location-context';
+import { MarketplaceGate, ExploringBanner } from '@/components/marketplace/marketplace-gate';
 
 type PT = {
   id: string;
@@ -45,14 +47,51 @@ export default function TrainersScreen() {
     filter && SPECIALISATION_FILTERS.includes(filter) ? filter : 'All',
   );
 
-  useEffect(() => { load(); }, []);
+  // Beta #019 — trainers are marketplace supply. In-person coaches obey
+  // geography (a nearby venue link or offering); online offerings are shown
+  // regardless of location. Never recommend a Nairobi in-person PT to Amsterdam.
+  // `venueScopeIds`: string[] → scope; null → kill switch off, fetch as before.
+  const ml = useMarketplaceLocation();
+  const scopeIds = ml.venueScopeIds;
+  const scopeKey = scopeIds === null ? 'all' : scopeIds.join(',');
+
+  useEffect(() => { ml.ensureResolved({ requestPermission: true }); }, [ml]);
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeKey]);
 
   const load = async () => {
-    const { data: pts } = await supabase
+    if (scopeIds !== null && scopeIds.length === 0) {
+      setTrainers([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+
+    let ptFilterIds: string[] | null = null; // null → no PT-id filter (kill switch off)
+    if (scopeIds !== null) {
+      // PT ids that resolve to a nearby venue (venue link OR an offering at a
+      // nearby gym) OR that offer an online service.
+      const [{ data: links }, { data: geoOfferings }, { data: onlineOfferings }] = await Promise.all([
+        supabase.from('pt_venue_links').select('pt_id').in('gym_id', scopeIds),
+        supabase.from('pt_offerings').select('pt_id').eq('is_active', true).eq('is_draft', false).in('gym_id', scopeIds),
+        supabase.from('pt_offerings').select('pt_id').eq('is_active', true).eq('is_draft', false).eq('type', 'online'),
+      ]);
+      ptFilterIds = Array.from(new Set<string>([
+        ...(((links as any[]) ?? []).map(l => l.pt_id)),
+        ...(((geoOfferings as any[]) ?? []).map(o => o.pt_id)),
+        ...(((onlineOfferings as any[]) ?? []).map(o => o.pt_id)),
+      ])).filter(Boolean);
+      if (ptFilterIds.length === 0) { setTrainers([]); setLoading(false); return; }
+    }
+
+    let ptQ = supabase
       .from('personal_trainers')
       .select('id, full_name, professional_name, photo_url, bio, specialisations, training_locations, session_types, service_areas, years_of_experience, is_certified_verified')
-      .eq('status', 'approved')
-      .order('created_at', { ascending: false });
+      .eq('status', 'approved');
+    if (ptFilterIds !== null) ptQ = ptQ.in('id', ptFilterIds);
+    const { data: pts } = await ptQ.order('created_at', { ascending: false });
 
     if (!pts) { setLoading(false); return; }
 
@@ -148,6 +187,8 @@ export default function TrainersScreen() {
       </ScrollView>
 
       {/* List */}
+      <View style={{ paddingHorizontal: 20 }}><ExploringBanner /></View>
+      <MarketplaceGate supplyNoun="in-person or online trainers">
       {loading ? (
         <View style={styles.loading}>
           <ActivityIndicator size="large" color={palette.blue500} />
@@ -244,6 +285,7 @@ export default function TrainersScreen() {
           <View style={{ height: 24 }} />
         </ScrollView>
       )}
+      </MarketplaceGate>
 
       <SearchModal
         visible={searchVisible}

@@ -56,3 +56,14 @@ export function isNutritionAdviceEffectivenessEnabled(): boolean {
 export function isNutritionOutcomeIntelligenceEnabled(): boolean {
   return process.env.EXPO_PUBLIC_ACP_OUTCOME_INTELLIGENCE_ENABLED !== 'false';
 }
+
+// Beta Feedback #019 — geographic gating of marketplace supply. Off only when
+// exactly "false". This is a cross-cutting change (Discover, category screens,
+// Home marketplace modules, plan fulfilment, professional support), so it
+// carries a kill switch: when off, every marketplace surface reverts to the
+// pre-#019 behaviour (no location resolution, no geo-scoped queries, no
+// unsupported-market state) while all non-marketplace features are unaffected
+// either way. Location is still never requested at startup.
+export function isMarketplaceGeoGatingEnabled(): boolean {
+  return process.env.EXPO_PUBLIC_LANA_MARKETPLACE_GEO_GATING_ENABLED !== 'false';
+}

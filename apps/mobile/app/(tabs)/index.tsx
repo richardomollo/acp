@@ -27,6 +27,7 @@ import {
 } from '@/lib/nutrition-matching';
 import { getFulfilmentForActivity, nextDateForWeekday, type PlanActivityFulfilment, type MarketplaceInventoryItem, type MarketplaceMatch } from '@/lib/fulfilment';
 import { ActivityFulfilmentCard, GymAccessList } from '@/components/activity-fulfilment-card';
+import { useMarketplaceLocation } from '@/contexts/marketplace-location-context';
 import { ExerciseMedia } from '@/components/exercise-media';
 import {
   getCompletionProgress, findStravaCandidates, findExerciseDbCandidates, findAcpBookingCandidates, findHealthKitCandidates,
@@ -493,6 +494,25 @@ const HOME_TOUR: TourStep[] = [
 export default function HomeScreen() {
   const router = useRouter();
   const { visible: tourVisible, dismiss: dismissTour } = useTour('home');
+  // Beta #019 — Home's marketplace modules ("Need a gym?", "Do it with Lana"
+  // matches) only appear when Lana has bookable supply where the user is. This
+  // never prompts for GPS (§12) — Home is a fitness/nutrition surface. If the
+  // user already granted location on Discover it resolves; otherwise the
+  // marketplace modules are simply absent and everything else is unchanged.
+  const marketLoc = useMarketplaceLocation();
+  const marketAvailable = marketLoc.availability?.status === 'available';
+  const marketLocRef = useRef(marketLoc);
+  marketLocRef.current = marketLoc;
+  /** Predicate for "keep this marketplace row?" — read inside data-loading
+   *  effects. Kill switch off → always true (pre-#019). Lana available here →
+   *  membership in the in-radius venue set. Otherwise → always false. */
+  const marketVenueFilter = (): ((gymId: string | null | undefined) => boolean) => {
+    const m = marketLocRef.current;
+    if (!m.geoGatingEnabled) return () => true;
+    if (m.availability?.status !== 'available') return () => false;
+    const allow = new Set(m.venueIdsInRadius);
+    return (gymId) => !!gymId && allow.has(gymId);
+  };
   const [isGuest, setIsGuest] = useState(true);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
@@ -556,6 +576,19 @@ export default function HomeScreen() {
   const [homeScheduledNext, setHomeScheduledNext] = useState<ScheduledNextPlan | null>(null);
   const [upcomingFulfilment, setUpcomingFulfilment] = useState<PlanActivityFulfilment | null>(null);
   const [showIntelligenceInfo, setShowIntelligenceInfo] = useState(false);
+
+  // Beta #019 — resolve marketplace availability in the background (no GPS
+  // prompt), and strip marketplace matches from the plan-fulfilment cards
+  // when Lana has no bookable supply where the user is. Self-directed
+  // workouts, nutrition and coaching content are untouched.
+  useEffect(() => { marketLoc.ensureResolved({ requestPermission: false }); }, [marketLoc]);
+  const gateFulfilment = useCallback(
+    (f: PlanActivityFulfilment | null): PlanActivityFulfilment | null =>
+      f && !marketAvailable ? { ...f, marketplaceMatches: [] } : f,
+    [marketAvailable],
+  );
+  const todayFulfilmentGated = gateFulfilment(todayFulfilment);
+  const upcomingFulfilmentGated = gateFulfilment(upcomingFulfilment);
   const [experiences, setExperiences] = useState<Experience[]>([]);
   const [loading, setLoading] = useState(true);
   const calSelected = new Date().toISOString().split('T')[0];
@@ -1038,10 +1071,10 @@ export default function HomeScreen() {
           const twoDaysAgoIso = new Date(today.getTime() - 2 * 86400000).toISOString();
           const [sessionsRes, experiencesRes, stravaStatus, stravaActivitiesRes, healthWorkoutsRes, workoutHistoryRes, checkedInBookingsRes, checkedInExperiencesRes] = await Promise.all([
             supabase.from('sessions')
-              .select('id, name, category, date, time, duration_minutes, is_active, spots_left, image_url, drop_in_price, gyms(name)')
+              .select('id, gym_id, name, category, date, time, duration_minutes, is_active, spots_left, image_url, drop_in_price, gyms(name)')
               .eq('date', todayIso).eq('is_active', true),
             supabase.from('experiences')
-              .select('id, name, category, date, start_time, price_kes, is_active, spots_left, image_url, gyms(name)')
+              .select('id, gym_id, name, category, date, start_time, price_kes, is_active, spots_left, image_url, gyms(name)')
               .eq('date', todayIso).eq('is_active', true),
             getStravaStatus(),
             // Existing signals from things the user already did — synced
@@ -1070,14 +1103,17 @@ export default function HomeScreen() {
               .eq('user_id', userId).eq('status', 'checked_in').gte('updated_at', twoDaysAgoIso),
           ]);
           if (cancelled) return;
+          // Beta #019 — geo-scope: only venues with valid active+bookable
+          // supply within radius; nothing when Lana isn't available here.
+          const _keep = marketVenueFilter(); // Beta #019 — geo-scope
           const inventory: MarketplaceInventoryItem[] = [
-            ...((sessionsRes?.data ?? []) as any[]).map(s => ({
+            ...((sessionsRes?.data ?? []) as any[]).filter(s => _keep(s.gym_id)).map(s => ({
               id: s.id, type: 'session' as const, name: s.name, category: s.category ?? null,
               date: s.date ?? null, startTime: s.time ?? null, durationMinutes: s.duration_minutes ?? null,
               gymName: s.gyms?.name ?? null, isActive: !!s.is_active, spotsLeft: s.spots_left ?? null,
               imageUrl: s.image_url ?? null, priceKes: s.drop_in_price ?? null,
             })),
-            ...((experiencesRes?.data ?? []) as any[]).map(e => ({
+            ...((experiencesRes?.data ?? []) as any[]).filter(e => _keep(e.gym_id)).map(e => ({
               id: e.id, type: 'experience' as const, name: e.name, category: e.category ?? null,
               date: e.date ?? null, startTime: e.start_time ?? null, durationMinutes: null,
               gymName: e.gyms?.name ?? null, isActive: !!e.is_active, spotsLeft: e.spots_left ?? null,
@@ -1222,22 +1258,23 @@ export default function HomeScreen() {
     (async () => {
       const [sessionsRes, experiencesRes, stravaStatusRes] = await Promise.all([
         supabase.from('sessions')
-          .select('id, name, category, date, time, duration_minutes, is_active, spots_left, image_url, drop_in_price, gyms(name)')
+          .select('id, gym_id, name, category, date, time, duration_minutes, is_active, spots_left, image_url, drop_in_price, gyms(name)')
           .eq('date', dateIso).eq('is_active', true),
         supabase.from('experiences')
-          .select('id, name, category, date, start_time, price_kes, is_active, spots_left, image_url, gyms(name)')
+          .select('id, gym_id, name, category, date, start_time, price_kes, is_active, spots_left, image_url, gyms(name)')
           .eq('date', dateIso).eq('is_active', true),
         getStravaStatus(),
       ]);
       if (cancelled) return;
+      const _keep = marketVenueFilter(); // Beta #019 — geo-scope
       const inventory: MarketplaceInventoryItem[] = [
-        ...((sessionsRes?.data ?? []) as any[]).map(sn => ({
+        ...((sessionsRes?.data ?? []) as any[]).filter(sn => _keep(sn.gym_id)).map(sn => ({
           id: sn.id, type: 'session' as const, name: sn.name, category: sn.category ?? null,
           date: sn.date ?? null, startTime: sn.time ?? null, durationMinutes: sn.duration_minutes ?? null,
           gymName: sn.gyms?.name ?? null, isActive: !!sn.is_active, spotsLeft: sn.spots_left ?? null,
           imageUrl: sn.image_url ?? null, priceKes: sn.drop_in_price ?? null,
         })),
-        ...((experiencesRes?.data ?? []) as any[]).map(e => ({
+        ...((experiencesRes?.data ?? []) as any[]).filter(e => _keep(e.gym_id)).map(e => ({
           id: e.id, type: 'experience' as const, name: e.name, category: e.category ?? null,
           date: e.date ?? null, startTime: e.start_time ?? null, durationMinutes: null,
           gymName: e.gyms?.name ?? null, isActive: !!e.is_active, spotsLeft: e.spots_left ?? null,
@@ -1251,7 +1288,7 @@ export default function HomeScreen() {
     })().catch(() => { if (!cancelled) setUpcomingFulfilment(null); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isGuest, userId, upcomingKey]);
+  }, [isGuest, userId, upcomingKey, marketLoc.availability?.status]);
 
   // Home Nutrition Integration — deterministic, never a second OpenAI call.
   // Only ever overrides the existing GENERAL/suggested meal path
@@ -1971,7 +2008,7 @@ export default function HomeScreen() {
                   <ActivityFulfilmentCard
                     userId={userId}
                     activity={primary}
-                    fulfilment={todayFulfilment ?? undefined}
+                    fulfilment={todayFulfilmentGated ?? undefined}
                     onInfoPress={() => setShowIntelligenceInfo(true)}
                     onDark={hasPlanMedia}
                     gymAccessSlot="detached"
@@ -2009,7 +2046,7 @@ export default function HomeScreen() {
               the Today's Plan (workout) card. Same <GymAccessList> the
               fulfilment card uses inline, so the two look identical.
               Navigation only — never marks the activity done. ─── */}
-        {!isGuest && homeIntelLoaded && todayGymAccess.length > 0 && (
+        {!isGuest && homeIntelLoaded && marketAvailable && todayGymAccess.length > 0 && (
           <View style={styles.section}>
             <View style={styles.mealsList}>
               <GymAccessList matches={todayGymAccess} />
@@ -2126,7 +2163,7 @@ export default function HomeScreen() {
                     <ActivityFulfilmentCard
                       userId={userId}
                       activity={next}
-                      fulfilment={upcomingFulfilment ?? undefined}
+                      fulfilment={upcomingFulfilmentGated ?? undefined}
                       onInfoPress={() => setShowIntelligenceInfo(true)}
                       onDark={hasUpNextMedia}
                       gymAccessSlot="detached"
@@ -2152,7 +2189,7 @@ export default function HomeScreen() {
 
         {/* ─── Up next · Need a gym? — the upcoming activity's gym-access
               matches, on white, below the video-backed card (never over it). ─── */}
-        {!isGuest && homeIntelLoaded && upNextGymAccess.length > 0 && (
+        {!isGuest && homeIntelLoaded && marketAvailable && upNextGymAccess.length > 0 && (
           <View style={styles.section}>
             <View style={styles.mealsList}>
               <GymAccessList matches={upNextGymAccess} />

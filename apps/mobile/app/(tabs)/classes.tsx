@@ -7,6 +7,8 @@ import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { SearchTrigger, SearchModal, SearchResultRow, SearchEmpty } from '@/components/search-trigger-modal';
 import { DateRail, buildDateRange } from '@/components/date-rail';
+import { useMarketplaceLocation } from '@/contexts/marketplace-location-context';
+import { MarketplaceGate, ExploringBanner } from '@/components/marketplace/marketplace-gate';
 
 const NEIGHBOURHOODS = [
   { label: 'Kilimani / Kileleshwa / Lavington',     keywords: ['kilimani', 'kileleshwa', 'lavington'] },
@@ -59,25 +61,61 @@ export default function ExploreScreen() {
   const [calSelected, setCalSelected] = useState(today.toISOString().split('T')[0]);
   const next21Days = useMemo(() => buildDateRange(21), []);
 
-  useEffect(() => { loadData(); }, []);
+  // Beta #019 — classes & PT offerings are marketplace supply; scope to venues
+  // within the supported radius. `venueScopeIds`: string[] → scope; null →
+  // kill switch off, fetch as pre-#019.
+  const ml = useMarketplaceLocation();
+  const scopeIds = ml.venueScopeIds;
+  const scopeKey = scopeIds === null ? 'all' : scopeIds.join(',');
+
+  useEffect(() => { ml.ensureResolved({ requestPermission: true }); }, [ml]);
+  useEffect(() => {
+    loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeKey]);
   useEffect(() => { if (initialCategory) setActiveCategory(initialCategory); }, [initialCategory]);
 
 
   const loadData = async () => {
+    if (scopeIds !== null && scopeIds.length === 0) {
+      setSessions([]);
+      setAllPtOfferings([]);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
+      const localPtIds = scopeIds !== null
+        ? Array.from(new Set(
+            (((await supabase.from('pt_venue_links').select('pt_id').in('gym_id', scopeIds)).data as any[]) ?? [])
+              .map(l => l.pt_id),
+          )).filter(Boolean)
+        : [];
+
+      let sessionsQ = supabase
+        .from('sessions')
+        .select('*, gyms(name, location, deposit_pct)')
+        .eq('is_active', true)
+        .gte('date', new Date().toISOString().split('T')[0]);
+      if (scopeIds !== null) sessionsQ = sessionsQ.in('gym_id', scopeIds);
+
+      let offeringsQ = supabase
+        .from('pt_offerings')
+        .select('id, title, type, duration_minutes, price_kes, image_url, gym_id, personal_trainers!inner(id, full_name, professional_name, photo_url, status)')
+        .eq('personal_trainers.status', 'approved')
+        .eq('is_active', true).eq('is_draft', false);
+      if (scopeIds !== null) {
+        // in-person offerings at a nearby venue, OR the trainer works a nearby
+        // venue, OR the offering is online (location-independent).
+        offeringsQ = offeringsQ.or(
+          `type.eq.online,gym_id.in.(${scopeIds.join(',')})` +
+          (localPtIds.length > 0 ? `,pt_id.in.(${localPtIds.join(',')})` : ''),
+        );
+      }
+
       const [{ data, error }, { data: ptData }] = await Promise.all([
-        supabase
-          .from('sessions')
-          .select('*, gyms(name, location, deposit_pct)')
-          .gte('date', new Date().toISOString().split('T')[0])
-          .order('date', { ascending: true }).order('time', { ascending: true }),
-        supabase
-          .from('pt_offerings')
-          .select('id, title, type, duration_minutes, price_kes, image_url, personal_trainers!inner(id, full_name, professional_name, photo_url, status)')
-          .eq('personal_trainers.status', 'approved')
-          .eq('is_active', true).eq('is_draft', false)
-          .order('created_at', { ascending: false }),
+        sessionsQ.order('date', { ascending: true }).order('time', { ascending: true }),
+        offeringsQ.order('created_at', { ascending: false }),
       ]);
       if (error) throw error;
       setSessions(data || []);
@@ -204,6 +242,8 @@ export default function ExploreScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
+        <View style={{ paddingHorizontal: 16, paddingTop: 8 }}><ExploringBanner /></View>
+        <MarketplaceGate supplyNoun="bookable classes or trainers">
         {/* Date strip: next 21 days */}
         <DateRail
           days={next21Days}
@@ -356,6 +396,7 @@ export default function ExploreScreen() {
             </TouchableOpacity>
           </View>
         )}
+        </MarketplaceGate>
 
         <View style={{ height: 40 }} />
       </ScrollView>

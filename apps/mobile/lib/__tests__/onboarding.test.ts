@@ -204,7 +204,7 @@ describe('buildPlanSummary', () => {
     assert.ok(approach.includes('Strength'));
     assert.ok(approach.includes('Cardio'));
     assert.ok(approach.includes('Nutrition'));
-    assert.ok(approach.includes('Community'));
+    assert.ok(approach.includes('Accountability')); // accountability barrier → Accountability (was 'Community', removed)
   });
 
   test('never surfaces the internal P1/P2-style support_style label as the focus line', () => {
@@ -297,8 +297,8 @@ describe('buildFallbackWeekPlan (no-AI fallback: basic first-week structure)', (
     assert.ok(plan.every(item => typeof item.day === 'string' && typeof item.label === 'string'));
   });
 
-  test('ignores approach areas with no day mapping (e.g. Nutrition, Community)', () => {
-    const plan = buildFallbackWeekPlan(['Nutrition', 'Community']);
+  test('ignores approach areas with no day mapping (e.g. Nutrition, Accountability)', () => {
+    const plan = buildFallbackWeekPlan(['Nutrition', 'Accountability']);
     assert.deepEqual(plan, []);
   });
 

@@ -6,7 +6,6 @@ import path from 'node:path';
 import { getSupplyCandidates } from '../orchestration.ts';
 import type { SessionCandidateRow } from '../session-candidates.ts';
 import type { ProviderCandidateRow } from '../provider-candidates.ts';
-import type { CommunityCandidateRow } from '../community-candidates.ts';
 import type { SupplyPlanActivityInput, SupplyUserContext } from '../types.ts';
 
 const ANCHOR = new Date('2026-09-02T09:00:00Z');
@@ -28,10 +27,6 @@ function sessionRow(overrides: Partial<SessionCandidateRow> = {}): SessionCandid
 function providerRow(overrides: Partial<ProviderCandidateRow> = {}): ProviderCandidateRow {
   return { id: 'p1', name: 'Coach', specialisations: [], status: 'approved', ...overrides };
 }
-function communityRow(overrides: Partial<CommunityCandidateRow> = {}): CommunityCandidateRow {
-  return { id: 'c1', name: 'Walking Club', category: 'walking', location: 'Nairobi', isActive: true, reviewStatus: 'approved', communityType: 'open', ...overrides };
-}
-
 describe('Test J — beginner confidence gets a soft advantage, never a hard requirement', () => {
   test('a beginner-labelled class outranks a non-beginner one for a beginner user, both otherwise equal', () => {
     const candidates = getSupplyCandidates({
@@ -70,21 +65,19 @@ describe('Scenario 6 — no matching supply', () => {
   });
 });
 
-describe('Integration — sessions + providers + communities combine into one ranked, diversified list', () => {
-  test('a strength plan with a relevant PT, session, and community all present returns a mixed-type result', () => {
+describe('Integration — sessions + providers combine into one ranked, diversified list', () => {
+  test('a strength plan with a relevant PT and session both present returns a mixed-type result', () => {
     const candidates = getSupplyCandidates({
       userContext: userContext({ goal: 'build_muscle', preferredActivities: ['gym'], barriers: ['accountability'] }),
       planActivity: planActivity(),
       sessionInventory: [sessionRow()],
       providers: [providerRow({ specialisations: ['Strength Training'] })],
-      communities: [communityRow({ category: 'strength' })],
       anchor: ANCHOR,
       overallCap: 6,
     });
     const types = new Set(candidates.map(c => c.type));
     assert.ok(types.has('session'));
     assert.ok(types.has('personal_trainer'));
-    assert.ok(types.has('community'));
   });
 });
 

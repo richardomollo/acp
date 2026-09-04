@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { Stack, useRouter } from "expo-router";
 import * as Linking from "expo-linking";
 import { AuthModalProvider } from "@/contexts/auth-modal-context";
+import { MarketplaceLocationProvider } from "@/contexts/marketplace-location-context";
 import { GlobalAuthModal } from "@/components/auth-modal";
 import { UpdateBanner } from "@/components/update-banner";
 import { supabase } from "@/lib/supabase";
@@ -61,17 +62,19 @@ export default Sentry.wrap(function Layout() {
 
   return (
     <AuthModalProvider>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="login" options={{ headerShown: false }} />
-        <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
-        <Stack.Screen name="reset-password" options={{ headerShown: false }} />
-        <Stack.Screen name="signup" options={{ headerShown: false }} />
-        <Stack.Screen name="membership-details" options={{ headerShown: false }} />
-        <Stack.Screen name="walkthrough" options={{ headerShown: false }} />
-      </Stack>
-      <GlobalAuthModal />
-      <UpdateBanner />
+      <MarketplaceLocationProvider>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen name="login" options={{ headerShown: false }} />
+          <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
+          <Stack.Screen name="reset-password" options={{ headerShown: false }} />
+          <Stack.Screen name="signup" options={{ headerShown: false }} />
+          <Stack.Screen name="membership-details" options={{ headerShown: false }} />
+          <Stack.Screen name="walkthrough" options={{ headerShown: false }} />
+        </Stack>
+        <GlobalAuthModal />
+        <UpdateBanner />
+      </MarketplaceLocationProvider>
     </AuthModalProvider>
   );
 });

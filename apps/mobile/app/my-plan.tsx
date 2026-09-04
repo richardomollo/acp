@@ -38,6 +38,7 @@ import { getSupplyCandidates } from '@/lib/supply/orchestration';
 import type { SessionCandidateRow } from '@/lib/supply/session-candidates';
 import type { ProviderCandidateRow } from '@/lib/supply/provider-candidates';
 import type { SupplyUserContext } from '@/lib/supply/types';
+import { useMarketplaceLocation } from '@/contexts/marketplace-location-context';
 import { ActivityFulfilmentCard } from '@/components/activity-fulfilment-card';
 import {
   isSundayPlanningWindow, localDateIso, getScheduledNextPlan, buildWeeklyBehaviourSummary,
@@ -52,7 +53,7 @@ const APPROACH_ICON: Record<string, string> = {
   Cardio: 'heart-outline',
   Movement: 'walk-outline',
   Nutrition: 'nutrition-outline',
-  Community: 'people-outline',
+  Accountability: 'people-outline',
   Consistency: 'repeat-outline',
 };
 
@@ -121,6 +122,28 @@ export default function MyPlanScreen() {
   const [foodSuggestions, setFoodSuggestions] = useState<FoodSuggestion[]>([]);
   const [cuisinePreference, setCuisinePreference] = useState<string | null>(null);
   const [preferredLocation, setPreferredLocation] = useState<string | null>(null);
+  // Beta #019 — marketplace supply for plan fulfilment is geographically
+  // constrained. `preferredLocation` (home|gym|both) is a TRAINING preference,
+  // never geography, so it no longer feeds SupplyUserContext.location; real
+  // coordinates do. Background-resolved (no GPS prompt on this screen).
+  const marketLoc = useMarketplaceLocation();
+  const marketLocRef = useRef(marketLoc);
+  marketLocRef.current = marketLoc;
+  useEffect(() => { marketLoc.ensureResolved({ requestPermission: false }); }, [marketLoc]);
+  const marketStatus = marketLoc.availability?.status ?? null;
+  // Scope a fetched session/experience inventory to venues with valid
+  // active+bookable supply within radius — [] when Lana isn't available here.
+  const scopeInventory = useCallback((rows: SessionCandidateRow[]): SessionCandidateRow[] => {
+    const m = marketLocRef.current;
+    if (!m.geoGatingEnabled) return rows;          // kill switch off → pre-#019
+    if (m.availability?.status !== 'available') return [];
+    const allow = new Set(m.venueIdsInRadius);
+    return rows.filter(r => r.gym?.id != null && allow.has(r.gym.id));
+  }, []);
+  const supplyLocationCtx = useCallback((): SupplyUserContext['location'] => {
+    const p = marketLocRef.current.point;
+    return p ? { latitude: p.latitude, longitude: p.longitude } : { text: null };
+  }, []);
   // Day 6 — already-computed longitudinal coaching evidence (see
   // lib/coaching-memory.ts). A plain read of the coaching_memory table;
   // this screen never aggregates history itself.
@@ -405,12 +428,12 @@ export default function MyPlanScreen() {
         const ctx: SupplyUserContext = {
           goal: onboardingAnswers.goal, experience: onboardingAnswers.strengthExperience,
           preferredActivities: onboardingAnswers.preferredActivities, barriers: onboardingAnswers.barriers,
-          location: { text: preferredLocation },
+          location: supplyLocationCtx(),
         };
         const anchor = new Date();
         setFulfilments(nextWeekPlan.assessment.starting_plan.activities.map((activity, i): PlanActivityFulfilment => {
           const key = normalizeActivity(activity.activity || activity.title, activity.category);
-          const candidates = getSupplyCandidates({ userContext: ctx, planActivity: activity, sessionInventory: inv, anchor, limitPerType: 2, overallCap: 2 });
+          const candidates = getSupplyCandidates({ userContext: ctx, planActivity: activity, sessionInventory: scopeInventory(inv), anchor, limitPerType: 2, overallCap: 2 });
           return {
             planActivityIndex: i,
             selfDirected: getSelfDirectedSource(key, stravaStatus.connected),
@@ -526,7 +549,7 @@ export default function MyPlanScreen() {
       const supplyUserContext: SupplyUserContext = {
         goal: onboardingAnswers.goal, experience: onboardingAnswers.strengthExperience,
         preferredActivities: onboardingAnswers.preferredActivities, barriers: onboardingAnswers.barriers,
-        location: { text: preferredLocation },
+        location: supplyLocationCtx(),
       };
 
       const anchor = new Date();
@@ -540,7 +563,7 @@ export default function MyPlanScreen() {
         assessment.starting_plan.activities.map((activity, i): PlanActivityFulfilment => {
           const key = normalizeActivity(activity.activity || activity.title, activity.category);
           const candidates = getSupplyCandidates({
-            userContext: supplyUserContext, planActivity: activity, sessionInventory, anchor,
+            userContext: supplyUserContext, planActivity: activity, sessionInventory: scopeInventory(sessionInventory), anchor,
             limitPerType: 2, overallCap: 2,
           });
           return {
@@ -638,7 +661,9 @@ export default function MyPlanScreen() {
     // Supabase fetch (including completion auto-matching) on every profile
     // field edit, a much larger behaviour change than Day 7.3 intends.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assessment, planId, userId, isNextView, nextWeekPlan]);
+    // marketStatus — re-derive fulfilment once marketplace availability
+    // resolves (so scoped inventory / real-coord ranking take effect).
+  }, [assessment, planId, userId, isNextView, nextWeekPlan, marketStatus]);
 
   // Day 5 — nutrition focus food suggestions. Only fetched when the current
   // plan actually has a nutrition_focus (i.e. a weekly-adaptation result) —
@@ -854,10 +879,35 @@ export default function MyPlanScreen() {
     try {
       const wantsPt = supportOpportunities.some(o => o.type === 'personal_trainer');
       const wantsNutrition = supportOpportunities.some(o => o.type === 'nutrition');
-      const { data } = await supabase
+
+      // Beta #019 — only recommend trainers reachable from here: linked to a
+      // nearby venue, offering at a nearby venue, or offering an online
+      // service. Never a Nairobi in-person PT to an Amsterdam user.
+      const m = marketLocRef.current;
+      let reachablePtIds: string[] | null = null; // null → no filter (kill switch off)
+      if (m.geoGatingEnabled) {
+        const nearbyIds = m.availability?.status === 'available' ? m.venueIdsInRadius : [];
+        const [{ data: ptLinks }, { data: ptGeoOff }, { data: ptOnlineOff }] = await Promise.all([
+          nearbyIds.length ? supabase.from('pt_venue_links').select('pt_id').in('gym_id', nearbyIds) : Promise.resolve({ data: [] as any[] }),
+          nearbyIds.length ? supabase.from('pt_offerings').select('pt_id').eq('is_active', true).eq('is_draft', false).in('gym_id', nearbyIds) : Promise.resolve({ data: [] as any[] }),
+          supabase.from('pt_offerings').select('pt_id').eq('is_active', true).eq('is_draft', false).eq('type', 'online'),
+        ]);
+        reachablePtIds = Array.from(new Set<string>([
+          ...(((ptLinks as any[]) ?? []).map(r => r.pt_id)),
+          ...(((ptGeoOff as any[]) ?? []).map(r => r.pt_id)),
+          ...(((ptOnlineOff as any[]) ?? []).map(r => r.pt_id)),
+        ])).filter(Boolean);
+      }
+
+      let ptQ = supabase
         .from('personal_trainers')
         .select('id, full_name, professional_name, specialisations, status')
         .eq('status', 'approved');
+      if (reachablePtIds !== null) {
+        if (reachablePtIds.length === 0) { setSupportMatches([]); setSupportLoading(false); return; }
+        ptQ = ptQ.in('id', reachablePtIds);
+      }
+      const { data } = await ptQ;
       interface RawProviderRow { id: string; full_name: string; professional_name: string | null; specialisations: string[] | null; status: string }
       const rawProviders = (data ?? []) as unknown as RawProviderRow[];
       const providers = rawProviders.map(p => ({
@@ -883,7 +933,7 @@ export default function MyPlanScreen() {
       const supplyUserContext: SupplyUserContext = {
         goal: onboardingAnswers.goal, experience: onboardingAnswers.strengthExperience,
         preferredActivities: onboardingAnswers.preferredActivities, barriers: onboardingAnswers.barriers,
-        location: { text: preferredLocation },
+        location: supplyLocationCtx(),
       };
       const orchestrated = getSupplyCandidates({
         userContext: supplyUserContext, supportOpportunities: assessment.support_opportunities,

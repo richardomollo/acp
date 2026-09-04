@@ -26,6 +26,36 @@ export function haversineKm(aLat: number, aLng: number, bLat: number, bLng: numb
 const NEAR_KM = 5;
 const FAR_KM = 20;
 
+/**
+ * Beta Feedback #019 — the ONE marketplace-coverage radius. A user's location
+ * has bookable marketplace supply only if geographically valid ACTIVE +
+ * BOOKABLE inventory exists within this many km. Aligned with FAR_KM (the
+ * existing "still location-relevant" band) so this fix introduces no second,
+ * conflicting distance semantic. Deliberately a single named constant — tune
+ * from real marketplace evidence, never scatter the number.
+ */
+export const MARKETPLACE_RADIUS_KM = 20;
+
+/**
+ * A lat/lng box that fully contains every point within `km` of the centre —
+ * a cheap, index-friendly pre-filter for a coordinate column before the exact
+ * Haversine test. Longitude degrees shrink with latitude; guarded so a box
+ * near the poles just widens to the full range rather than going NaN.
+ */
+export function boundingBoxKm(latitude: number, longitude: number, km: number): {
+  minLat: number; maxLat: number; minLng: number; maxLng: number;
+} {
+  const latDelta = km / 111.32; // ~km per degree of latitude
+  const cosLat = Math.cos((latitude * Math.PI) / 180);
+  const lngDelta = Math.abs(cosLat) < 1e-6 ? 180 : km / (111.32 * Math.abs(cosLat));
+  return {
+    minLat: latitude - latDelta,
+    maxLat: latitude + latDelta,
+    minLng: Math.max(-180, longitude - lngDelta),
+    maxLng: Math.min(180, longitude + lngDelta),
+  };
+}
+
 export interface LocationInput {
   text?: string | null;
   latitude?: number | null;

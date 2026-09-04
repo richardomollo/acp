@@ -15,6 +15,7 @@ import { getProgressSnapshot } from '@/services/progress-service';
 import { interpretProgress } from '@/lib/progress-interpreter';
 import type { ProgressSnapshot, ProgressInterpretation } from '@/lib/progress-types';
 import { getHumanSupportInsight, dismissHumanSupportInsight, type HumanSupportInsight } from '@/services/human-support-service';
+import { useMarketplaceLocation } from '@/contexts/marketplace-location-context';
 import { nutritionOutcomeIntelligenceService } from '@/services/nutrition-outcome-intelligence-service';
 import { NutritionWhatLanaIsLearning } from '@/components/nutrition/nutrition-what-lana-is-learning';
 import type { OutcomeObservation } from '@/lib/nutrition/nutrition-outcome-intelligence';
@@ -44,15 +45,6 @@ interface NutritionStats {
   mealsLogged: number;
   avgProtein: number;
   avgHydration: number;
-}
-
-interface CommunityActivityRow {
-  id: string;
-  check_in_time: string | null;
-  community_events: {
-    id: string; title: string; date: string; community_id: string;
-    communities: { name: string; logo_url: string | null } | null;
-  } | null;
 }
 
 interface ActivityRow {
@@ -221,10 +213,12 @@ export default function FitnessJourneyScreen() {
   const [measurements, setMeasurements] = useState<MeasurementRow[]>([]);
   const [goalTargetDate, setGoalTargetDate] = useState<string | null>(null);
   const [nutrition, setNutrition] = useState<NutritionStats>({ streak: 0, mealsLogged: 0, avgProtein: 0, avgHydration: 0 });
-  const [communityActivity, setCommunityActivity] = useState<CommunityActivityRow[]>([]);
   const [progressInsight, setProgressInsight] = useState<ProgressInterpretation | null>(null);
   const [progressSnapshot, setProgressSnapshot] = useState<ProgressSnapshot | null>(null);
   const [humanSupport, setHumanSupport] = useState<HumanSupportInsight | null>(null);
+  // Beta #019 — a specific bookable-trainer CTA only where Lana has supply.
+  const { availability: marketAvailability } = useMarketplaceLocation();
+  const marketAvailable = marketAvailability?.status === 'available';
   const [dismissingSupport, setDismissingSupport] = useState(false);
   const [outcomeObservations, setOutcomeObservations] = useState<OutcomeObservation[]>([]);
 
@@ -270,7 +264,7 @@ export default function FitnessJourneyScreen() {
 
       const [
         { data }, { data: profileData }, { data: measurementData }, { data: checkinData },
-        { data: mealLogsData }, { data: activitiesData }, { data: communityActivityData },
+        { data: mealLogsData }, { data: activitiesData },
       ] = await Promise.all([
         supabase
           .from('workout_history')
@@ -310,12 +304,6 @@ export default function FitnessJourneyScreen() {
           .eq('user_id', session.user.id)
           .order('start_time', { ascending: false })
           .limit(500),
-        supabase
-          .from('community_event_attendees')
-          .select('id, check_in_time, community_events(id, title, date, community_id, communities(name, logo_url))')
-          .eq('user_id', session.user.id).eq('checked_in', true)
-          .order('check_in_time', { ascending: false })
-          .limit(10),
       ]);
 
       if (active) setStartingWeight(profileData?.starting_weight_kg ?? null);
@@ -323,7 +311,6 @@ export default function FitnessJourneyScreen() {
       if (active) setInitialWeightKg(profileData?.initial_weight_kg ?? null);
       if (active) setGoalTargetDate(profileData?.goal_target_date ?? null);
       if (active) setMeasurements((measurementData as unknown as MeasurementRow[]) ?? []);
-      if (active) setCommunityActivity((communityActivityData as unknown as CommunityActivityRow[]) ?? []);
 
       if (active) {
         const logs = (mealLogsData as any[]) ?? [];
@@ -516,7 +503,19 @@ export default function FitnessJourneyScreen() {
                 <ThemedText style={s.supportHeadline}>{HUMAN_SUPPORT_HEADLINE[humanSupport.primary.trigger] ?? 'A trainer could help'}</ThemedText>
                 <ThemedText style={s.supportReason}>{humanSupport.primary.reason}</ThemedText>
 
-                {humanSupport.trainerOwned ? null : humanSupport.ptRecommendations[0] ? (
+                {humanSupport.trainerOwned ? null : !marketAvailable ? (
+                  // Beta #019 — no specific bookable trainer where Lana has no
+                  // supply; the advice above still stands. Route to the
+                  // (geo-gated) trainers browser rather than a Nairobi PT.
+                  <TouchableOpacity
+                    style={s.supportCta}
+                    onPress={() => router.push('/(tabs)/trainers' as any)}
+                    activeOpacity={0.85}
+                  >
+                    <ThemedText style={s.supportCtaText}>Explore trainers</ThemedText>
+                    <Ionicons name="arrow-forward" size={14} color="#fff" />
+                  </TouchableOpacity>
+                ) : humanSupport.ptRecommendations[0] ? (
                   <TouchableOpacity
                     style={s.supportCta}
                     onPress={() => router.push({ pathname: '/trainer-profile', params: { id: humanSupport.ptRecommendations[0].id } } as any)}
@@ -594,35 +593,6 @@ export default function FitnessJourneyScreen() {
                   </View>
                 </View>
               </View>
-            )}
-
-            {/* ── Community Activity ── */}
-            {communityActivity.length > 0 && (
-              <>
-                <ThemedText style={s.sectionTitle}>
-                  Community Activity · {communityActivity.filter(c => (c.check_in_time ?? '').slice(0, 7) === new Date().toISOString().slice(0, 7)).length} this month
-                </ThemedText>
-                {communityActivity.slice(0, 3).map(c => (
-                  <TouchableOpacity
-                    key={c.id}
-                    style={s.goalTeaserCard}
-                    activeOpacity={0.85}
-                    onPress={() => c.community_events?.community_id && router.push({ pathname: '/community/[id]', params: { id: c.community_events.community_id } } as any)}
-                  >
-                    <View style={s.goalTeaserIcon}>
-                      <Ionicons name="people-outline" size={20} color={palette.blue500} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <ThemedText style={s.goalTeaserTitle}>{c.community_events?.title ?? 'Community event'}</ThemedText>
-                      <ThemedText style={s.goalTeaserSub}>
-                        {c.community_events?.communities?.name ?? 'Community'}
-                        {c.community_events?.date ? ` · ${new Date(`${c.community_events.date}T00:00:00`).toLocaleDateString('en-KE', { day: 'numeric', month: 'short' })}` : ''}
-                      </ThemedText>
-                    </View>
-                    <Ionicons name="chevron-forward" size={16} color={palette.gray300} />
-                  </TouchableOpacity>
-                ))}
-              </>
             )}
 
             <View style={{ height: 100 }} />

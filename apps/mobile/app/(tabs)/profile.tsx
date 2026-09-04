@@ -271,14 +271,6 @@ export default function ProfileScreen() {
               <Ionicons name="chevron-forward" size={18} color={palette.gray200} />
             </TouchableOpacity>
             <View style={styles.menuDivider} />
-            <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/(tabs)/communities' as any)}>
-              <View style={styles.menuItemLeft}>
-                <Ionicons name="people-outline" size={20} color={palette.ink600} />
-                <ThemedText style={styles.menuText}>My Clubs</ThemedText>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={palette.gray200} />
-            </TouchableOpacity>
-            <View style={styles.menuDivider} />
             <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/my-trainers' as any)}>
               <View style={styles.menuItemLeft}>
                 <Ionicons name="person-circle-outline" size={20} color={palette.ink600} />

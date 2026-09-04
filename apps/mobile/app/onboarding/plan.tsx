@@ -15,7 +15,7 @@ const APPROACH_ICON: Record<string, string> = {
   Cardio: 'heart-outline',
   Movement: 'walk-outline',
   Nutrition: 'nutrition-outline',
-  Community: 'people-outline',
+  Accountability: 'people-outline',
   Consistency: 'repeat-outline',
 };
 

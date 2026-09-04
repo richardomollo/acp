@@ -7,6 +7,8 @@ import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { SearchTrigger, SearchModal, SearchResultRow, SearchEmpty } from '@/components/search-trigger-modal';
 import { DateRail, buildDateRange } from '@/components/date-rail';
+import { useMarketplaceLocation } from '@/contexts/marketplace-location-context';
+import { MarketplaceGate, ExploringBanner } from '@/components/marketplace/marketplace-gate';
 
 interface Experience {
   id: string; name: string; tagline: string | null;
@@ -29,15 +31,32 @@ export default function ExperiencesScreen() {
   const [calSelected, setCalSelected] = useState(new Date().toISOString().split('T')[0]);
   const next21Days = useMemo(() => buildDateRange(21), []);
 
-  useEffect(() => { loadData(); }, []);
+  // Beta #019 — experiences are marketplace supply; scope to nearby venues.
+  // `venueScopeIds`: string[] → scope; null → kill switch off, fetch as before.
+  const ml = useMarketplaceLocation();
+  const scopeIds = ml.venueScopeIds;
+  const scopeKey = scopeIds === null ? 'all' : scopeIds.join(',');
+
+  useEffect(() => { ml.ensureResolved({ requestPermission: true }); }, [ml]);
+  useEffect(() => {
+    loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeKey]);
 
   const loadData = async () => {
+    if (scopeIds !== null && scopeIds.length === 0) {
+      setExperiences([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-    const { data } = await supabase
+    let q = supabase
       .from('experiences')
       .select('id, name, tagline, date, start_time, end_time, price_kes, discount_kes, spots_left, max_capacity, image_url, category, gyms(name, location)')
-      .gte('date', new Date().toISOString().split('T')[0])
-      .order('date').order('start_time');
+      .eq('is_active', true)
+      .gte('date', new Date().toISOString().split('T')[0]);
+    if (scopeIds !== null) q = q.in('gym_id', scopeIds);
+    const { data } = await q.order('date').order('start_time');
     if (data) {
       setExperiences(data as any);
       setCategories(Array.from(new Set(data.map((e: any) => e.category).filter(Boolean))));
@@ -114,6 +133,8 @@ export default function ExperiencesScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
+        <View style={{ paddingHorizontal: 16, paddingTop: 8 }}><ExploringBanner /></View>
+        <MarketplaceGate supplyNoun="bookable experiences">
         {/* Date strip: next 21 days */}
         <DateRail
           days={next21Days}
@@ -233,6 +254,7 @@ export default function ExperiencesScreen() {
             ))}
           </View>
         )}
+        </MarketplaceGate>
 
         <View style={{ height: 40 }} />
       </ScrollView>

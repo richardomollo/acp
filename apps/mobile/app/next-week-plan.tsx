@@ -27,6 +27,7 @@ import { getSelfDirectedSource, normalizeActivity, type PlanActivityFulfilment }
 import { getSupplyCandidates } from '@/lib/supply/orchestration';
 import type { SessionCandidateRow } from '@/lib/supply/session-candidates';
 import type { SupplyUserContext } from '@/lib/supply/types';
+import { useMarketplaceLocation } from '@/contexts/marketplace-location-context';
 import { ActivityFulfilmentCard } from '@/components/activity-fulfilment-card';
 import {
   isSundayPlanningWindow, getScheduledNextPlan, buildWeeklyBehaviourSummary,
@@ -52,6 +53,23 @@ export default function NextWeekPlanScreen() {
   const [nextPlan, setNextPlan] = useState<ScheduledNextPlan | null>(null);
   const [answers, setAnswers] = useState<OnboardingAnswers>(EMPTY_ANSWERS);
   const [preferredLocation, setPreferredLocation] = useState<string | null>(null);
+  // Beta #019 — geo-constrain marketplace supply in this preview too.
+  const marketLoc = useMarketplaceLocation();
+  const marketLocRef = useRef(marketLoc);
+  marketLocRef.current = marketLoc;
+  useEffect(() => { marketLoc.ensureResolved({ requestPermission: false }); }, [marketLoc]);
+  const marketStatus = marketLoc.availability?.status ?? null;
+  const scopeInv = useCallback((rows: SessionCandidateRow[]): SessionCandidateRow[] => {
+    const m = marketLocRef.current;
+    if (!m.geoGatingEnabled) return rows;          // kill switch off → pre-#019
+    if (m.availability?.status !== 'available') return [];
+    const allow = new Set(m.venueIdsInRadius);
+    return rows.filter(r => r.gym?.id != null && allow.has(r.gym.id));
+  }, []);
+  const supplyLoc = useCallback((): SupplyUserContext['location'] => {
+    const p = marketLocRef.current.point;
+    return p ? { latitude: p.latitude, longitude: p.longitude } : { text: null };
+  }, []);
   const [preferredTrainingDays, setPreferredTrainingDays] = useState<string[] | null>(null);
   const [fulfilments, setFulfilments] = useState<PlanActivityFulfilment[]>([]);
   const [showWhyPlan, setShowWhyPlan] = useState(false);
@@ -152,12 +170,12 @@ export default function NextWeekPlanScreen() {
       const ctx: SupplyUserContext = {
         goal: answers.goal, experience: answers.strengthExperience,
         preferredActivities: answers.preferredActivities, barriers: answers.barriers,
-        location: { text: preferredLocation },
+        location: supplyLoc(),
       };
       const anchor = new Date();
       setFulfilments(nextPlan.assessment.starting_plan.activities.map((activity, i): PlanActivityFulfilment => {
         const key = normalizeActivity(activity.activity || activity.title, activity.category);
-        const candidates = getSupplyCandidates({ userContext: ctx, planActivity: activity, sessionInventory: inv, anchor, limitPerType: 2, overallCap: 2 });
+        const candidates = getSupplyCandidates({ userContext: ctx, planActivity: activity, sessionInventory: scopeInv(inv), anchor, limitPerType: 2, overallCap: 2 });
         return {
           planActivityIndex: i,
           selfDirected: getSelfDirectedSource(key, stravaStatus.connected),
@@ -174,7 +192,7 @@ export default function NextWeekPlanScreen() {
       }));
     })().catch(() => { /* booking layer is enhancement-only */ });
     return () => { cancelled = true; };
-  }, [nextPlan, userId, answers, preferredLocation]);
+  }, [nextPlan, userId, answers, preferredLocation, marketStatus]);
 
   const { whyPlanReasons, whatChangedLines } = useMemo(() => {
     if (!nextPlan) return { whyPlanReasons: [], whatChangedLines: null as string[] | null };

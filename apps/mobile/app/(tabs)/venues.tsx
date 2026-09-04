@@ -6,6 +6,8 @@ import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { palette, radii, fontSize } from '@/constants/theme';
 import { SearchTrigger, SearchModal, SearchResultRow, SearchEmpty } from '@/components/search-trigger-modal';
+import { useMarketplaceLocation } from '@/contexts/marketplace-location-context';
+import { MarketplaceGate, ExploringBanner } from '@/components/marketplace/marketplace-gate';
 
 interface Gym {
   id: string;
@@ -37,23 +39,36 @@ export default function VenuesScreen() {
   const [isLocationModalVisible, setIsLocationModalVisible] = useState(false);
   const [searchVisible, setSearchVisible] = useState(false);
 
+  // Beta #019 — venues are marketplace supply; only ever show ones within the
+  // supported radius of the user's (or explored) location. `venueScopeIds`:
+  // string[] → scope to these; null → kill switch off, fetch as before.
+  const ml = useMarketplaceLocation();
+  const scopeIds = ml.venueScopeIds;
+  const scopeKey = scopeIds === null ? 'all' : scopeIds.join(',');
+
+  useEffect(() => { ml.ensureResolved({ requestPermission: true }); }, [ml]);
+
   useEffect(() => {
     loadGyms();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeKey]);
 
   useEffect(() => {
     applyFilters();
   }, [gyms, searchQuery, activeType, activeLocation]);
 
   const loadGyms = async () => {
+    if (scopeIds !== null && scopeIds.length === 0) {
+      setGyms([]);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
-      
-      const { data, error } = await supabase
-        .from('gyms')
-        .select('*')
-        .eq('is_active', true)
-        .order('name', { ascending: true });
+
+      let q = supabase.from('gyms').select('*').eq('is_active', true);
+      if (scopeIds !== null) q = q.in('id', scopeIds);
+      const { data, error } = await q.order('name', { ascending: true });
 
       if (error) throw error;
 
@@ -194,6 +209,8 @@ export default function VenuesScreen() {
       </SearchModal>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <ExploringBanner />
+        <MarketplaceGate supplyNoun="bookable venues">
         {/* Results Count */}
         <ThemedText style={styles.resultsText}>
           {filteredGyms.length} {filteredGyms.length === 1 ? 'venue' : 'venues'} available
@@ -255,7 +272,7 @@ export default function VenuesScreen() {
             <ThemedText style={styles.emptySubtext}>
               Try adjusting your filters or search query
             </ThemedText>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.resetButton}
               onPress={() => {
                 setSearchQuery('');
@@ -267,6 +284,7 @@ export default function VenuesScreen() {
             </TouchableOpacity>
           </View>
         )}
+        </MarketplaceGate>
         <View style={{ height: 40 }} />
       </ScrollView>
     </View>

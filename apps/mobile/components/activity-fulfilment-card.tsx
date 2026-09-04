@@ -28,6 +28,7 @@ import type { PlanActivityFulfilment, MarketplaceMatch } from '@/lib/fulfilment'
 import type { ActivityRecommendation } from '@/lib/activity-recommendation-types';
 import { getActivityRecommendation } from '@/services/activity-recommendation-service';
 import { normalizeActivity, isGymAccessListing } from '@/lib/fulfilment';
+import { useMarketplaceLocation } from '@/contexts/marketplace-location-context';
 
 const LOADING_COPY: Record<string, string> = {
   gym: 'Preparing your workout…',
@@ -102,6 +103,11 @@ export function ActivityFulfilmentCard({
 }) {
   const s = onDark ? sDark : sLight;
   const router = useRouter();
+  // Beta #019 — "GET PROFESSIONAL SUPPORT" recommends bookable Lana trainers,
+  // so it only shows where Lana has bookable supply. Self-directed workout
+  // recommendations and the fulfilment routes are NOT gated on this.
+  const { availability: marketAvailability } = useMarketplaceLocation();
+  const marketAvailable = marketAvailability?.status === 'available';
   const [recommendation, setRecommendation] = useState<ActivityRecommendation | null>(null);
   const [loading, setLoading] = useState(false);
   // Debounces the primary CTA (section 5) — reset whenever this screen
@@ -280,7 +286,7 @@ export function ActivityFulfilmentCard({
         </>
       )}
 
-      {recommendation?.professionalSupport && (
+      {recommendation?.professionalSupport && marketAvailable && (
         <View style={s.block}>
           <ThemedText style={s.header}>GET PROFESSIONAL SUPPORT</ThemedText>
           <ThemedText style={s.title}>{recommendation.professionalSupport.headline}</ThemedText>

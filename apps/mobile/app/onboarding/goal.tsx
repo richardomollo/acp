@@ -14,7 +14,7 @@ import { palette, radii, fontSize } from '@/constants/theme';
 const DATA_POINTS: { icon: string; title: string; desc: string }[] = [
   { icon: 'flag-outline', title: 'What you tell us', desc: 'Your goals, starting point, schedule, preferences and what tends to get in your way.' },
   { icon: 'trending-up-outline', title: 'What Lana learns', desc: 'What you complete and how your plan fits your routine — real progress that helps Lana learn what works for you.' },
-  { icon: 'people-outline', title: 'Real support, when it helps', desc: 'Nutritionists, personal trainers, classes, sessions, or communities tailored to you — recommended, never forced.' },
+  { icon: 'people-outline', title: 'Real support, when it helps', desc: 'Nutritionists, personal trainers, classes and sessions tailored to you — recommended, never forced.' },
   { icon: 'sync-outline', title: 'Adapts with you', desc: 'Your plan evolves as Lana learns what works for you, while keeping your goals and preferences at the centre.' },
 ];
 
@@ -150,7 +150,7 @@ export default function OnboardingGoalScreen() {
             <ThemedText style={styles.sub}>
               Tell Lana what you want to achieve and where you&apos;re starting. It
               will build your plan, learn from your progress, adapt as you go, and recommend
-              nutritionists, personal trainers, classes, sessions, or communities tailored to you
+              nutritionists, personal trainers, classes and sessions tailored to you
               — recommended, never forced.
             </ThemedText>
 

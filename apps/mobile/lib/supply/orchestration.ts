@@ -26,13 +26,10 @@
 // structured venue-level facility data to rank on; venues only ever appear
 // as fulfilment CONTEXT on session/experience candidates (the `venue`
 // field). This is a reported data gap, not a fabricated feature.
-import type { NormalizedActivityKey } from '../fulfilment.ts';
-import { normalizeActivity } from '../fulfilment.ts';
 import { buildSessionCandidates, type SessionCandidateRow } from './session-candidates.ts';
 import { buildPersonalTrainerCandidates, buildNutritionistCandidates, type ProviderCandidateRow } from './provider-candidates.ts';
-import { buildCommunityCandidates, type CommunityCandidateRow } from './community-candidates.ts';
 import { diversifySupplyCandidates, type DiversifyOptions } from './diversify.ts';
-import type { SupplyCandidate, SupplyPlanActivityInput, SupplyUserContext, SupportOpportunity, PreferredActivity } from './types.ts';
+import type { SupplyCandidate, SupplyPlanActivityInput, SupplyUserContext, SupportOpportunity } from './types.ts';
 
 export interface GetSupplyCandidatesParams {
   userContext: SupplyUserContext;
@@ -43,15 +40,9 @@ export interface GetSupplyCandidatesParams {
   /** Pre-fetched, already-active/future-filtered inventory (caller owns the Supabase query, matching lib/fulfilment.ts's existing convention — avoids N+1 inside this pure function, spec section 39). */
   sessionInventory?: SessionCandidateRow[];
   providers?: ProviderCandidateRow[];
-  communities?: CommunityCandidateRow[];
   anchor: Date;
   limitPerType?: number;
   overallCap?: number;
-}
-
-function preferredActivityToKey(activity: PreferredActivity): NormalizedActivityKey | null {
-  if (activity === 'personal_training') return null; // not a session/community activity concept — handled entirely via provider matching
-  return activity;
 }
 
 /**
@@ -62,7 +53,7 @@ function preferredActivityToKey(activity: PreferredActivity): NormalizedActivity
  * scenario 6).
  */
 export function getSupplyCandidates(params: GetSupplyCandidatesParams): SupplyCandidate[] {
-  const { userContext, planActivity, supportOpportunities, sessionInventory, providers, communities, anchor } = params;
+  const { userContext, planActivity, supportOpportunities, sessionInventory, providers, anchor } = params;
   const diversifyOptions: DiversifyOptions = { limitPerType: params.limitPerType, overallCap: params.overallCap };
 
   const all: SupplyCandidate[] = [];
@@ -76,20 +67,9 @@ export function getSupplyCandidates(params: GetSupplyCandidatesParams): SupplyCa
     all.push(...buildNutritionistCandidates(providers, userContext, supportOpportunities));
   }
 
-  if (communities) {
-    const relevantKeys: NormalizedActivityKey[] = [];
-    if (planActivity) relevantKeys.push(normalizeActivity(planActivity.activity, planActivity.category));
-    for (const a of userContext.preferredActivities) {
-      const key = preferredActivityToKey(a);
-      if (key) relevantKeys.push(key);
-    }
-    all.push(...buildCommunityCandidates(communities, userContext, relevantKeys));
-  }
-
   return diversifySupplyCandidates(all, diversifyOptions);
 }
 
 export type { SupplyCandidate, SupplyCandidateType, SupplyUserContext, SupplyPlanActivityInput, SupplyScoring, SupplyReasonCode } from './types.ts';
 export type { SessionCandidateRow } from './session-candidates.ts';
 export type { ProviderCandidateRow } from './provider-candidates.ts';
-export type { CommunityCandidateRow } from './community-candidates.ts';

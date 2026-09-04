@@ -11,7 +11,7 @@ import type { PrimaryGoal, PreferredActivity, Barrier, StrengthExperience } from
 
 export type SupplyCandidateType =
   | 'class' | 'session' | 'experience' | 'venue'
-  | 'personal_trainer' | 'nutritionist' | 'community';
+  | 'personal_trainer' | 'nutritionist';
 
 // Internal, structured-only reason codes (spec section 31) — never
 // natural-language explanations. Communicated to the user (if at all) by a

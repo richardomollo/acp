@@ -13,14 +13,14 @@ function candidate(id: string, type: SupplyCandidateType, overall: number): Supp
 }
 
 describe('Test P — diversified output', () => {
-  test('five strong sessions do not crowd out a single strong PT and community when both are relevant', () => {
+  test('five strong sessions do not crowd out a single strong PT and nutritionist when both are relevant', () => {
     const sessions = Array.from({ length: 5 }, (_, i) => candidate(`s${i}`, 'session', 0.9 - i * 0.01));
     const pt = candidate('pt1', 'personal_trainer', 0.5);
-    const community = candidate('c1', 'community', 0.4);
-    const result = diversifySupplyCandidates([...sessions, pt, community], { limitPerType: 5, overallCap: 4 });
+    const nutritionist = candidate('n1', 'nutritionist', 0.4);
+    const result = diversifySupplyCandidates([...sessions, pt, nutritionist], { limitPerType: 5, overallCap: 4 });
     const types = new Set(result.map(c => c.type));
     assert.ok(types.has('personal_trainer'));
-    assert.ok(types.has('community'));
+    assert.ok(types.has('nutritionist'));
   });
 
   test('a clearly superior candidate is never bumped purely to force variety', () => {
@@ -33,7 +33,7 @@ describe('Test P — diversified output', () => {
 
 describe('Test O — deterministic ordering (diversification variant)', () => {
   test('identical input always produces identical output order', () => {
-    const input = [candidate('a', 'session', 0.5), candidate('b', 'community', 0.5), candidate('c', 'personal_trainer', 0.5)];
+    const input = [candidate('a', 'session', 0.5), candidate('b', 'nutritionist', 0.5), candidate('c', 'personal_trainer', 0.5)];
     const r1 = diversifySupplyCandidates(input, { overallCap: 3 }).map(c => c.id);
     const r2 = diversifySupplyCandidates(input, { overallCap: 3 }).map(c => c.id);
     assert.deepEqual(r1, r2);

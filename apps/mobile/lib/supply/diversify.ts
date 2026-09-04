@@ -3,8 +3,8 @@
 // Two-phase, deliberately simple (not a real diversity optimizer, section
 // 32's own "implement a simple diversification layer"):
 //  1. Guarantee one slot to every type that produced at least one eligible
-//     candidate (so a single strong PT/community/open-gym result is never
-//     entirely crowded out by five near-identical classes).
+//     candidate (so a single strong PT/open-gym result is never entirely
+//     crowded out by five near-identical classes).
 //  2. Fill every remaining slot up to the overall cap by pure global score,
 //     regardless of type — a genuinely superior candidate is never bumped
 //     just to force variety (spec: "do not sacrifice clearly superior
@@ -43,7 +43,7 @@ export function diversifySupplyCandidates(
 
   // Phase 1 — one guaranteed slot per non-empty type, in a fixed,
   // deterministic type order (never Math.random(), never input order).
-  const TYPE_ORDER: SupplyCandidateType[] = ['session', 'experience', 'personal_trainer', 'nutritionist', 'community', 'venue', 'class'];
+  const TYPE_ORDER: SupplyCandidateType[] = ['session', 'experience', 'personal_trainer', 'nutritionist', 'venue', 'class'];
   for (const type of TYPE_ORDER) {
     if (selected.length >= overallCap) break;
     const list = remaining.get(type);

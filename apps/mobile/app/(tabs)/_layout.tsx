@@ -13,7 +13,7 @@ const INACTIVE_COLOR = palette.gray300;
 const TAB_DEFS = [
   { name: 'index',    label: 'Today',     icon: 'home-outline',      iconActive: 'home'      },
   // Still the 'discover' route under the hood (venues/classes/trainers/
-  // experiences/communities all navigate back to it) — only this tab
+  // experiences all navigate back to it) — only this tab
   // slot's icon/label/press-behaviour changed, so those existing back
   // links keep working unchanged.
   { name: 'discover', label: 'Nutrition', icon: 'nutrition-outline', iconActive: 'nutrition' },
@@ -125,7 +125,6 @@ export default function TabLayout() {
       <Tabs.Screen name="classes"     options={{ href: null }} />
       <Tabs.Screen name="trainers"    options={{ href: null }} />
       <Tabs.Screen name="experiences" options={{ href: null }} />
-      <Tabs.Screen name="communities" options={{ href: null }} />
     </Tabs>
   );
 }

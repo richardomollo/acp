@@ -322,7 +322,7 @@ export function buildPlanSummary(answers: OnboardingAnswers): PlanSummary {
   if (answers.goal === 'lose_weight' || answers.goal === 'build_muscle') approach.push('Strength', 'Cardio');
   if (answers.goal === 'maintain_weight' || answers.goal === 'reduce_stress') approach.push('Movement');
   if (answers.barriers.includes('nutrition') || answers.goal === 'lose_weight' || answers.goal === 'maintain_weight') approach.push('Nutrition');
-  if (answers.barriers.includes('accountability') || answers.barriers.includes('motivation')) approach.push('Community');
+  if (answers.barriers.includes('accountability') || answers.barriers.includes('motivation')) approach.push('Accountability');
   if (approach.length === 0) approach.push('Movement', 'Consistency');
 
   return { goalLine, startingPointLine, focusLine, approach: Array.from(new Set(approach)) };

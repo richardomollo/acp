@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { DateRail, buildDateRange } from '@/components/date-rail';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useMarketplaceLocation } from '@/contexts/marketplace-location-context';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -99,19 +100,31 @@ export default function FitnessScreen() {
   const [selectedDate, setSelectedDate] = useState(today);
   const days = useMemo(() => buildDateRange(14), []);
 
+  // Beta #019 — these rails are bookable marketplace classes; scope to venues
+  // within the supported radius. `venueScopeIds`: string[] → scope; null →
+  // kill switch off, fetch as before. Location resolved in the background —
+  // no GPS prompt on this tab.
+  const ml = useMarketplaceLocation();
+  const scopeIds = ml.venueScopeIds;
+  const scopeKey = scopeIds === null ? 'all' : scopeIds.join(',');
+  useEffect(() => { ml.ensureResolved({ requestPermission: false }); }, [ml]);
+
   useEffect(() => {
     (async () => {
+      if (scopeIds !== null && scopeIds.length === 0) { setSessions([]); setLoading(false); return; }
       setLoading(true);
-      const { data } = await supabase
+      let q = supabase
         .from('sessions')
         .select('id, name, category, image_url, duration_minutes, date, gyms(name)')
-        .gte('date', today)
-        .order('date', { ascending: true })
-        .limit(40);
+        .eq('is_active', true)
+        .gte('date', today);
+      if (scopeIds !== null) q = q.in('gym_id', scopeIds);
+      const { data } = await q.order('date', { ascending: true }).limit(40);
       setSessions((data as unknown as FitnessSession[]) ?? []);
       setLoading(false);
     })();
-  }, [today]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [today, scopeKey]);
 
   const sessionDates = useMemo(() => new Set(sessions.map(sess => sess.date)), [sessions]);
   const workoutSessions = useMemo(() => sessions.filter(sess => isWorkoutCategory(sess.category)), [sessions]);

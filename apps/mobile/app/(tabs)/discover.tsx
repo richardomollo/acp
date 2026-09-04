@@ -13,18 +13,19 @@ import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { authService } from '@/services/auth';
 import { useAuthModal } from '@/contexts/auth-modal-context';
+import { useMarketplaceLocation } from '@/contexts/marketplace-location-context';
+import { MarketplaceGate, ExploringBanner } from '@/components/marketplace/marketplace-gate';
 
 const W = Dimensions.get('window').width;
 const CW = W - 40; // content width (20px padding each side)
 
-type TabKey = 'venues' | 'classes' | 'trainers' | 'experiences' | 'communities';
+type TabKey = 'venues' | 'classes' | 'trainers' | 'experiences';
 
 const TABS: { key: TabKey; label: string; icon: string; route: string }[] = [
   { key: 'venues',      label: 'Venues',      icon: 'business-outline', route: '/(tabs)/venues'      },
   { key: 'classes',     label: 'Classes',     icon: 'calendar-outline', route: '/(tabs)/classes'     },
   { key: 'trainers',    label: 'Trainers',    icon: 'body-outline',     route: '/(tabs)/trainers'    },
   { key: 'experiences', label: 'Experiences', icon: 'sparkles-outline', route: '/(tabs)/experiences' },
-  { key: 'communities', label: 'Communities', icon: 'people-outline',   route: '/(tabs)/communities' },
 ];
 
 const BROWSE_CARD_BG: Record<TabKey, string> = {
@@ -32,7 +33,6 @@ const BROWSE_CARD_BG: Record<TabKey, string> = {
   classes:     palette.navy,
   trainers:    palette.success700,
   experiences: palette.warning700,
-  communities: '#7c3aed',
 };
 
 interface SessionCategory {
@@ -82,8 +82,15 @@ export default function DiscoverScreen() {
   const router = useRouter();
   const { showAuthModal } = useAuthModal();
   const { visible: tourVisible, dismiss: dismissTour } = useTour('discover');
+  // Beta #019 — marketplace supply is geographically constrained; the search
+  // modal only queries real inventory when Lana is actually available where
+  // the user is (or the city they're exploring), scoped to nearby venues.
+  // `venueScopeIds`: string[] → scope to these; null → kill switch off.
+  const marketLoc = useMarketplaceLocation();
+  const marketAvailable = marketLoc.availability?.status === 'available';
+  const scopeIds = marketLoc.venueScopeIds;
   const [cardImages, setCardImages] = useState<Record<TabKey, string | null>>({
-    venues: null, classes: null, trainers: null, experiences: null, communities: null,
+    venues: null, classes: null, trainers: null, experiences: null,
   });
   const [categories, setCategories] = useState<SessionCategory[]>([]);
   const [isGuest, setIsGuest] = useState(true);
@@ -101,14 +108,35 @@ export default function DiscoverScreen() {
       setSearchResults({ sessions: [], gyms: [], experiences: [], trainers: [] });
       return;
     }
+    // Beta #019 — no marketplace search outside a supported market. The modal
+    // shows a "not available here" note instead of Nairobi-wide results.
+    if (scopeIds !== null && scopeIds.length === 0) {
+      setSearchResults({ sessions: [], gyms: [], experiences: [], trainers: [] });
+      return;
+    }
     setSearchLoading(true);
     try {
       const term = `%${q.trim()}%`;
+      // Trainers linked to an in-radius venue (in-person supply only).
+      const localPtIds = scopeIds !== null
+        ? Array.from(new Set(
+            (((await supabase.from('pt_venue_links').select('pt_id').in('gym_id', scopeIds)).data as any[]) ?? [])
+              .map(l => l.pt_id),
+          )).filter(Boolean)
+        : null;
+
+      const scopeCol = (b: any, col: string) => (scopeIds !== null ? b.in(col, scopeIds) : b);
       const [sessRes, gymRes, expRes, ptRes] = await Promise.all([
-        supabase.from('sessions').select('id, name, date, drop_in_price, image_url, gyms(name, deposit_pct)').ilike('name', term).limit(5),
-        supabase.from('gyms').select('id, name, location, image_url').ilike('name', term).limit(4),
-        supabase.from('experiences').select('id, name, tagline, category, price_kes, discount_kes, image_url').ilike('name', term).limit(4),
-        supabase.from('personal_trainers').select('id, full_name, professional_name, photo_url, specialisations').ilike('full_name', term).eq('status', 'approved').limit(4),
+        scopeCol(supabase.from('sessions').select('id, name, date, drop_in_price, image_url, gyms(name, deposit_pct)').ilike('name', term), 'gym_id').limit(5),
+        scopeCol(supabase.from('gyms').select('id, name, location, image_url').ilike('name', term), 'id').limit(4),
+        scopeCol(supabase.from('experiences').select('id, name, tagline, category, price_kes, discount_kes, image_url').ilike('name', term), 'gym_id').limit(4),
+        localPtIds === null
+          ? supabase.from('personal_trainers').select('id, full_name, professional_name, photo_url, specialisations')
+              .ilike('full_name', term).eq('status', 'approved').limit(4)
+          : localPtIds.length > 0
+            ? supabase.from('personal_trainers').select('id, full_name, professional_name, photo_url, specialisations')
+                .ilike('full_name', term).eq('status', 'approved').in('id', localPtIds).limit(4)
+            : Promise.resolve({ data: [] as any[] }),
       ]);
       setSearchResults({
         sessions: (sessRes.data ?? []) as any,
@@ -143,19 +171,17 @@ export default function DiscoverScreen() {
     })();
 
     (async () => {
-      const [{ data: gym }, { data: session }, { data: pt }, { data: exp }, { data: community }] = await Promise.all([
+      const [{ data: gym }, { data: session }, { data: pt }, { data: exp }] = await Promise.all([
         supabase.from('gyms').select('image_url').eq('is_active', true).not('image_url', 'is', null).limit(1).maybeSingle(),
         supabase.from('sessions').select('image_url').not('image_url', 'is', null).order('date', { ascending: true }).limit(1).maybeSingle(),
         supabase.from('personal_trainers').select('photo_url').eq('status', 'approved').not('photo_url', 'is', null).limit(1).maybeSingle(),
         supabase.from('experiences').select('image_url').not('image_url', 'is', null).order('date', { ascending: true }).limit(1).maybeSingle(),
-        supabase.from('communities').select('cover_url, logo_url').eq('review_status', 'approved').eq('is_active', true).or('cover_url.not.is.null,logo_url.not.is.null').limit(1).maybeSingle(),
       ]);
       setCardImages({
         venues: (gym as any)?.image_url ?? null,
         classes: (session as any)?.image_url ?? null,
         trainers: (pt as any)?.photo_url ?? null,
         experiences: (exp as any)?.image_url ?? null,
-        communities: (community as any)?.cover_url ?? (community as any)?.logo_url ?? null,
       });
     })();
 
@@ -196,51 +222,58 @@ export default function DiscoverScreen() {
 
       {/* ── Scrollable content ── */}
       <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
-        <ThemedText style={s.browseTitle}>Browse all</ThemedText>
-        <View style={s.browseGrid}>
-          {TABS.map(t => {
-            const imageUrl = cardImages[t.key];
-            return (
-              <TouchableOpacity
-                key={t.key}
-                style={[s.browseCard, { backgroundColor: BROWSE_CARD_BG[t.key] }]}
-                onPress={() => router.push(t.route as any)}
-                activeOpacity={0.9}
-              >
-                {imageUrl ? (
-                  <Image source={{ uri: imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-                ) : null}
-                <LinearGradient
-                  colors={['transparent', 'rgba(0,0,0,0.6)']}
-                  style={[StyleSheet.absoluteFill, { top: '30%' }]}
-                />
-                <View style={s.browseCardIconWrap}>
-                  <Ionicons name={t.icon as any} size={16} color="#fff" />
-                </View>
-                <ThemedText style={s.browseCardLabel}>{t.label}</ThemedText>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        <ExploringBanner />
 
-        {categories.length > 0 && (
-          <>
-            <ThemedText style={s.categoriesTitle}>Top categories</ThemedText>
-            <View style={s.categoriesGrid}>
-              {categories.map(cat => (
+        {/* Beta #019 — the browse marketplace is geographically gated. When
+            Lana has no local supply this becomes the unsupported-market state;
+            the Fitness & Nutrition CTA below stays regardless. */}
+        <MarketplaceGate supplyNoun="bookable gyms, classes, trainers or experiences">
+          <ThemedText style={s.browseTitle}>Browse all</ThemedText>
+          <View style={s.browseGrid}>
+            {TABS.map(t => {
+              const imageUrl = cardImages[t.key];
+              return (
                 <TouchableOpacity
-                  key={cat.id}
-                  style={s.categoryRow}
-                  activeOpacity={0.8}
-                  onPress={() => router.push({ pathname: '/(tabs)/classes', params: { category: cat.name } } as any)}
+                  key={t.key}
+                  style={[s.browseCard, { backgroundColor: BROWSE_CARD_BG[t.key] }]}
+                  onPress={() => router.push(t.route as any)}
+                  activeOpacity={0.9}
                 >
-                  <Image source={{ uri: cat.image_url! }} style={s.categoryThumb} resizeMode="cover" />
-                  <ThemedText style={s.categoryLabel} numberOfLines={1}>{cat.name}</ThemedText>
+                  {imageUrl ? (
+                    <Image source={{ uri: imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                  ) : null}
+                  <LinearGradient
+                    colors={['transparent', 'rgba(0,0,0,0.6)']}
+                    style={[StyleSheet.absoluteFill, { top: '30%' }]}
+                  />
+                  <View style={s.browseCardIconWrap}>
+                    <Ionicons name={t.icon as any} size={16} color="#fff" />
+                  </View>
+                  <ThemedText style={s.browseCardLabel}>{t.label}</ThemedText>
                 </TouchableOpacity>
-              ))}
-            </View>
-          </>
-        )}
+              );
+            })}
+          </View>
+
+          {categories.length > 0 && (
+            <>
+              <ThemedText style={s.categoriesTitle}>Top categories</ThemedText>
+              <View style={s.categoriesGrid}>
+                {categories.map(cat => (
+                  <TouchableOpacity
+                    key={cat.id}
+                    style={s.categoryRow}
+                    activeOpacity={0.8}
+                    onPress={() => router.push({ pathname: '/(tabs)/classes', params: { category: cat.name } } as any)}
+                  >
+                    <Image source={{ uri: cat.image_url! }} style={s.categoryThumb} resizeMode="cover" />
+                    <ThemedText style={s.categoryLabel} numberOfLines={1}>{cat.name}</ThemedText>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          )}
+        </MarketplaceGate>
 
         {/* ─── My Journey CTA (fitness + nutrition, merged) ─── */}
         <ThemedText style={s.journeyTitle}>Fitness & Nutrition</ThemedText>
@@ -297,7 +330,18 @@ export default function DiscoverScreen() {
           <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             {searchLoading && <ActivityIndicator style={{ marginTop: 40 }} color={palette.blue500} />}
 
-            {!searchLoading && searchQuery.trim().length >= 2
+            {!searchLoading && searchQuery.trim().length >= 2 && !marketAvailable && (
+              <View style={s.searchEmpty}>
+                <Ionicons name="map-outline" size={40} color={palette.gray300} />
+                <ThemedText style={s.searchEmptyText}>
+                  Lana doesn&apos;t have bookable partners
+                  {marketLoc.activeLabel ? ` in ${marketLoc.activeLabel}` : ' here'} yet.
+                  Try &quot;Explore another city&quot; on Discover.
+                </ThemedText>
+              </View>
+            )}
+
+            {!searchLoading && marketAvailable && searchQuery.trim().length >= 2
               && searchResults.sessions.length === 0 && searchResults.gyms.length === 0
               && searchResults.experiences.length === 0 && searchResults.trainers.length === 0 && (
               <View style={s.searchEmpty}>

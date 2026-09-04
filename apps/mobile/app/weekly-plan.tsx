@@ -5,7 +5,7 @@
 // matches) are shown here too, same as My Plan — only synced-activity
 // candidate banners (Strava/ExerciseDB/ACP-booking auto-match confirmation)
 // are left out; mark done/undo stays the only completion action here.
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { View, ScrollView, TouchableOpacity, ActivityIndicator, Modal, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -25,6 +25,7 @@ import {
 } from '@/lib/fulfilment';
 import { getCompletionProgress, type PlanActivityCompletion } from '@/lib/completion';
 import { ActivityFulfilmentCard } from '@/components/activity-fulfilment-card';
+import { useMarketplaceLocation } from '@/contexts/marketplace-location-context';
 import { palette, radii, fontSize } from '@/constants/theme';
 
 // A calendar week always has all 7 days, even when the plan itself only
@@ -117,6 +118,11 @@ export default function WeeklyPlanScreen() {
   // just self-directed (ExerciseDB/Strava) + real ACP marketplace matches
   // for each planned activity. No candidate-confirmation banners here.
   const [fulfilments, setFulfilments] = useState<PlanActivityFulfilment[]>([]);
+  // Beta #019 — marketplace matches for this week's plan are geo-constrained.
+  const marketLoc = useMarketplaceLocation();
+  const marketLocRef = useRef(marketLoc);
+  marketLocRef.current = marketLoc;
+  useEffect(() => { marketLoc.ensureResolved({ requestPermission: false }); }, [marketLoc]);
   const [viewMode, setViewMode] = useState<'week' | 'day'>('week');
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
   // Week mode's day list is an accordion — at most one day's details open
@@ -176,12 +182,12 @@ export default function WeeklyPlanScreen() {
           .in('date', weekDates),
         supabase
           .from('sessions')
-          .select('id, name, category, date, time, duration_minutes, is_active, spots_left, image_url, drop_in_price, gyms(name)')
+          .select('id, gym_id, name, category, date, time, duration_minutes, is_active, spots_left, image_url, drop_in_price, gyms(name)')
           .gte('date', todayIsoForInventory)
           .eq('is_active', true),
         supabase
           .from('experiences')
-          .select('id, name, category, date, start_time, price_kes, is_active, spots_left, image_url, gyms(name)')
+          .select('id, gym_id, name, category, date, start_time, price_kes, is_active, spots_left, image_url, gyms(name)')
           .gte('date', todayIsoForInventory)
           .eq('is_active', true),
         getStravaStatus(), // never throws — resolves { connected: false } on failure
@@ -200,14 +206,25 @@ export default function WeeklyPlanScreen() {
         waterCups: statsByDate.get(date)?.water_cups ?? 0,
       })));
 
+      // Beta #019 — only venues with valid active+bookable supply within
+      // radius of the resolved marketplace location. [] when Lana isn't
+      // available here → the fulfilment cards fall back to self-directed.
+      const mkt = marketLocRef.current;
+      const allowSet = new Set(mkt.venueIdsInRadius);
+      const inScope: (gymId: string | null | undefined) => boolean =
+        !mkt.geoGatingEnabled
+          ? () => true                                  // kill switch off → pre-#019
+          : mkt.availability?.status === 'available'
+            ? (gymId) => !!gymId && allowSet.has(gymId)
+            : () => false;
       const inventory: MarketplaceInventoryItem[] = [
-        ...((sessionsData ?? []) as any[]).map(sRow => ({
+        ...((sessionsData ?? []) as any[]).filter(sRow => inScope(sRow.gym_id)).map(sRow => ({
           id: sRow.id, type: 'session' as const, name: sRow.name, category: sRow.category ?? null,
           date: sRow.date ?? null, startTime: sRow.time ?? null, durationMinutes: sRow.duration_minutes ?? null,
           gymName: sRow.gyms?.name ?? null, isActive: !!sRow.is_active, spotsLeft: sRow.spots_left ?? null,
           imageUrl: sRow.image_url ?? null, priceKes: sRow.drop_in_price ?? null,
         })),
-        ...((experiencesData ?? []) as any[]).map(eRow => ({
+        ...((experiencesData ?? []) as any[]).filter(eRow => inScope(eRow.gym_id)).map(eRow => ({
           id: eRow.id, type: 'experience' as const, name: eRow.name, category: eRow.category ?? null,
           date: eRow.date ?? null, startTime: eRow.start_time ?? null, durationMinutes: null,
           gymName: eRow.gyms?.name ?? null, isActive: !!eRow.is_active, spotsLeft: eRow.spots_left ?? null,
