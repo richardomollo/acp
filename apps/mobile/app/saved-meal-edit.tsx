@@ -22,8 +22,10 @@ import type { CanonicalFood, LogUnit } from '@/lib/nutrition/food-types';
 
 export default function SavedMealEditScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ id?: string; prefill?: string }>();
+  const params = useLocalSearchParams<{ id?: string; prefill?: string; name?: string; homemade?: string; slot?: string }>();
   const editingId = typeof params.id === 'string' && params.id.length > 0 ? params.id : null;
+  const homemade = params.homemade === '1';
+  const initialName = typeof params.name === 'string' ? params.name : '';
 
   const [userId, setUserId] = useState<string | null>(null);
   const [draft, setDraft] = useState<SavedMealDraft | null>(null);
@@ -55,17 +57,17 @@ export default function SavedMealEditScreen() {
           const foods = await Promise.all(ids.map(id => foodLogService.getFood(id).catch(() => null)));
           const byId = new Map<string, CanonicalFood>();
           foods.forEach(f => { if (f) byId.set(f.id, f); });
-          if (active) setDraft({ ...emptyDraft(), components: componentsFromPrefill(specs, byId) });
+          if (active) setDraft({ ...emptyDraft(), name: initialName, components: componentsFromPrefill(specs, byId) });
         } catch {
-          if (active) setDraft(emptyDraft());
+          if (active) setDraft({ ...emptyDraft(), name: initialName });
         }
         return;
       }
 
-      if (active) setDraft(emptyDraft());
+      if (active) setDraft({ ...emptyDraft(), name: initialName });
     })();
     return () => { active = false; };
-  }, [editingId, params.prefill, router]);
+  }, [editingId, params.prefill, initialName, router]);
 
   const onPickFood = useCallback(async (foodId: string) => {
     const target = pickerFor;
@@ -96,9 +98,22 @@ export default function SavedMealEditScreen() {
     if (!validation.ok) { setShowErrors(true); return; }
     setSaving(true);
     try {
-      if (editingId) await savedMealService.update(editingId, draft);
-      else await savedMealService.create(userId, draft);
-      router.back();
+      if (editingId) {
+        await savedMealService.update(editingId, draft);
+        router.back();
+      } else {
+        const newId = await savedMealService.create(userId, draft);
+        // Came here to log a cooked meal, not just to save a definition —
+        // hand straight to the log screen so the meal is recorded now.
+        if (homemade) {
+          router.replace({
+            pathname: '/saved-meal-log',
+            params: { id: newId, ...(params.slot ? { slot: String(params.slot) } : {}) },
+          });
+        } else {
+          router.back();
+        }
+      }
     } catch {
       setSaving(false);
       Alert.alert('Could not save', 'Please try again.');
@@ -113,11 +128,19 @@ export default function SavedMealEditScreen() {
           <TouchableOpacity style={s.backBtn} onPress={() => router.back()} hitSlop={12}>
             <Ionicons name="arrow-back" size={22} color={palette.ink900} />
           </TouchableOpacity>
-          <ThemedText style={s.headerTitle}>{editingId ? 'Edit meal' : 'Create a meal'}</ThemedText>
+          <ThemedText style={s.headerTitle}>
+            {editingId ? 'Edit meal' : homemade ? 'Build your meal' : 'Create a meal'}
+          </ThemedText>
           <View style={{ width: 38 }} />
         </SafeAreaView>
 
         <ScrollView contentContainerStyle={s.pad} keyboardShouldPersistTaps="handled">
+          {homemade && !editingId && (
+            <ThemedText style={s.homemadeHint}>
+              Add each ingredient with its amount. We total the verified nutrition facts, then
+              log it and keep it in My Meals for next time.
+            </ThemedText>
+          )}
           <ThemedText style={s.fieldLabel}>Name</ThemedText>
           <TextInput
             style={[s.nameInput, showErrors && validation.nameError && s.inputError]}
@@ -300,6 +323,7 @@ const s = StyleSheet.create({
 
   fieldLabel: { fontSize: 11, fontWeight: '800', color: palette.gray300, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
   hint: { fontSize: 12.5, color: palette.gray450, lineHeight: 18, marginBottom: 6 },
+  homemadeHint: { fontSize: 12.5, color: palette.gray450, lineHeight: 18, marginBottom: 16 },
   nameInput: {
     height: 46, borderRadius: radii.lg, borderWidth: 1, borderColor: palette.hairline,
     paddingHorizontal: 14, fontSize: 15, fontWeight: '600', color: palette.ink900,

@@ -310,6 +310,17 @@ export default function PhotoMealScreen() {
                       <TouchableOpacity onPress={() => setPickerItemId(item.id)}>
                         <ThemedText style={s.actionLink}>Choose food</ThemedText>
                       </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => router.push({
+                          pathname: '/homemade-meal',
+                          params: {
+                            ...(item.visionLabel ? { name: item.visionLabel } : {}),
+                            ...(slot ? { slot } : {}),
+                          },
+                        })}
+                      >
+                        <ThemedText style={s.actionLink}>Log as homemade</ThemedText>
+                      </TouchableOpacity>
                       <TouchableOpacity onPress={() => patchItem(item.id, removeItem(item))}>
                         <ThemedText style={s.actionLinkMuted}>Remove</ThemedText>
                       </TouchableOpacity>

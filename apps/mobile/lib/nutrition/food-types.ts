@@ -53,6 +53,15 @@ export type MealSlot = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 export type LogUnit = 'g' | 'ml' | 'serving';
 export type CaptureMethod = 'manual' | 'search' | 'plan' | 'camera' | 'saved_meal';
 
+/**
+ * Nutrition N6.5 (Beta #018) — how a reusable saved meal was defined.
+ *   user_recipe_from_components — the user listed canonical-food ingredients;
+ *     every number is a deterministic sum of verified food facts.
+ *   user_meal_estimated — the user saved an approximate meal (a standard
+ *     recipe estimate, or their own typed numbers). Disclosed as an estimate.
+ */
+export type SavedMealProvenance = 'user_recipe_from_components' | 'user_meal_estimated';
+
 /** A named household measure for a food, resolved to grams (never guessed — from the source or an explicit ACP estimate). */
 export interface FoodServing {
   label: string;   // "1 medium (118 g)"
@@ -111,7 +120,8 @@ export interface FoodSearchResult {
 
 /** What the Log-food flow submits. */
 export interface FoodLogInput {
-  /** `null` for a name-only custom entry (N1 §13 option B — carries no nutrients, counts nothing). */
+  /** `null` for a name-only custom entry (N1 §13 option B) or a homemade meal
+   *  logged with user-entered numbers (N6.5 — see `userProvidedNutrition`). */
   foodId: string | null;
   displayName: string;
   brand?: string | null;
@@ -121,6 +131,16 @@ export interface FoodLogInput {
   mealSlot?: MealSlot | null;
   captureMethod: CaptureMethod;
   note?: string | null;
+  /** Nutrition N6.5 (Beta #018) — a user-entered nutrient snapshot for a
+   *  homemade / packaged / takeaway item that has no canonical `foods` row.
+   *  Only honoured when `foodId` is null and `userProvidedNutrition` is true;
+   *  the values are the TOTALS for the portion eaten (never per-100 g) and
+   *  are frozen verbatim — nothing scales or invents them. Nutrients the user
+   *  left blank stay `null` (unknown), never 0. */
+  nutrients?: Partial<Nutrients> | null;
+  /** Nutrition N6.5 — marks the row's numbers as the user's own, not a
+   *  verified database's. Persisted to `food_log_entries.user_provided_nutrition`. */
+  userProvidedNutrition?: boolean;
   /** Nutrition N6 — set together for every entry written in one log action so
    *  the occurrence can be shown/edited/deleted as a group. Never read by
    *  N2/N3/N4 nutrition maths. */
@@ -154,6 +174,9 @@ export interface FoodLogEntry {
   logGroupId: string | null;
   /** Nutrition N6 — the saved meal this occurrence was logged from, or `null`. */
   savedMealId: string | null;
+  /** Nutrition N6.5 (Beta #018) — the nutrient snapshot was typed in by the
+   *  user (homemade / packaged / takeaway), not derived from a canonical food. */
+  userProvidedNutrition: boolean;
   /** nutrients SCALED to quantityGrams, frozen at log time. `null` = source didn't supply it. */
   nutrients: Nutrients;
 }

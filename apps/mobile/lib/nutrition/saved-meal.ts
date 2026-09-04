@@ -10,7 +10,9 @@
 // canonical component food (§26). Name-only "custom" foods cannot be
 // components — there is nothing to reproduce or calculate (§20).
 
-import type { CanonicalFood, FoodLogEntry, FoodLogInput, LogUnit, MealSlot, NutrientKey } from './food-types.ts';
+import type {
+  CanonicalFood, FoodLogEntry, FoodLogInput, LogUnit, MealSlot, NutrientKey, SavedMealProvenance,
+} from './food-types.ts';
 import { resolveGrams, computeLogSnapshot, PortionError } from './food-nutrition.ts';
 import { summariseDay, type NutrientCompleteness } from './nutrition-history.ts';
 
@@ -36,6 +38,10 @@ export interface SavedMealDraft {
   name: string;
   description: string;
   components: DraftComponent[];
+  /** N6.5 (Beta #018) — how this definition was built. An ingredient list is
+   *  `user_recipe_from_components` (the default); a saved approximate meal is
+   *  `user_meal_estimated`. */
+  provenance: SavedMealProvenance;
 }
 
 /** A minimal spec used to pre-fill a draft from an existing log / a photo
@@ -52,6 +58,7 @@ export interface SavedMeal {
   id: string;
   name: string;
   description: string | null;
+  provenance: SavedMealProvenance;
   createdAt: string;
   updatedAt: string;
   components: {
@@ -89,7 +96,7 @@ export function unitOptionsForFood(food: CanonicalFood): LogUnit[] {
 }
 
 export function emptyDraft(): SavedMealDraft {
-  return { id: null, name: '', description: '', components: [] };
+  return { id: null, name: '', description: '', components: [], provenance: 'user_recipe_from_components' };
 }
 
 export function draftFromSavedMeal(meal: SavedMeal): SavedMealDraft {
@@ -97,6 +104,7 @@ export function draftFromSavedMeal(meal: SavedMeal): SavedMealDraft {
     id: meal.id,
     name: meal.name,
     description: meal.description ?? '',
+    provenance: meal.provenance,
     components: [...meal.components]
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map(c => ({

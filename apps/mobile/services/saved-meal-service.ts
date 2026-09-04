@@ -19,7 +19,7 @@ import {
 } from '@/lib/nutrition/saved-meal';
 
 const MEAL_SELECT = `
-  id, name, description, created_at, updated_at,
+  id, name, description, provenance, created_at, updated_at,
   saved_meal_items (
     id, quantity, unit, serving_label, sort_order,
     foods ( ${FOOD_SELECT}, food_servings ( label, grams, sort_order ) )
@@ -44,6 +44,7 @@ function mapMealRow(row: any): SavedMeal {
     id: String(row.id),
     name: String(row.name),
     description: row.description ?? null,
+    provenance: row.provenance === 'user_meal_estimated' ? 'user_meal_estimated' : 'user_recipe_from_components',
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
     components: items,
@@ -79,7 +80,12 @@ export const savedMealService = {
   async create(userId: string, draft: SavedMealDraft): Promise<string> {
     const { data: meal, error: mealErr } = await supabase
       .from('saved_meals')
-      .insert({ user_id: userId, name: draft.name.trim(), description: draft.description.trim() || null })
+      .insert({
+        user_id: userId,
+        name: draft.name.trim(),
+        description: draft.description.trim() || null,
+        provenance: draft.provenance,
+      })
       .select('id')
       .single();
     if (mealErr || !meal) throw mealErr ?? new Error('Could not create meal');
@@ -99,7 +105,12 @@ export const savedMealService = {
   async update(id: string, draft: SavedMealDraft): Promise<void> {
     const { error: mealErr } = await supabase
       .from('saved_meals')
-      .update({ name: draft.name.trim(), description: draft.description.trim() || null, updated_at: new Date().toISOString() })
+      .update({
+        name: draft.name.trim(),
+        description: draft.description.trim() || null,
+        provenance: draft.provenance,
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', id);
     if (mealErr) throw mealErr;
 

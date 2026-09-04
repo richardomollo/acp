@@ -10,6 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { isNutritionSavedMealsEnabled } from '@/lib/flags';
 import { savedMealService } from '@/services/saved-meal-service';
 import { computeSavedMealPreview, type SavedMeal } from '@/lib/nutrition/saved-meal';
+import { savedMealProvenanceTag } from '@/lib/nutrition/homemade-meal';
 
 // Nutrition N6 — "My meals". A saved meal is a reusable RECIPE of canonical
 // foods + portions. The kcal shown here is a DETERMINISTIC preview recomputed
@@ -81,6 +82,7 @@ export default function MyMealsScreen() {
                     <ThemedText style={s.mealMeta}>
                       {meal.components.length} food{meal.components.length === 1 ? '' : 's'}
                       {meal.components.length > 0 ? ` · ${complete ? '~' : '≥ ~'}${kcal} kcal` : ''}
+                      {savedMealProvenanceTag(meal.provenance) ? ` · ${savedMealProvenanceTag(meal.provenance)}` : ''}
                     </ThemedText>
                   </View>
                   <TouchableOpacity

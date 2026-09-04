@@ -211,6 +211,22 @@ export default function LogFoodScreen() {
                 </TouchableOpacity>
               )}
 
+              {query.trim().length < 2 && (
+                <TouchableOpacity
+                  style={s.myMealsBtn}
+                  activeOpacity={0.8}
+                  onPress={() => router.push({
+                    pathname: '/homemade-meal',
+                    params: { ...(slot ? { slot } : {}) },
+                  })}
+                >
+                  <Ionicons name="restaurant-outline" size={16} color={palette.ink900} />
+                  <ThemedText style={s.cameraBtnText}>Log a homemade meal</ThemedText>
+                  <View style={{ flex: 1 }} />
+                  <Ionicons name="chevron-forward" size={16} color={palette.gray200} />
+                </TouchableOpacity>
+              )}
+
               {query.trim().length < 2 && recent.length > 0 && (
                 <>
                   <ThemedText style={s.sectionLabel}>Recent</ThemedText>
@@ -235,7 +251,24 @@ export default function LogFoodScreen() {
               )}
 
               {!searching && !searchError && query.trim().length >= 2 && results.length === 0 && (
-                <ThemedText style={s.emptyText}>No foods matched “{query.trim()}”.</ThemedText>
+                <View style={s.noMatchCard}>
+                  <ThemedText style={s.noMatchTitle}>No exact match for “{query.trim()}”.</ThemedText>
+                  <ThemedText style={s.noMatchBody}>
+                    If you cooked it yourself, log it as a homemade meal — build it from its
+                    ingredients, or enter the numbers off a label.
+                  </ThemedText>
+                  <TouchableOpacity
+                    style={s.noMatchBtn}
+                    activeOpacity={0.85}
+                    onPress={() => router.push({
+                      pathname: '/homemade-meal',
+                      params: { name: query.trim(), ...(slot ? { slot } : {}) },
+                    })}
+                  >
+                    <Ionicons name="restaurant-outline" size={16} color="#fff" />
+                    <ThemedText style={s.noMatchBtnText}>Log a homemade meal</ThemedText>
+                  </TouchableOpacity>
+                </View>
               )}
 
               {!searching && results.map(r => (
@@ -376,6 +409,17 @@ const s = StyleSheet.create({
   rowName: { fontSize: 14.5, fontWeight: '700', color: palette.ink900 },
   rowMeta: { fontSize: 12, color: palette.gray450, marginTop: 2 },
   emptyText: { fontSize: 13.5, color: palette.gray450, textAlign: 'center', marginTop: 40 },
+  noMatchCard: {
+    marginTop: 32, padding: 16, borderRadius: radii.lg,
+    borderWidth: 1, borderColor: palette.hairline, backgroundColor: palette.surfaceMuted,
+  },
+  noMatchTitle: { fontSize: 14, fontWeight: '800', color: palette.ink900 },
+  noMatchBody: { fontSize: 12.5, color: palette.gray450, lineHeight: 18, marginTop: 6 },
+  noMatchBtn: {
+    marginTop: 14, height: 46, borderRadius: radii.lg, backgroundColor: palette.ink900,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+  },
+  noMatchBtnText: { fontSize: 14, fontWeight: '800', color: '#fff' },
   notice: { alignItems: 'center', marginTop: 40, gap: 8 },
   noticeText: { fontSize: 13.5, color: palette.gray450 },
   noticeRetry: { fontSize: 13.5, fontWeight: '700', color: palette.blue600 },

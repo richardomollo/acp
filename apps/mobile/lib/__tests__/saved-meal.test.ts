@@ -217,7 +217,8 @@ describe('saved meal draft operations (§52)', () => {
 
 // ── validation ─────────────────────────────────────────────────────────
 describe('validateDraft', () => {
-  const withComp = (name: string, cs: DraftComponent[]): SavedMealDraft => ({ id: null, name, description: '', components: cs });
+  const withComp = (name: string, cs: DraftComponent[]): SavedMealDraft =>
+    ({ id: null, name, description: '', components: cs, provenance: 'user_recipe_from_components' });
 
   test('blank name → nameError', () => {
     const v = validateDraft(withComp('   ', [comp(banana(), '100', 'g')]));
@@ -283,6 +284,7 @@ describe('draftToItemRows / prefill', () => {
   test('draftFromSavedMeal round-trips a persisted meal into an editable draft', () => {
     const meal: SavedMeal = {
       id: 'm1', name: 'My Breakfast', description: null,
+      provenance: 'user_recipe_from_components',
       createdAt: 't', updatedAt: 't',
       components: [
         { id: 'i2', food: oats(), quantity: 30, unit: 'g', servingLabel: null, sortOrder: 1 },

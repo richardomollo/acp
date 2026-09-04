@@ -12,6 +12,7 @@ import { localISODate } from '@/lib/fulfilment';
 import {
   resolveGrams, computeLogSnapshot, sumDailyNutrition,
 } from '@/lib/nutrition/food-nutrition';
+import { normaliseUserNutrients, HOMEMADE_MEAL_SOURCE } from '@/lib/nutrition/homemade-meal';
 import { buildHistory, addLocalDays, type DayNutrition } from '@/lib/nutrition/nutrition-history';
 import {
   NUTRIENT_KEYS, emptyNutrients,
@@ -26,6 +27,7 @@ const LOG_SELECT = [
   'id', 'user_id', 'logged_at', 'local_date', 'timezone', 'meal_slot', 'food_id',
   'display_name', 'brand', 'quantity', 'unit', 'serving_label', 'quantity_grams',
   'capture_method', 'source', 'source_type', 'note', 'log_group_id', 'saved_meal_id',
+  'user_provided_nutrition',
   ...Object.values(NUTRIENT_COLUMN),
 ].join(', ');
 
@@ -65,6 +67,7 @@ function mapLogRow(row: Record<string, any>): FoodLogEntry {
     note: row.note ?? null,
     logGroupId: row.log_group_id ?? null,
     savedMealId: row.saved_meal_id ?? null,
+    userProvidedNutrition: row.user_provided_nutrition === true,
     nutrients: readNutrientsFromRow(row),
   };
 }
@@ -118,8 +121,16 @@ export const foodLogService = {
   /**
    * Logs one food. Resolves the portion to grams deterministically, freezes
    * the nutrient snapshot at this moment (N1 §11/§12), and inserts an
-   * owner-only row. A name-only custom entry (`foodId === null`) carries no
-   * grams and no nutrients — it contributes nothing to totals (N1 §13-B).
+   * owner-only row.
+   *
+   *   • `foodId` set          → snapshot is SCALED from the canonical food.
+   *   • `userProvidedNutrition` (N6.5 / Beta #018) → the caller supplied the
+   *     nutrient TOTALS for the portion (a homemade / packaged / takeaway
+   *     item with no canonical row). Frozen verbatim; blanks stay `null`,
+   *     never 0; source_type is 'user_custom'.
+   *   • neither                → a name-only custom entry: no grams, no
+   *     nutrients, contributes nothing to totals (N1 §13-B).
+   *
    * Throws on an unresolvable portion — never persists a fake number.
    */
   async logFood(userId: string, input: FoodLogInput, now: Date = new Date()): Promise<FoodLogEntry> {
@@ -131,6 +142,7 @@ export const foodLogService = {
     let snapshot: Nutrients = emptyNutrients();
     let source: string | null = null;
     let sourceType: string | null = null;
+    const userProvidedNutrition = !input.foodId && input.userProvidedNutrition === true && input.nutrients != null;
 
     if (input.foodId) {
       const food = await this.getFood(input.foodId);
@@ -139,6 +151,14 @@ export const foodLogService = {
       snapshot = computeLogSnapshot(food, quantityGrams);
       source = food.source;
       sourceType = food.sourceType;
+    } else if (userProvidedNutrition) {
+      // The user's own numbers for the whole portion — not scaled, not
+      // invented. Grams-first: a real (approximate) weight makes this a food
+      // entry rather than a name-only one.
+      snapshot = normaliseUserNutrients(input.nutrients);
+      quantityGrams = input.unit === 'g' && input.quantity > 0 ? input.quantity : null;
+      source = HOMEMADE_MEAL_SOURCE;
+      sourceType = 'user_custom';
     }
 
     const { data, error } = await supabase
@@ -162,6 +182,7 @@ export const foodLogService = {
         note: input.note?.trim() || null,
         log_group_id: input.logGroupId ?? null,
         saved_meal_id: input.savedMealId ?? null,
+        user_provided_nutrition: userProvidedNutrition,
         ...nutrientsToColumns(snapshot),
       })
       .select(LOG_SELECT)
@@ -175,8 +196,16 @@ export const foodLogService = {
     entryId: string, quantity: number, unit: LogUnit, servingLabel?: string | null,
   ): Promise<FoodLogEntry> {
     const { data: existing } = await supabase
-      .from('food_log_entries').select('food_id').eq('id', entryId).maybeSingle();
+      .from('food_log_entries').select('food_id, user_provided_nutrition').eq('id', entryId).maybeSingle();
     if (!existing) throw new Error('Entry not found');
+
+    // A user-provided homemade/packaged row has no canonical food to re-scale
+    // from — its numbers describe a specific portion the user ate. Editing
+    // the amount can't reinterpret those totals, so this path won't touch it;
+    // the UI deletes and re-adds instead.
+    if ((existing as any).user_provided_nutrition === true) {
+      throw new Error('Delete and re-add a homemade entry to change its amount.');
+    }
 
     let quantityGrams: number | null = null;
     let snapshot: Nutrients = emptyNutrients();
