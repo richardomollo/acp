@@ -8,9 +8,14 @@ import { palette, radii, fontSize, shadows } from '@/constants/theme';
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
-import { DateRail, buildDateRange } from '@/components/date-rail';
+import { buildDateRange } from '@/components/date-rail';
 import { LinearGradient } from 'expo-linear-gradient';
+import { authService } from '@/services/auth';
 import { useMarketplaceLocation } from '@/contexts/marketplace-location-context';
+import { MarketplaceUnavailableNotice } from '@/components/marketplace/marketplace-gate';
+import {
+  resolveFitnessDayState, scheduleOccursOnDate,
+} from '@/lib/fitness-empty-state';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -24,11 +29,20 @@ interface FitnessSession {
   gyms: { name: string } | null;
 }
 
+interface ScheduledWorkout {
+  workout_id: string;
+  start_date: string;
+  recurrence: string;
+  weekdays: number[];
+  workouts: { title: string | null } | null;
+}
+
 // Real `sessions.category` values seen in production — bucketed into two
 // honest, non-fabricated rails. Anything not recognised as a self-directed
 // workout style falls into Classes (the safer default for instructor-led
 // content like pilates/martial arts/dance).
 const WORKOUT_CATEGORIES = new Set(['hiit', 'strength training', 'cardio', 'crossfit', 'strength']);
+const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function isWorkoutCategory(category: string | null): boolean {
   return WORKOUT_CATEGORIES.has((category ?? '').toLowerCase());
@@ -109,6 +123,22 @@ export default function FitnessScreen() {
   const scopeKey = scopeIds === null ? 'all' : scopeIds.join(',');
   useEffect(() => { ml.ensureResolved({ requestPermission: false }); }, [ml]);
 
+  // Beta #019B — self-guided / trainer-scheduled workouts for the selected day.
+  // These are NEVER hidden because marketplace supply is absent (§4).
+  const [scheduledWorkouts, setScheduledWorkouts] = useState<ScheduledWorkout[]>([]);
+  useEffect(() => {
+    (async () => {
+      const session = await authService.getSession();
+      if (!session?.user) { setScheduledWorkouts([]); return; }
+      const { data } = await supabase
+        .from('workout_schedules')
+        .select('workout_id, start_date, recurrence, weekdays, workouts(title)')
+        .eq('user_id', session.user.id)
+        .eq('is_active', true);
+      setScheduledWorkouts((data as unknown as ScheduledWorkout[]) ?? []);
+    })();
+  }, []);
+
   useEffect(() => {
     (async () => {
       if (scopeIds !== null && scopeIds.length === 0) { setSessions([]); setLoading(false); return; }
@@ -131,6 +161,19 @@ export default function FitnessScreen() {
   const classSessions = useMemo(() => sessions.filter(sess => !isWorkoutCategory(sess.category)), [sessions]);
   const plannedToday = sessionDates.has(selectedDate);
 
+  // Beta #019B — the empty state depends on BOTH day content and #019
+  // marketplace availability, and a planned workout always wins.
+  const dayWorkouts = useMemo(
+    () => scheduledWorkouts.filter(w => scheduleOccursOnDate(w, selectedDate)),
+    [scheduledWorkouts, selectedDate],
+  );
+  const dayState = resolveFitnessDayState({
+    hasMarketplaceSessionOnDay: plannedToday,
+    hasPlannedWorkoutOnDay: dayWorkouts.length > 0,
+    marketplaceStatus: ml.availability?.status ?? null,
+    geoGatingEnabled: ml.geoGatingEnabled,
+  });
+
   const openSession = (session: FitnessSession) => {
     router.push({ pathname: '/session-details', params: { sessionId: session.id, gymName: session.gyms?.name || 'Gym' } } as any);
   };
@@ -149,19 +192,77 @@ export default function FitnessScreen() {
 
       <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
         <ThemedText style={s.todayLabel}>Today</ThemedText>
-        <DateRail days={days} selected={selectedDate} sessionDates={sessionDates} onSelect={setSelectedDate} />
-
-        <View style={s.emptyCard}>
-          <View style={s.emptyIconWrap}>
-            <Ionicons name="calendar-outline" size={22} color={palette.blue600} />
-          </View>
-          <ThemedText style={s.emptyText}>
-            {plannedToday ? 'Sessions are available this day' : "You've got nothing planned for this day"}
-          </ThemedText>
-          <TouchableOpacity onPress={() => router.push('/workout-hub' as any)} activeOpacity={0.7}>
-            <ThemedText style={s.emptyCta}>Plan something</ThemedText>
-          </TouchableOpacity>
+        {/* Date strip — same styling as the Weekly Plan page's week strip. */}
+        <View style={s.weekStrip}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.weekStripRow}>
+            {days.map(({ date, dateStr }) => {
+              const isSelected = dateStr === selectedDate;
+              const isToday = dateStr === today;
+              const hasSessions = sessionDates.has(dateStr);
+              return (
+                <TouchableOpacity
+                  key={dateStr}
+                  style={[s.stripDay, isSelected && s.stripDaySelected]}
+                  onPress={() => setSelectedDate(dateStr)}
+                  activeOpacity={0.7}
+                >
+                  <ThemedText style={[s.stripDayLabel, isToday && s.stripDayLabelToday]}>
+                    {isToday ? 'Today' : DAY_ABBR[date.getDay()]}
+                  </ThemedText>
+                  <ThemedText style={[s.stripDayNum, isToday && s.stripDayNumToday]}>{date.getDate()}</ThemedText>
+                  <View style={[s.stripDot, hasSessions && s.stripDotActive]} />
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
         </View>
+
+        {/* Beta #019B — empty state depends on day content AND #019 market
+            availability; a self-guided workout is never hidden (§4). */}
+        {dayState === 'has_planned_workout' ? (
+          <TouchableOpacity
+            style={s.emptyCard}
+            activeOpacity={0.85}
+            onPress={() => router.push({ pathname: '/workout-detail', params: { workoutId: dayWorkouts[0].workout_id } } as any)}
+          >
+            <View style={s.emptyIconWrap}>
+              <Ionicons name="barbell-outline" size={22} color={palette.blue600} />
+            </View>
+            <ThemedText style={s.emptyText}>
+              {dayWorkouts[0].workouts?.title
+                ? `Planned: ${dayWorkouts[0].workouts.title}`
+                : 'You have a workout planned for this day'}
+            </ThemedText>
+            <ThemedText style={s.emptyCta}>Open workout</ThemedText>
+          </TouchableOpacity>
+        ) : dayState === 'has_marketplace_session' ? (
+          <View style={s.emptyCard}>
+            <View style={s.emptyIconWrap}>
+              <Ionicons name="calendar-outline" size={22} color={palette.blue600} />
+            </View>
+            <ThemedText style={s.emptyText}>Sessions are available this day</ThemedText>
+            <TouchableOpacity onPress={() => router.push('/workout-hub' as any)} activeOpacity={0.7}>
+              <ThemedText style={s.emptyCta}>Plan something</ThemedText>
+            </TouchableOpacity>
+          </View>
+        ) : dayState === 'empty_available' ? (
+          <View style={s.emptyCard}>
+            <View style={s.emptyIconWrap}>
+              <Ionicons name="calendar-outline" size={22} color={palette.blue600} />
+            </View>
+            <ThemedText style={s.emptyText}>You&apos;ve got nothing planned for this day</ThemedText>
+            <TouchableOpacity onPress={() => router.push('/workout-hub' as any)} activeOpacity={0.7}>
+              <ThemedText style={s.emptyCta}>Plan something</ThemedText>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          // empty_no_local_inventory | empty_location_unknown — reuse the #019
+          // availability notice verbatim so Fitness, Discover and Home speak
+          // the same language (§2/§9).
+          <View style={s.noticeWrap}>
+            <MarketplaceUnavailableNotice supplyNoun="bookable gyms, classes or trainers" showLoading={false} />
+          </View>
+        )}
 
         <SessionRail
           title="Workouts"
@@ -207,6 +308,22 @@ const s = StyleSheet.create({
     paddingHorizontal: 20, marginTop: 16,
   },
 
+  // Date strip — mirrors weekly-plan.tsx's weekStrip / stripDay styling.
+  weekStrip: {
+    backgroundColor: palette.surfaceMuted,
+    borderRadius: radii['2xl'], padding: 12,
+    marginHorizontal: 20, marginTop: 8, marginBottom: 16,
+  },
+  weekStripRow: { gap: 6 },
+  stripDay: { alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 12, borderRadius: radii.lg, minWidth: 52 },
+  stripDaySelected: { backgroundColor: palette.white },
+  stripDayLabel: { fontSize: 11, fontWeight: '600', color: palette.gray450, textTransform: 'uppercase' },
+  stripDayLabelToday: { color: palette.blue600 },
+  stripDayNum: { fontSize: fontSize.base, fontWeight: '800', color: palette.ink900 },
+  stripDayNumToday: { color: palette.blue600 },
+  stripDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: palette.border, marginTop: 2 },
+  stripDotActive: { backgroundColor: palette.blue500 },
+
   emptyCard: {
     marginHorizontal: 20, marginTop: 4, marginBottom: 24,
     backgroundColor: palette.surfaceMuted, borderRadius: radii.xl,
@@ -219,6 +336,7 @@ const s = StyleSheet.create({
   },
   emptyText: { fontSize: 14, fontWeight: '600', color: palette.ink700, textAlign: 'center' },
   emptyCta: { fontSize: 13, fontWeight: '700', color: palette.blue600 },
+  noticeWrap: { paddingHorizontal: 20, marginTop: 4, marginBottom: 24 },
 
   section: { marginBottom: 24 },
   sectionHeaderRow: {

@@ -94,36 +94,27 @@ export function CityPickerModal({ visible, onClose }: { visible: boolean; onClos
   );
 }
 
-// ── The gate ─────────────────────────────────────────────────────────────
-export function MarketplaceGate({
-  children,
-  /** copy tweak for the unsupported state, e.g. "bookable classes" */
+// ── The non-available notice (reused by MarketplaceGate AND other surfaces
+//    e.g. the Fitness empty-state, so the market-availability language stays
+//    identical everywhere — Beta #019B §2/§9). Renders one of: retry (query
+//    failed), "We're not in <city> yet" (no_local_inventory), "Where should
+//    we look?" (location_unknown). Returns null when the market is available
+//    or still resolving (unless `showLoading`). ──
+export function MarketplaceUnavailableNotice({
   supplyNoun = 'bookable gyms, trainers or wellness partners',
-  /** when true, resolve location as soon as this mounts and prompt for GPS
-   *  the first time (Discover). A background surface passes false. */
-  autoResolve = true,
+  showLoading = true,
 }: {
-  children: ReactNode;
   supplyNoun?: string;
-  autoResolve?: boolean;
+  showLoading?: boolean;
 }) {
-  const {
-    resolution, availability, queryFailed, retry, ensureResolved, activeLabel,
-  } = useMarketplaceLocation();
+  const { resolution, availability, queryFailed, retry, activeLabel } = useMarketplaceLocation();
   const [pickerOpen, setPickerOpen] = useState(false);
-
-  useEffect(() => {
-    if (autoResolve) ensureResolved({ requestPermission: true });
-  }, [autoResolve, ensureResolved]);
-
   const cityBit = activeLabel ? ` in ${activeLabel}` : ' here';
 
-  // Still resolving and nothing to show yet.
   if (resolution !== 'ready' && !availability && !queryFailed) {
-    return <View style={s.centre}><ActivityIndicator color={palette.blue500} /></View>;
+    return showLoading ? <View style={s.centre}><ActivityIndicator color={palette.blue500} /></View> : null;
   }
 
-  // Query failed — neutral retry, never a false "not in your city".
   if (queryFailed && (!availability || availability.status !== 'available')) {
     return (
       <View style={s.stateCard}>
@@ -138,10 +129,7 @@ export function MarketplaceGate({
   }
 
   const status = availability?.status;
-
-  if (status === 'available') {
-    return <>{children}</>;
-  }
+  if (status === 'available' || status == null) return null;
 
   if (status === 'no_local_inventory') {
     return (
@@ -181,6 +169,38 @@ export function MarketplaceGate({
       <CityPickerModal visible={pickerOpen} onClose={() => setPickerOpen(false)} />
     </>
   );
+}
+
+// ── The gate ─────────────────────────────────────────────────────────────
+export function MarketplaceGate({
+  children,
+  /** copy tweak for the unsupported state, e.g. "bookable classes" */
+  supplyNoun = 'bookable gyms, trainers or wellness partners',
+  /** when true, resolve location as soon as this mounts and prompt for GPS
+   *  the first time (Discover). A background surface passes false. */
+  autoResolve = true,
+}: {
+  children: ReactNode;
+  supplyNoun?: string;
+  autoResolve?: boolean;
+}) {
+  const { resolution, availability, queryFailed, ensureResolved } = useMarketplaceLocation();
+
+  useEffect(() => {
+    if (autoResolve) ensureResolved({ requestPermission: true });
+  }, [autoResolve, ensureResolved]);
+
+  // Still resolving and nothing to show yet.
+  if (resolution !== 'ready' && !availability && !queryFailed) {
+    return <View style={s.centre}><ActivityIndicator color={palette.blue500} /></View>;
+  }
+
+  // Available (incl. stale-but-available while a refetch failed) → real content.
+  if (availability?.status === 'available') {
+    return <>{children}</>;
+  }
+
+  return <MarketplaceUnavailableNotice supplyNoun={supplyNoun} />;
 }
 
 const s = StyleSheet.create({
