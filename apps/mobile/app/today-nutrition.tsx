@@ -23,7 +23,8 @@ import { buildNutritionPatterns, type NutritionPatternEvidence } from '@/lib/nut
 import { KEY_NUTRIENTS } from '@/lib/nutrition/nutrient-display';
 import { NutrientList } from '@/components/nutrition/nutrient-list';
 import { ObservedPanel, DayEnergyStrip } from '@/components/nutrition/nutrition-observed';
-import { NutritionReferenceSection } from '@/components/nutrition/nutrition-references';
+// "Your nutrition references" section hidden per product decision (2026-09-04) — see render site below.
+// import { NutritionReferenceSection } from '@/components/nutrition/nutrition-references';
 import { nutritionReferenceService } from '@/services/nutrition-reference-service';
 import { buildNutritionReferenceComparisons, type UserReferenceContext, type NutritionReferenceComparison } from '@/lib/nutrition/nutrition-reference-engine';
 import { NutritionCoachingSection } from '@/components/nutrition/nutrition-coaching-section';
@@ -559,13 +560,16 @@ export default function TodayNutritionScreen() {
               </View>
             )}
 
-            {/* Nutrition N3 — reference comparison. Deterministic, neutral,
-                never a recommendation. */}
+            {/* Nutrition N3 — "Your nutrition references" — hidden per product
+                decision (2026-09-04). The data still loads (refContext /
+                refComparisons) for any future use; only the section render is
+                removed. Re-enable by restoring the <NutritionReferenceSection>
+                block below.
             {refContext && refComparisons && (
               <View style={s.section}>
                 <NutritionReferenceSection context={refContext} comparisons={refComparisons} />
               </View>
-            )}
+            )} */}
 
             {/* Nutrition N4 — coaching. Deterministic cards always; LLM only
                 rephrases. Renders nothing when there are no eligible
