@@ -14,12 +14,14 @@ import { supabase } from '@/lib/supabase';
 import { authService } from './auth';
 import { programmeService } from './programme-service';
 import { getHumanSupportInsight } from './human-support-service';
-import { selectExerciseForRequirement, type SelectedExercise } from './exercise-selection-service';
+import { selectExerciseForRequirement, selectionKeys, type SelectedExercise } from './exercise-selection-service';
+import { exerciseService } from './exercise-service';
 import {
   buildGenerationContext, isGoalSupported, MOBILITY_REQUIREMENTS,
   workoutTypeSpec, estimateSessionMinutes,
-  classifyStrengthStructure, fitStrengthSessionForStructure, fullBodyOrdinalInPlan, type ProfileLike,
+  classifyStrengthStructure, fitStrengthSessionForStructure, titleImpliesConditioning, fullBodyOrdinalInPlan, type ProfileLike,
 } from '@/lib/programme-generator';
+import { sanitizeStrengthActivity } from '@/lib/plan-execution-capability';
 import type { ExerciseRequirement, GenerationContext } from '@/lib/programme-types';
 import { resolveWeekNumber, parseLocalDateOnly } from '@/lib/workout-execution';
 import { normalizeActivity, type NormalizedActivityKey } from '@/lib/fulfilment';
@@ -90,6 +92,45 @@ async function persistExercise(selected: SelectedExercise): Promise<string | nul
   return data.id;
 }
 
+/**
+ * Best-effort media backfill. Exercises persisted while the MuscleWiki proxy
+ * was unavailable have gif_url = null and never recover on their own (the
+ * value is frozen at generation time). Called on demand — e.g. when Home
+ * resolves a workout whose card has no background — this re-fetches media
+ * for that workout's MuscleWiki exercises and populates gif_url in place, so
+ * the demo clips also start showing in workout-detail / workout-player.
+ *
+ * Only touches source='musclewiki' rows that have an external_id and no
+ * gif_url; ACP's own fallback bodyweight exercises (no external id, no
+ * media) are left alone. Sequential + capped — this is a background repair,
+ * not a hot path. Returns the first media URL it managed to persist, else null.
+ */
+export async function hydrateWorkoutExerciseMedia(workoutId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('workout_exercises')
+    .select('sort_order, exercises(id, source, external_id, gif_url)')
+    .eq('workout_id', workoutId)
+    .order('sort_order');
+
+  const stale = ((data as any[]) ?? [])
+    .map(r => r.exercises)
+    .filter((e: any): e is { id: string; source: string; external_id: string | null; gif_url: string | null } =>
+      !!e && e.source === 'musclewiki' && !!e.external_id && !e.gif_url);
+  if (stale.length === 0) return null;
+
+  let firstUrl: string | null = null;
+  for (const e of stale.slice(0, 8)) {
+    try {
+      const fresh = await exerciseService.getById(e.external_id!);
+      const url = fresh?.media[0]?.url ?? null;
+      if (!url) continue;
+      await supabase.from('exercises').update({ gif_url: url }).eq('id', e.id);
+      if (!firstUrl) firstUrl = url;
+    } catch { /* best effort — a miss just leaves the card in its plain form */ }
+  }
+  return firstUrl;
+}
+
 /** Real count of persisted workout_exercises rows for a workout — never inferred/assumed from the requirement list, since a requirement can fail to persist (Day 2 section 11's silent-continue-on-failure). */
 async function countWorkoutExercises(workoutId: string): Promise<number> {
   const { count } = await supabase
@@ -151,6 +192,55 @@ async function findExistingSession(
   return { id: match.id, title: match.title, isActivityBlock, durationMinutes: match.duration_minutes, exerciseCount };
 }
 
+function isoWeekBounds(localDate: string): { monday: string; sunday: string } {
+  const d = parseLocalDateOnly(localDate) ?? new Date();
+  const day = (d.getDay() + 6) % 7; // 0 = Monday
+  const monday = new Date(d); monday.setDate(d.getDate() - day);
+  const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
+  const fmt = (x: Date) => x.toISOString().slice(0, 10);
+  return { monday: fmt(monday), sunday: fmt(sunday) };
+}
+
+/**
+ * Beta #016 §9/§11 — normalized-name keys of the exercises already
+ * prescribed in this user's OTHER standalone strength sessions in the same
+ * Mon–Sun week. Deterministic (pure DB read of existing rows), no AI/RNG.
+ * The caller applies these to ACCESSORY/CORE requirements only, so a week's
+ * accessories rotate while anchor compound lifts stay continuous for
+ * progression (§10). Fully best-effort: any failure → empty set → the
+ * previous single-session behaviour, unchanged.
+ */
+async function weeklyStrengthExerciseKeys(
+  userId: string, aroundLocalDate: string | null | undefined, excludeWorkoutId: string,
+): Promise<Set<string>> {
+  const keys = new Set<string>();
+  if (!aroundLocalDate) return keys;
+  try {
+    const { monday, sunday } = isoWeekBounds(aroundLocalDate);
+    const { data: workoutRows } = await supabase
+      .from('workouts')
+      .select('id, workout_type, suggested_local_date')
+      .eq('user_id', userId)
+      .gte('suggested_local_date', monday)
+      .lte('suggested_local_date', sunday);
+    const ids = ((workoutRows as any[]) ?? [])
+      .filter(w => typeof w.workout_type === 'string' && w.workout_type.startsWith('acp_suggested_strength') && w.id !== excludeWorkoutId)
+      .map(w => w.id);
+    if (ids.length === 0) return keys;
+    const { data: exRows } = await supabase
+      .from('workout_exercises')
+      .select('exercises(name)')
+      .in('workout_id', ids);
+    for (const r of (exRows as any[]) ?? []) {
+      const name = r.exercises?.name;
+      if (typeof name === 'string' && name.trim()) {
+        keys.add(`name:${name.trim().toLowerCase().replace(/\s+/g, ' ')}`);
+      }
+    }
+  } catch { /* best-effort — no weekly context, unchanged behaviour */ }
+  return keys;
+}
+
 /**
  * Runs exercise selection/persistence against an EXISTING workout row —
  * shared by fresh generation (a brand-new claimed row) and repair (Chunk
@@ -161,13 +251,40 @@ async function findExistingSession(
  */
 async function populateExerciseWorkout(
   workoutId: string, requirements: ExerciseRequirement[], context: GenerationContext,
+  // Beta #016 (§9/§11) — normalized names of ACCESSORY/CORE exercises already
+  // prescribed in sibling strength sessions of the same canonical week.
+  // Seeded into `alreadySelected` for non-compound requirements only, so a
+  // week's accessories rotate while anchor compound lifts stay continuous for
+  // progression (§10). Empty/absent → single-session behaviour, unchanged.
+  weeklyAccessoryExclusions?: Set<string>,
 ): Promise<number> {
   const alreadySelected = new Set<string>();
   let sortOrder = await countWorkoutExercises(workoutId);
   let exerciseCount = 0;
+
   for (const requirement of requirements) {
-    const picked = await selectExerciseForRequirement(requirement, context.equipmentLocation, context.experience, alreadySelected);
-    alreadySelected.add(picked.exercise.id);
+    const isCompound = requirement.role === 'compound';
+    // This session's own picks always block a re-pick. Weekly rotation adds
+    // to that for accessories/core only — it never blocks an anchor compound
+    // from recurring across the week (§10).
+    const exclude = isCompound || !weeklyAccessoryExclusions
+      ? alreadySelected
+      : new Set<string>([...alreadySelected, ...weeklyAccessoryExclusions]);
+
+    const picked = await selectExerciseForRequirement(requirement, context.equipmentLocation, context.experience, exclude);
+
+    // Beta #016 invariant + Beta #017 §16/§17 — a requirement that can only
+    // be satisfied by an exercise already in this session is DROPPED, not
+    // folded. Folding this requirement's sets onto the prior same-pattern row
+    // corrupts that row's prescription (an accessory 3×12 folded onto a
+    // compound 4×8 would read as "6×8"), which §17 says to avoid: prefer a
+    // truthful shorter workout over a semantically wrong exercise. With the
+    // #017 curated fallback pool this case is now rare (a repeated pattern
+    // resolves to a DISTINCT curated exercise), so the duration cost is small.
+    if (picked.duplicate) continue;
+
+    for (const k of selectionKeys(picked.exercise)) alreadySelected.add(k);
+
     const exerciseId = await persistExercise(picked);
     if (!exerciseId) continue;
     const { error: weErr } = await supabase.from('workout_exercises').insert({
@@ -350,7 +467,7 @@ async function claimStandaloneWorkoutSlot(
 async function generateExerciseSession(
   userId: string, requirements: ExerciseRequirement[], context: GenerationContext,
   key: SupportedActivityKey, title: string, category: string, durationMinutes: number,
-  opts?: { workoutType?: string; description?: string; slotDate?: string; locationType?: 'home' | 'gym' | 'both' },
+  opts?: { workoutType?: string; description?: string; slotDate?: string; locationType?: 'home' | 'gym' | 'both'; weeklyExclusions?: Set<string> },
 ): Promise<{ id: string; title: string; durationMinutes: number; exerciseCount: number } | null> {
   const claim = await claimStandaloneWorkoutSlot(userId, key, {
     title,
@@ -370,7 +487,7 @@ async function generateExerciseSession(
     return { id: claim.id, title: claim.title, durationMinutes: claim.durationMinutes, exerciseCount };
   }
 
-  const exerciseCount = await populateExerciseWorkout(claim.id, requirements, context);
+  const exerciseCount = await populateExerciseWorkout(claim.id, requirements, context, opts?.weeklyExclusions);
   if (!isValidSuggestedSession({ isActivityBlock: false, exerciseCount })) return null; // never report a broken session as a successful GENERATED_PERSONALISED_SESSION (section 9)
   return { id: claim.id, title: claim.title, durationMinutes: claim.durationMinutes, exerciseCount };
 }
@@ -420,7 +537,15 @@ async function generateSession(
       const { requirements, durationMinutes } = fitStrengthSessionForStructure(
         structure, context.experience, activity.duration_minutes,
         strengthSeed ?? activity.planned_date ?? activity.day ?? null,
+        // Beta #016 §8 — a "…plus short conditioning" canonical activity must
+        // not have its strength portion padded to fill the whole window with
+        // extra accessory strength work (ACP can't model the conditioning
+        // block — documented gap).
+        { skipPrimaryFill: titleImpliesConditioning(activity.title, activity.description) },
       );
+      // Beta #016 §9/§11 — accessories/core rotate off what the rest of this
+      // week's strength sessions already prescribed; anchor compounds don't.
+      const weeklyExclusions = await weeklyStrengthExerciseKeys(userId, activity.planned_date, /* excludeWorkoutId */ '');
       // Beta #015C — location is NOT a substitute for session duration (§10):
       // a standalone support day is now a substantive ~60-min session for an
       // advanced user, so it's no longer stamped 'both' to soften a 24-min
@@ -432,6 +557,7 @@ async function generateSession(
           workoutType: suggestedStrengthWorkoutType(structure),
           description: strengthDescription(activity, context.experience),
           slotDate: activity.planned_date ?? undefined,
+          weeklyExclusions,
         },
       );
       return w ? { ...w, sessionType: 'exercise_workout' } : null;
@@ -463,8 +589,16 @@ async function generateSession(
  * falls back to the existing fulfilment.ts self-directed/marketplace
  * rendering for that case, exactly as before this task.
  */
-export async function getActivityRecommendation(userId: string, activity: StartingPlanActivity): Promise<ActivityRecommendation> {
-  const key = normalizeActivity(activity.activity || activity.title, activity.category);
+export async function getActivityRecommendation(userId: string, rawActivity: StartingPlanActivity): Promise<ActivityRecommendation> {
+  const key = normalizeActivity(rawActivity.activity || rawActivity.title, rawActivity.category);
+
+  // Beta #017 §12B/§13 — a strength activity whose canonical title/description
+  // promises a conditioning block ACP can't execute is sanitised BEFORE
+  // anything reads it: the card title, the generated workout, the reuse-
+  // signature and the stored duration all then reflect what actually runs.
+  const { activity: sanitizedActivity, strippedConditioning } =
+    key === 'gym' ? sanitizeStrengthActivity(rawActivity) : { activity: rawActivity, strippedConditioning: false };
+  const activity = sanitizedActivity;
 
   const fallback = (professionalSupport?: ProfessionalSupportRecommendation): ActivityRecommendation => ({
     activityType: key,
@@ -554,7 +688,8 @@ export async function getActivityRecommendation(userId: string, activity: Starti
 
   const requirementsForKey: ExerciseRequirement[] | null =
     key === 'gym'
-      ? fitStrengthSessionForStructure(strengthStructure!, context.experience, activity.duration_minutes, strengthSeed).requirements
+      ? fitStrengthSessionForStructure(strengthStructure!, context.experience, activity.duration_minutes, strengthSeed,
+          { skipPrimaryFill: titleImpliesConditioning(activity.title, activity.description) }).requirements
     : key === 'mobility' ? MOBILITY_REQUIREMENTS : null;
 
   // Beta Feedback #006 (cardio) + #013 (strength) — the headline/title must
@@ -592,14 +727,19 @@ export async function getActivityRecommendation(userId: string, activity: Starti
   const generated = await generateSession(userId, key, context, activity, strengthSeed);
   if (!generated) return fallback(professionalSupport);
 
+  // Beta #017 §13/§14 — never silently drop the conditioning promise.
+  const reason = strippedConditioning
+    ? `${SESSION_REASON[key]} The plan mentioned a conditioning finisher, which isn't something the guided session can run yet — this is the strength portion, fitted honestly to the time.`
+    : SESSION_REASON[key];
+
   return {
     activityType: key,
     title: headline,
-    reason: SESSION_REASON[key],
+    reason,
     durationMinutes: generated.durationMinutes,
     selfGuided: {
       mode: 'GENERATED_PERSONALISED_SESSION', sessionId: generated.id, sessionType: generated.sessionType,
-      title: selfTitle, reason: SESSION_REASON[key], exerciseCount: generated.exerciseCount,
+      title: selfTitle, reason, exerciseCount: generated.exerciseCount,
     },
     professionalSupport,
   };
