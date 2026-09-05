@@ -1,6 +1,6 @@
 import {
   StyleSheet, View, ScrollView, TouchableOpacity,
-  ActivityIndicator, Dimensions, Alert, Platform,
+  ActivityIndicator, Alert, Platform,
 } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
@@ -13,8 +13,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ExerciseMedia } from '@/components/exercise-media';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getStravaStatus, connectStrava } from '@/services/strava';
-
-const GIF_SIZE = Dimensions.get('window').width - 88; // card has 14px padding each side + 20px outer each side
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -266,7 +264,9 @@ export default function WorkoutDetailScreen() {
           style={s.topFadeBg}
           pointerEvents="none"
         />
-        {/* ── Hero ── */}
+        {/* ── Hero — just the back/favorite nav row; stays pinned above the
+              scroll. Everything else (badge, title, stats) now scrolls with
+              the rest of the page — see heroMeta below, inside ScrollView. ── */}
         <View style={s.hero}>
           <SafeAreaView edges={['top']} style={s.heroSafe}>
             <View style={s.heroTopRow}>
@@ -286,88 +286,6 @@ export default function WorkoutDetailScreen() {
                     color={workoutFavorited ? '#ff6b6b' : palette.ink900}
                   />
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={s.editBtn}
-                  onPress={() => router.push({ pathname: '/schedule-workout', params: { workoutId: workout.id } } as any)}
-                  hitSlop={12}
-                >
-                  <Ionicons name="calendar-outline" size={18} color={palette.ink900} />
-                </TouchableOpacity>
-                {workout.user_id && workout.user_id === userId ? (
-                  <TouchableOpacity
-                    style={s.deleteBtn}
-                    onPress={handleDelete}
-                    disabled={deleting}
-                    hitSlop={12}
-                  >
-                    {deleting ? (
-                      <ActivityIndicator size="small" color={palette.danger600} />
-                    ) : (
-                      <Ionicons name="trash-outline" size={19} color={palette.danger600} />
-                    )}
-                  </TouchableOpacity>
-                ) : null}
-              </View>
-            </View>
-
-            <View style={s.heroMeta}>
-              <View style={s.badgeRow}>
-                {/* Beta Feedback #006 — a run/walk activity block has no
-                    meaningful difficulty tier (it is defined by its own
-                    prescription, e.g. "Run intervals"); showing "Beginner"
-                    on an advanced user's prescribed run was misleading. The
-                    badge stays for structured exercise workouts only. */}
-                {!workout.is_activity_block && (
-                  <View style={[s.diffBadge, { backgroundColor: diff.bg }]}>
-                    <ThemedText style={[s.diffText, { color: diff.text }]}>
-                      {workout.difficulty.charAt(0).toUpperCase() + workout.difficulty.slice(1)}
-                    </ThemedText>
-                  </View>
-                )}
-                {workout.assigned_by && (
-                  <View style={s.assignedBadge}>
-                    <Ionicons name="person-outline" size={11} color={palette.blue600} />
-                    <ThemedText style={s.assignedBadgeText}>
-                      Assigned by {workout.personal_trainers?.professional_name || workout.personal_trainers?.full_name || 'your trainer'}
-                    </ThemedText>
-                  </View>
-                )}
-              </View>
-              <ThemedText style={s.heroTitle}>{workout.title}</ThemedText>
-              {workout.description ? (
-                <ThemedText style={s.heroDesc}>{workout.description}</ThemedText>
-              ) : null}
-
-              {/* Stats strip */}
-              <View style={s.statsRow}>
-                <View style={s.statItem}>
-                  <Ionicons name="time-outline" size={16} color={palette.gray450} />
-                  <ThemedText style={s.statText}>{workout.duration_minutes} min</ThemedText>
-                </View>
-                {!workout.is_activity_block && (
-                  <>
-                    <View style={s.statDivider} />
-                    <View style={s.statItem}>
-                      <Ionicons name="list-outline" size={16} color={palette.gray450} />
-                      <ThemedText style={s.statText}>{exercises.length} exercises</ThemedText>
-                    </View>
-                  </>
-                )}
-                {/* Beta Feedback #006 — location (Home/Gym) is only
-                    meaningful for a structured exercise workout. A run is
-                    done outdoors or on a treadmill; labelling it "Gym" was
-                    wrong. */}
-                {!workout.is_activity_block && (
-                  <>
-                    <View style={s.statDivider} />
-                    <View style={s.statItem}>
-                      <Ionicons name={workout.location_type === 'home' ? 'home-outline' : 'barbell-outline'} size={16} color={palette.gray450} />
-                      <ThemedText style={s.statText}>
-                        {workout.location_type === 'home' ? 'Home' : workout.location_type === 'gym' ? 'Gym' : 'Any'}
-                      </ThemedText>
-                    </View>
-                  </>
-                )}
               </View>
             </View>
           </SafeAreaView>
@@ -375,6 +293,69 @@ export default function WorkoutDetailScreen() {
 
         {/* ── Exercise list ── */}
         <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
+          <View style={s.heroMeta}>
+            {workout.assigned_by && (
+              <View style={s.badgeRow}>
+                <View style={s.assignedBadge}>
+                  <Ionicons name="person-outline" size={11} color={palette.blue600} />
+                  <ThemedText style={s.assignedBadgeText}>
+                    Assigned by {workout.personal_trainers?.professional_name || workout.personal_trainers?.full_name || 'your trainer'}
+                  </ThemedText>
+                </View>
+              </View>
+            )}
+            <View style={s.titleRow}>
+              {/* Beta Feedback #006 — a run/walk activity block has no
+                  meaningful difficulty tier (it is defined by its own
+                  prescription, e.g. "Run intervals"); showing "Beginner"
+                  on an advanced user's prescribed run was misleading. The
+                  badge stays for structured exercise workouts only. */}
+              {!workout.is_activity_block && (
+                <View style={[s.diffBadge, { backgroundColor: diff.bg }]}>
+                  <ThemedText style={[s.diffText, { color: diff.text }]}>
+                    {workout.difficulty.charAt(0).toUpperCase() + workout.difficulty.slice(1)}
+                  </ThemedText>
+                </View>
+              )}
+              <ThemedText style={s.heroTitle}>{workout.title}</ThemedText>
+            </View>
+            {workout.description ? (
+              <ThemedText style={s.heroDesc}>{workout.description}</ThemedText>
+            ) : null}
+
+            {/* Stats strip */}
+            <View style={s.statsRow}>
+              <View style={s.statItem}>
+                <Ionicons name="time-outline" size={16} color={palette.gray450} />
+                <ThemedText style={s.statText}>{workout.duration_minutes} min</ThemedText>
+              </View>
+              {!workout.is_activity_block && (
+                <>
+                  <View style={s.statDivider} />
+                  <View style={s.statItem}>
+                    <Ionicons name="list-outline" size={16} color={palette.gray450} />
+                    <ThemedText style={s.statText}>{exercises.length} exercises</ThemedText>
+                  </View>
+                </>
+              )}
+              {/* Beta Feedback #006 — location (Home/Gym) is only
+                  meaningful for a structured exercise workout. A run is
+                  done outdoors or on a treadmill; labelling it "Gym" was
+                  wrong. */}
+              {!workout.is_activity_block && (
+                <>
+                  <View style={s.statDivider} />
+                  <View style={s.statItem}>
+                    <Ionicons name={workout.location_type === 'home' ? 'home-outline' : 'barbell-outline'} size={16} color={palette.gray450} />
+                    <ThemedText style={s.statText}>
+                      {workout.location_type === 'home' ? 'Home' : workout.location_type === 'gym' ? 'Gym' : 'Any'}
+                    </ThemedText>
+                  </View>
+                </>
+              )}
+            </View>
+          </View>
+
           {!workout.is_activity_block && <ThemedText style={s.sectionTitle}>Exercises</ThemedText>}
 
           {!workout.is_activity_block && groups.map(([bodyPart, items]) => {
@@ -399,14 +380,25 @@ export default function WorkoutDetailScreen() {
                       >
                         <View style={s.exMain}>
                           <View style={s.exHeader}>
-                            <View style={s.exIconWrap}>
-                              <Ionicons name={meta.icon as any} size={18} color={palette.blue600} />
-                            </View>
                             <View style={{ flex: 1 }}>
                               <ThemedText style={s.exName}>{ex.name}</ThemedText>
-                              {ex.target_muscle ? (
-                                <ThemedText style={s.exMuscle}>{ex.target_muscle}</ThemedText>
-                              ) : null}
+                              <View style={s.exMuscleRow}>
+                                {ex.target_muscle ? (
+                                  <ThemedText style={s.exMuscle}>{ex.target_muscle}</ThemedText>
+                                ) : null}
+                                {/* Equipment chip */}
+                                {ex.equipment && ex.equipment !== 'body weight' ? (
+                                  <View style={s.equipChip}>
+                                    <Ionicons name="barbell-outline" size={11} color={palette.gray450} />
+                                    <ThemedText style={s.equipText}>{ex.equipment}</ThemedText>
+                                  </View>
+                                ) : (
+                                  <View style={s.equipChip}>
+                                    <Ionicons name="checkmark-circle-outline" size={11} color={palette.success700} />
+                                    <ThemedText style={[s.equipText, { color: palette.success700 }]}>No equipment</ThemedText>
+                                  </View>
+                                )}
+                              </View>
                             </View>
                             <Ionicons
                               name={isOpen ? 'chevron-up' : 'chevron-down'}
@@ -417,19 +409,6 @@ export default function WorkoutDetailScreen() {
                           {/* Prescription */}
                           <ThemedText style={s.exPrescription}>{prescriptionLabel(we)}</ThemedText>
 
-                          {/* Equipment chips */}
-                          {ex.equipment && ex.equipment !== 'body weight' ? (
-                            <View style={s.equipChip}>
-                              <Ionicons name="barbell-outline" size={11} color={palette.gray450} />
-                              <ThemedText style={s.equipText}>{ex.equipment}</ThemedText>
-                            </View>
-                          ) : (
-                            <View style={s.equipChip}>
-                              <Ionicons name="checkmark-circle-outline" size={11} color={palette.success700} />
-                              <ThemedText style={[s.equipText, { color: palette.success700 }]}>No equipment</ThemedText>
-                            </View>
-                          )}
-
                           {/* Expanded: demonstration media (Beta #007 — at the
                               top of the expanded exercise; renders only when
                               the canonical exercise source supplies media and
@@ -439,7 +418,7 @@ export default function WorkoutDetailScreen() {
                             <>
                               {ex.gif_url ? (
                                 <View style={s.gifWrap}>
-                                  <ExerciseMedia url={ex.gif_url} style={s.gif} />
+                                  <ExerciseMedia url={ex.gif_url} style={s.gif} fit="cover" />
                                 </View>
                               ) : null}
                               <View style={s.rateRow}>
@@ -565,14 +544,11 @@ const s = StyleSheet.create({
   topFadeBg: { position: 'absolute', top: 0, left: 0, right: 0, height: 320 },
 
   // Hero — transparent so the topFadeBg gradient (same blue100 wash Home uses) shows through
-  hero: {
-    paddingBottom: 24,
-    borderBottomWidth: 1, borderBottomColor: palette.hairline,
-  },
+  hero: {},
   heroSafe: { paddingHorizontal: 20, paddingTop: 8 },
   heroTopRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 4,
   },
   backBtn: {
     width: 38, height: 38, borderRadius: 19,
@@ -590,7 +566,7 @@ const s = StyleSheet.create({
     backgroundColor: palette.danger50,
     alignItems: 'center', justifyContent: 'center',
   },
-  heroMeta: {},
+  heroMeta: { marginBottom: 20 },
   badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
   diffBadge: {
     alignSelf: 'flex-start',
@@ -603,7 +579,8 @@ const s = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 4, borderRadius: radii.pill,
   },
   assignedBadgeText: { fontSize: 11, fontWeight: '700', color: palette.blue600 },
-  heroTitle: { fontSize: 26, fontWeight: '800', letterSpacing: -0.5, color: palette.ink900, marginBottom: 8 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+  heroTitle: { fontSize: 26, fontWeight: '800', letterSpacing: -0.5, color: palette.ink900 },
   heroDesc: { fontSize: fontSize.sm, color: palette.gray450, lineHeight: 20, marginBottom: 14 },
 
   statsRow: {
@@ -617,7 +594,7 @@ const s = StyleSheet.create({
 
   // List
   scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: 20, paddingTop: 20 },
+  scrollContent: { paddingHorizontal: 20, paddingTop: 8 },
   sectionTitle: {
     fontSize: 13, fontWeight: '700', color: palette.gray300,
     textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 14,
@@ -655,24 +632,25 @@ const s = StyleSheet.create({
   exCard: {
     flexDirection: 'row', gap: 12,
     backgroundColor: palette.white, borderRadius: radii.xl,
-    borderWidth: 1, borderColor: palette.borderFaint,
-    padding: 14, marginBottom: 10,
+    borderBottomWidth: 1, borderBottomColor: palette.borderFaint,
+    padding: 10, marginBottom: 8,
   },
   exMain: { flex: 1 },
-  exHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 6 },
+  exHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 3 },
   exIconWrap: {
-    width: 32, height: 32, borderRadius: 9,
+    width: 28, height: 28, borderRadius: 8,
     backgroundColor: palette.surfaceMuted,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  exName: { fontSize: 15, fontWeight: '700', color: palette.ink900, lineHeight: 20 },
-  exMuscle: { fontSize: 12, color: palette.gray450, marginTop: 1 },
-  exPrescription: { fontSize: 13, fontWeight: '600', color: palette.blue500, marginBottom: 6 },
+  exName: { fontSize: 15, fontWeight: '700', color: palette.ink900, lineHeight: 18 },
+  exMuscleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
+  exMuscle: { fontSize: 12, color: palette.gray450 },
+  exPrescription: { fontSize: 13, fontWeight: '600', color: palette.blue500, marginBottom: 3 },
   equipChip: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     alignSelf: 'flex-start',
     backgroundColor: palette.surfaceMuted,
-    paddingHorizontal: 8, paddingVertical: 3, borderRadius: radii.pill,
+    paddingHorizontal: 8, paddingVertical: 2, borderRadius: radii.pill,
   },
   equipText: { fontSize: 11, fontWeight: '600', color: palette.gray450 },
 
@@ -690,12 +668,10 @@ const s = StyleSheet.create({
   noteText: { flex: 1, fontSize: 12.5, color: palette.ink700, lineHeight: 17, fontStyle: 'italic' },
 
   gifWrap: {
-    marginTop: 0, marginBottom: 0, borderRadius: radii.lg, overflow: 'hidden',
-    backgroundColor: palette.white,
-    alignItems: 'center',
+    marginHorizontal: -10, marginTop: 6, marginBottom: 6, overflow: 'hidden',
   },
   gif: {
-    width: GIF_SIZE, height: GIF_SIZE,
+    width: '100%', aspectRatio: 16 / 9,
   },
   instructions: {
     marginTop: 12, padding: 12,

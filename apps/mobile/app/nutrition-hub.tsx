@@ -143,6 +143,11 @@ export default function NutritionHubScreen() {
 
   return (
     <View style={s.root}>
+      <LinearGradient
+        colors={[palette.blue100, 'rgba(208,224,255,0)']}
+        style={s.topFadeBg}
+        pointerEvents="none"
+      />
       <View style={s.header}>
         <View style={s.headerRow}>
           <TouchableOpacity style={s.backBtn} onPress={() => router.back()} hitSlop={12}>
@@ -150,7 +155,7 @@ export default function NutritionHubScreen() {
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
             <ThemedText style={s.headerTitle}>Nutrition Hub</ThemedText>
-            <ThemedText style={s.headerSub}>Eat better, Kenyan-style</ThemedText>
+            <ThemedText style={s.headerSub}>Eat better</ThemedText>
           </View>
           {userId && (
             <TouchableOpacity
@@ -303,59 +308,6 @@ export default function NutritionHubScreen() {
             </TouchableOpacity>
           )}
 
-          {/* ── Meal Library ── */}
-          <View style={s.bodyPartHeader}>
-            <ThemedText style={s.bodyPartEyebrow}>DISCOVER</ThemedText>
-            <ThemedText style={s.bodyPartTitle}>Meal Library</ThemedText>
-          </View>
-          <TouchableOpacity style={s.browseCta} onPress={() => router.push('/meal-library' as any)} activeOpacity={0.85}>
-            <View style={s.browseCtaIcon}>
-              <Ionicons name="restaurant-outline" size={22} color={palette.success700} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <ThemedText style={s.createCtaTitle}>Browse Kenyan Meals</ThemedText>
-              <ThemedText style={s.createCtaSub}>Breakfast, lunch, dinner, snacks &amp; smoothies with full macros</ThemedText>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={palette.gray300} />
-          </TouchableOpacity>
-
-          {userId && (
-            <>
-              <View style={s.bodyPartHeader}>
-                <ThemedText style={s.bodyPartEyebrow}>PLANNER</ThemedText>
-                <ThemedText style={s.bodyPartTitle}>Meal Plans</ThemedText>
-              </View>
-              <TouchableOpacity style={s.browseCta} onPress={() => router.push('/my-meal-plans' as any)} activeOpacity={0.85}>
-                <View style={s.browseCtaIcon}>
-                  <Ionicons name="calendar-outline" size={22} color={palette.success700} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <ThemedText style={s.createCtaTitle}>My Meal Plans</ThemedText>
-                  <ThemedText style={s.createCtaSub}>Build your own weekly plan or view what&apos;s assigned</ThemedText>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color={palette.gray300} />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={s.journeyCta}
-                onPress={() => router.push('/fitness-journey' as any)}
-                activeOpacity={0.85}
-              >
-                <LinearGradient
-                  colors={[palette.success700, '#0d9d4e']}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                  style={s.journeyCtaGrad}
-                >
-                  <View>
-                    <ThemedText style={s.journeyCtaTitle}>My Nutrition Journey</ThemedText>
-                    <ThemedText style={s.journeyCtaSub}>Streaks, meals logged &amp; progress</ThemedText>
-                  </View>
-                  <Ionicons name="chevron-forward" size={22} color="#fff" />
-                </LinearGradient>
-              </TouchableOpacity>
-            </>
-          )}
-
           <View style={{ height: 100 }} />
         </ScrollView>
       )}
@@ -365,10 +317,9 @@ export default function NutritionHubScreen() {
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: palette.white },
+  topFadeBg: { position: 'absolute', top: 0, left: 0, right: 0, height: 460 },
 
   header: {
-    backgroundColor: palette.white,
-    borderBottomWidth: 1, borderBottomColor: palette.hairline,
     paddingHorizontal: 20, paddingTop: 60, paddingBottom: 14,
   },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
@@ -389,8 +340,7 @@ const s = StyleSheet.create({
 
   setupCta: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    borderRadius: radii.xl, borderWidth: 1, borderColor: palette.hairline,
-    backgroundColor: palette.white, padding: 14, marginBottom: 24, ...shadows.sm,
+    borderRadius: radii.xl, padding: 14, marginBottom: 24,
   },
   setupCtaIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: palette.success50, alignItems: 'center', justifyContent: 'center' },
 
@@ -419,8 +369,7 @@ const s = StyleSheet.create({
 
   browseCta: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    borderRadius: radii.xl, borderWidth: 1, borderColor: palette.hairline,
-    backgroundColor: palette.white, padding: 14, marginBottom: 24, ...shadows.sm,
+    borderRadius: radii.xl, padding: 14, marginBottom: 24,
   },
   browseCtaIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: palette.success50, alignItems: 'center', justifyContent: 'center' },
   createCtaTitle: { fontSize: 15, fontWeight: '800', color: palette.ink900 },
