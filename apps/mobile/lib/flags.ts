@@ -77,3 +77,15 @@ export function isMarketplaceGeoGatingEnabled(): boolean {
 export function isMeasurementCheckinEnabled(): boolean {
   return process.env.EXPO_PUBLIC_LANA_MEASUREMENT_CHECKIN_ENABLED !== 'false';
 }
+
+// Beta Feedback #022 — adaptive daily nutrition planning + learning loop on
+// Today Nutrition (Log this / Swap / Portion / "Having something else?").
+// Deliberately OPT-IN (on only when exactly "true"), unlike every flag above —
+// this is new, undeployed, unverified-on-device behaviour, not a rollback
+// switch for something already shipped. Off (the default): the existing
+// "no active meal plan → suggested meals" behaviour is completely unchanged,
+// and every nutritionist-assigned meal_plans path is unaffected either way
+// (this feature never touches that path, on or off).
+export function isAdaptiveNutritionEnabled(): boolean {
+  return process.env.EXPO_PUBLIC_LANA_ADAPTIVE_NUTRITION_ENABLED === 'true';
+}

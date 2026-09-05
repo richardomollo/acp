@@ -4,14 +4,17 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ThemedText } from '@/components/themed-text';
 import { useRouter, Stack } from 'expo-router';
 import { palette, radii, fontSize } from '@/constants/theme';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { supabase } from '@/lib/supabase';
 import { authService } from '@/services/auth';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { SupportOpportunity } from '@/lib/ai-assessment';
-import { matchProfessionalProviders, type ProviderMatch } from '@/lib/professional-support';
+import { matchProfessionalProviders, resolveProfessionalSupportAvailability, type ProviderMatch, type ProfessionalSupportAvailability } from '@/lib/professional-support';
+import { getEligiblePersonalTrainerIds } from '@/services/professional-eligibility-service';
+import { useMarketplaceLocation } from '@/contexts/marketplace-location-context';
+import { ProfessionalSupportUnavailableNotice } from '@/components/marketplace/marketplace-gate';
 import type { PrimaryGoal, PreferredActivity } from '@/lib/onboarding';
 
 // Local calendar date (not UTC) — a measurement dated "today" must be today
@@ -56,6 +59,16 @@ export default function LogProgressScreen() {
   const [supportExpanded, setSupportExpanded] = useState(false);
   const [supportLoading, setSupportLoading] = useState(false);
   const [supportMatches, setSupportMatches] = useState<ProviderMatch[] | null>(null);
+  // Beta Feedback #019E — WHY the list is empty (geography vs. error vs.
+  // unresolved location), so the empty state never reads as a search failure.
+  const [supportAvailability, setSupportAvailability] = useState<ProfessionalSupportAvailability | null>(null);
+  // Beta Feedback #019D — trainer support must obey the same marketplace
+  // geography as venues/classes/trainers (§019). Background resolve only —
+  // matching itself stays lazy, fetched only after an explicit tap below.
+  const marketLoc = useMarketplaceLocation();
+  const marketLocRef = useRef(marketLoc);
+  marketLocRef.current = marketLoc;
+  useEffect(() => { marketLocRef.current.ensureResolved({ requestPermission: false }); }, []);
 
   useEffect(() => {
     (async () => {
@@ -79,15 +92,44 @@ export default function LogProgressScreen() {
     if (supportMatches !== null || supportLoading) return;
     setSupportLoading(true);
     try {
-      const { data } = await supabase
+      // Beta Feedback #019D — never recommend an in-person trainer Lana has
+      // no reach to from here. Eligible = explicit active online offering OR
+      // reachable within the current marketplace scope (same rule as
+      // trainers/classes/discover — see mergeEligiblePtIds).
+      const eligibility = await getEligiblePersonalTrainerIds(marketLocRef.current.venueScopeIds);
+      // Beta Feedback #019E — a query failure must read as a genuine error,
+      // never as "Lana isn't here yet" or "show everybody".
+      if (!eligibility.ok) {
+        setSupportAvailability('error');
+        setSupportMatches([]);
+        setSupportLoading(false);
+        return;
+      }
+      const eligibleIds = eligibility.ids;
+      const locationKnown = marketLocRef.current.availability != null
+        && marketLocRef.current.availability.status !== 'location_unknown';
+
+      if (eligibleIds !== null && eligibleIds.length === 0) {
+        setSupportAvailability(resolveProfessionalSupportAvailability({ locationKnown, queryFailed: false, matchCount: 0 }));
+        setSupportMatches([]);
+        setSupportLoading(false);
+        return;
+      }
+
+      let ptQ = supabase
         .from('personal_trainers')
         .select('id, full_name, professional_name, specialisations, photo_url')
         .eq('status', 'approved');
+      if (eligibleIds !== null) ptQ = ptQ.in('id', eligibleIds);
+      const { data } = await ptQ;
       const providers = ((data ?? []) as any[]).map(p => ({
         id: p.id, name: p.professional_name || p.full_name, specialisations: p.specialisations ?? [], photoUrl: p.photo_url ?? null,
       }));
-      setSupportMatches(matchProfessionalProviders(goal, preferredActivities, false, providers));
+      const matches = matchProfessionalProviders(goal, preferredActivities, false, providers);
+      setSupportAvailability(resolveProfessionalSupportAvailability({ locationKnown, queryFailed: false, matchCount: matches.length }));
+      setSupportMatches(matches);
     } catch {
+      setSupportAvailability('error');
       setSupportMatches([]); // fails safe — the rest of the screen is unaffected
     } finally {
       setSupportLoading(false);
@@ -258,9 +300,16 @@ export default function LogProgressScreen() {
               ))}
             </View>
           ) : (
-            <ThemedText style={[s.supportBody, { marginTop: 8 }]}>
-              No matching professionals were found right now.
-            </ThemedText>
+            // Beta Feedback #019E — WHY there's nothing to show: geography,
+            // an unresolved location, or a genuine failure — never one
+            // generic "no matching professionals" message.
+            <View style={{ marginTop: 8 }}>
+              <ProfessionalSupportUnavailableNotice
+                availability={supportAvailability && supportAvailability !== 'available' ? supportAvailability : 'no_local_or_online_support'}
+                professionalNoun="personal trainers"
+                continueWithNoun="Lana's measurement logging and progress tracking"
+              />
+            </View>
           )}
         </View>
 

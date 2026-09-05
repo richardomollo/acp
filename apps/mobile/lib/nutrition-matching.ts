@@ -177,7 +177,7 @@ export interface DailyMealSelection<T = GeneralMealCandidate> {
  * cryptographic guarantees needed, just a stable, well-distributed integer
  * for a given string. Never uses Math.random().
  */
-function stableHash(input: string): number {
+export function stableHash(input: string): number {
   let hash = 5381;
   for (let i = 0; i < input.length; i++) {
     hash = ((hash * 33) ^ input.charCodeAt(i)) >>> 0; // unsigned 32-bit, deterministic

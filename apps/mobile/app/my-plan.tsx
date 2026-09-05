@@ -5,7 +5,7 @@
 // Reachable any time via the "My Plan" CTA on the My Goals page, and via
 // "See my detailed plan" at the end of onboarding.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { View, ScrollView, TouchableOpacity, ActivityIndicator, Modal, StyleSheet } from 'react-native';
+import { View, ScrollView, TouchableOpacity, ActivityIndicator, Modal, StyleSheet, Image } from 'react-native';
 import { useRouter, useFocusEffect, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -33,7 +33,9 @@ import {
   getCompletionProgress, findStravaCandidates, findExerciseDbCandidates, findAcpBookingCandidates, findHealthKitCandidates,
   type PlanActivityCompletion, type CompletionCandidate, type StravaActivityRow, type WorkoutHistoryRow, type AcpCheckedInRow, type HealthKitWorkoutRow,
 } from '@/lib/completion';
-import { matchProfessionalProviders, type ProviderMatch } from '@/lib/professional-support';
+import { matchProfessionalProviders, resolveProfessionalSupportAvailability, type ProviderMatch, type ProfessionalSupportAvailability } from '@/lib/professional-support';
+import { getEligiblePersonalTrainerIds } from '@/services/professional-eligibility-service';
+import { ProfessionalSupportUnavailableNotice } from '@/components/marketplace/marketplace-gate';
 import { getSupplyCandidates } from '@/lib/supply/orchestration';
 import type { SessionCandidateRow } from '@/lib/supply/session-candidates';
 import type { ProviderCandidateRow } from '@/lib/supply/provider-candidates';
@@ -114,6 +116,9 @@ export default function MyPlanScreen() {
   const [supportExpanded, setSupportExpanded] = useState(false);
   const [supportLoading, setSupportLoading] = useState(false);
   const [supportMatches, setSupportMatches] = useState<ProviderMatch[] | null>(null);
+  // Beta Feedback #019E — WHY the list is empty (geography vs. error vs.
+  // unresolved location), so the empty state never reads as a search failure.
+  const [supportAvailability, setSupportAvailability] = useState<ProfessionalSupportAvailability | null>(null);
   // Day 5 — weekly review + adaptation. generatingReview guards the explicit,
   // user-initiated "See my weekly review" tap; foodSuggestions is populated
   // by a separate, non-blocking effect only when the current plan actually
@@ -880,38 +885,41 @@ export default function MyPlanScreen() {
       const wantsPt = supportOpportunities.some(o => o.type === 'personal_trainer');
       const wantsNutrition = supportOpportunities.some(o => o.type === 'nutrition');
 
-      // Beta #019 — only recommend trainers reachable from here: linked to a
-      // nearby venue, offering at a nearby venue, or offering an online
-      // service. Never a Nairobi in-person PT to an Amsterdam user.
-      const m = marketLocRef.current;
-      let reachablePtIds: string[] | null = null; // null → no filter (kill switch off)
-      if (m.geoGatingEnabled) {
-        const nearbyIds = m.availability?.status === 'available' ? m.venueIdsInRadius : [];
-        const [{ data: ptLinks }, { data: ptGeoOff }, { data: ptOnlineOff }] = await Promise.all([
-          nearbyIds.length ? supabase.from('pt_venue_links').select('pt_id').in('gym_id', nearbyIds) : Promise.resolve({ data: [] as any[] }),
-          nearbyIds.length ? supabase.from('pt_offerings').select('pt_id').eq('is_active', true).eq('is_draft', false).in('gym_id', nearbyIds) : Promise.resolve({ data: [] as any[] }),
-          supabase.from('pt_offerings').select('pt_id').eq('is_active', true).eq('is_draft', false).eq('type', 'online'),
-        ]);
-        reachablePtIds = Array.from(new Set<string>([
-          ...(((ptLinks as any[]) ?? []).map(r => r.pt_id)),
-          ...(((ptGeoOff as any[]) ?? []).map(r => r.pt_id)),
-          ...(((ptOnlineOff as any[]) ?? []).map(r => r.pt_id)),
-        ])).filter(Boolean);
+      // Beta #019/#019D — only recommend trainers reachable from here: linked
+      // to a nearby venue, offering at a nearby venue, or offering an online
+      // service. Never a Nairobi in-person PT to an Amsterdam user. Shared
+      // with trainers/discover/nutrition/log-progress — see mergeEligiblePtIds.
+      const eligibility = await getEligiblePersonalTrainerIds(marketLocRef.current.venueScopeIds);
+      // Beta #019E — a query failure must read as a genuine error, never as
+      // "Lana isn't here yet" or "show everybody".
+      if (!eligibility.ok) {
+        setSupportAvailability('error');
+        setSupportMatches([]);
+        setSupportLoading(false);
+        return;
       }
+      const reachablePtIds = eligibility.ids;
+      const locationKnown = marketLocRef.current.availability != null
+        && marketLocRef.current.availability.status !== 'location_unknown';
 
       let ptQ = supabase
         .from('personal_trainers')
-        .select('id, full_name, professional_name, specialisations, status')
+        .select('id, full_name, professional_name, specialisations, status, photo_url')
         .eq('status', 'approved');
       if (reachablePtIds !== null) {
-        if (reachablePtIds.length === 0) { setSupportMatches([]); setSupportLoading(false); return; }
+        if (reachablePtIds.length === 0) {
+          setSupportAvailability(resolveProfessionalSupportAvailability({ locationKnown, queryFailed: false, matchCount: 0 }));
+          setSupportMatches([]);
+          setSupportLoading(false);
+          return;
+        }
         ptQ = ptQ.in('id', reachablePtIds);
       }
       const { data } = await ptQ;
-      interface RawProviderRow { id: string; full_name: string; professional_name: string | null; specialisations: string[] | null; status: string }
+      interface RawProviderRow { id: string; full_name: string; professional_name: string | null; specialisations: string[] | null; status: string; photo_url: string | null }
       const rawProviders = (data ?? []) as unknown as RawProviderRow[];
       const providers = rawProviders.map(p => ({
-        id: p.id, name: p.professional_name || p.full_name, specialisations: p.specialisations ?? [],
+        id: p.id, name: p.professional_name || p.full_name, specialisations: p.specialisations ?? [], photoUrl: p.photo_url ?? null,
       }));
       const matches = [
         ...(wantsPt ? matchProfessionalProviders(onboardingAnswers.goal, onboardingAnswers.preferredActivities, false, providers) : []),
@@ -942,8 +950,10 @@ export default function MyPlanScreen() {
       const orderById = new Map(orchestrated.map((c, i) => [c.id, i]));
       deduped.sort((a, b) => (orderById.get(a.id) ?? 999) - (orderById.get(b.id) ?? 999));
 
+      setSupportAvailability(resolveProfessionalSupportAvailability({ locationKnown, queryFailed: false, matchCount: deduped.length }));
       setSupportMatches(deduped);
     } catch {
+      setSupportAvailability('error');
       setSupportMatches([]); // fails safe — the plan itself is unaffected
     } finally {
       setSupportLoading(false);
@@ -1566,6 +1576,13 @@ export default function MyPlanScreen() {
                     <View style={{ marginTop: 12 }}>
                       {supportMatches.map(m => (
                         <TouchableOpacity key={m.id} style={styles.providerRow} onPress={() => router.push(m.navigationTarget as any)} activeOpacity={0.7}>
+                          {m.photoUrl ? (
+                            <Image source={{ uri: m.photoUrl }} style={styles.providerAvatar} />
+                          ) : (
+                            <View style={[styles.providerAvatar, styles.providerAvatarFallback]}>
+                              <Ionicons name="person-outline" size={18} color={palette.gray300} />
+                            </View>
+                          )}
                           <View style={{ flex: 1 }}>
                             <ThemedText style={styles.dayTitle}>{m.name}</ThemedText>
                             {m.matchReasons.length > 0 && (
@@ -1577,9 +1594,25 @@ export default function MyPlanScreen() {
                       ))}
                     </View>
                   ) : (
-                    <ThemedText style={[styles.aiBody, { marginTop: 8 }]}>
-                      No matching professionals were found right now.
-                    </ThemedText>
+                    // Beta Feedback #019E — WHY there's nothing to show:
+                    // geography, an unresolved location, or a genuine
+                    // failure — never one generic "no matching professionals"
+                    // message. Both PT and nutrition can be wanted at once
+                    // here, so the noun reflects whichever is actually
+                    // relevant rather than defaulting to one.
+                    <View style={{ marginTop: 8 }}>
+                      <ProfessionalSupportUnavailableNotice
+                        availability={supportAvailability && supportAvailability !== 'available' ? supportAvailability : 'no_local_or_online_support'}
+                        professionalNoun={
+                          supportOpportunities.some(o => o.type === 'personal_trainer') && supportOpportunities.some(o => o.type === 'nutrition')
+                            ? 'trainers or nutrition professionals'
+                            : supportOpportunities.some(o => o.type === 'nutrition')
+                              ? 'nutrition professionals'
+                              : 'personal trainers'
+                        }
+                        continueWithNoun="your plan, workouts and progress tools"
+                      />
+                    </View>
                   )}
                 </View>
               )}
@@ -2088,6 +2121,8 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: palette.hairline,
   },
+  providerAvatar: { width: 75, height: 74, borderRadius: radii.lg, flexShrink: 0 },
+  providerAvatarFallback: { backgroundColor: palette.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
 
   fulfilmentBlock: {
     marginTop: 10,

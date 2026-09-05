@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { palette, radii, fontSize } from '@/constants/theme';
 import { SearchTrigger, SearchModal, SearchResultRow, SearchEmpty } from '@/components/search-trigger-modal';
 import { useMarketplaceLocation } from '@/contexts/marketplace-location-context';
+import { getEligiblePersonalTrainerIds } from '@/services/professional-eligibility-service';
 import { MarketplaceGate, ExploringBanner } from '@/components/marketplace/marketplace-gate';
 
 type PT = {
@@ -69,22 +70,15 @@ export default function TrainersScreen() {
     }
     setLoading(true);
 
-    let ptFilterIds: string[] | null = null; // null → no PT-id filter (kill switch off)
-    if (scopeIds !== null) {
-      // PT ids that resolve to a nearby venue (venue link OR an offering at a
-      // nearby gym) OR that offer an online service.
-      const [{ data: links }, { data: geoOfferings }, { data: onlineOfferings }] = await Promise.all([
-        supabase.from('pt_venue_links').select('pt_id').in('gym_id', scopeIds),
-        supabase.from('pt_offerings').select('pt_id').eq('is_active', true).eq('is_draft', false).in('gym_id', scopeIds),
-        supabase.from('pt_offerings').select('pt_id').eq('is_active', true).eq('is_draft', false).eq('type', 'online'),
-      ]);
-      ptFilterIds = Array.from(new Set<string>([
-        ...(((links as any[]) ?? []).map(l => l.pt_id)),
-        ...(((geoOfferings as any[]) ?? []).map(o => o.pt_id)),
-        ...(((onlineOfferings as any[]) ?? []).map(o => o.pt_id)),
-      ])).filter(Boolean);
-      if (ptFilterIds.length === 0) { setTrainers([]); setLoading(false); return; }
-    }
+    // Beta #019D — shared with discover/my-plan/nutrition/log-progress, see
+    // mergeEligiblePtIds: PT ids reachable at a nearby venue (venue link OR
+    // an offering there) OR that offer an explicit active online service.
+    // #019E — a query failure fails closed (empty directory) rather than
+    // showing every Kenyan trainer to an Amsterdam user.
+    const eligibility = await getEligiblePersonalTrainerIds(scopeIds);
+    if (!eligibility.ok) { setTrainers([]); setLoading(false); return; }
+    const ptFilterIds = eligibility.ids;
+    if (ptFilterIds !== null && ptFilterIds.length === 0) { setTrainers([]); setLoading(false); return; }
 
     let ptQ = supabase
       .from('personal_trainers')

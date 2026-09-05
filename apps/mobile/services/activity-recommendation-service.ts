@@ -589,7 +589,17 @@ async function generateSession(
  * falls back to the existing fulfilment.ts self-directed/marketplace
  * rendering for that case, exactly as before this task.
  */
-export async function getActivityRecommendation(userId: string, rawActivity: StartingPlanActivity): Promise<ActivityRecommendation> {
+export async function getActivityRecommendation(
+  userId: string,
+  rawActivity: StartingPlanActivity,
+  // Beta Feedback #019D — `useMarketplaceLocation().venueScopeIds`, passed
+  // straight through to getHumanSupportInsight so its trainer suggestion
+  // never names an in-person professional outside the current marketplace
+  // scope. null → kill switch off (pre-#019D behaviour).
+  venueScopeIds: string[] | null,
+  // Beta Feedback #019E — `useMarketplaceLocation().availability?.status !== 'location_unknown' && availability != null`.
+  locationKnown: boolean,
+): Promise<ActivityRecommendation> {
   const key = normalizeActivity(rawActivity.activity || rawActivity.title, rawActivity.category);
 
   // Beta #017 §12B/§13 — a strength activity whose canonical title/description
@@ -612,7 +622,7 @@ export async function getActivityRecommendation(userId: string, rawActivity: Sta
 
   const [existing, insight] = await Promise.all([
     findExistingSession(userId, key),
-    getHumanSupportInsight(userId).catch(() => null),
+    getHumanSupportInsight(userId, venueScopeIds, locationKnown).catch(() => null),
   ]);
   const professionalSupport = buildProfessionalSupport(insight);
 

@@ -17,7 +17,7 @@
 // `fulfilment` (lib/fulfilment.ts) prop. "GET PROFESSIONAL SUPPORT" is
 // parallel to both branches (section 20) since human-support signals aren't
 // scoped to only ACP-generatable activities.
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { View, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -106,8 +106,14 @@ export function ActivityFulfilmentCard({
   // Beta #019 — "GET PROFESSIONAL SUPPORT" recommends bookable Lana trainers,
   // so it only shows where Lana has bookable supply. Self-directed workout
   // recommendations and the fulfilment routes are NOT gated on this.
-  const { availability: marketAvailability } = useMarketplaceLocation();
-  const marketAvailable = marketAvailability?.status === 'available';
+  const ml = useMarketplaceLocation();
+  const marketAvailable = ml.availability?.status === 'available';
+  // Beta Feedback #019D — venueScopeIds only needs to be read once per
+  // fetch below; a ref keeps the fetch effect's dependency list unchanged
+  // (activity identity only), matching the existing pattern elsewhere.
+  const mlRef = useRef(ml);
+  mlRef.current = ml;
+  useEffect(() => { mlRef.current.ensureResolved({ requestPermission: false }); }, []);
   const [recommendation, setRecommendation] = useState<ActivityRecommendation | null>(null);
   const [loading, setLoading] = useState(false);
   // Debounces the primary CTA (section 5) — reset whenever this screen
@@ -121,7 +127,10 @@ export function ActivityFulfilmentCard({
     let active = true;
     setLoading(true);
     setRecommendation(null); // clear any stale recommendation from a previous activity identity before the new fetch resolves
-    getActivityRecommendation(userId, activity)
+    getActivityRecommendation(
+      userId, activity, mlRef.current.venueScopeIds,
+      mlRef.current.availability != null && mlRef.current.availability.status !== 'location_unknown',
+    )
       .then(rec => { if (active) setRecommendation(rec); })
       .catch(() => { /* failure behaviour (section 25): stay null, fall through to the existing fulfilment route below */ })
       .finally(() => { if (active) setLoading(false); });
@@ -286,7 +295,12 @@ export function ActivityFulfilmentCard({
         </>
       )}
 
-      {recommendation?.professionalSupport && marketAvailable && (
+      {/* Beta #019D — `marketAvailable` alone would hide a professional who
+          IS eligible purely through an explicit online offering (§2: online
+          support may cross geography). `professionalSupport.trainers` is
+          already the fully geo-filtered list (see getHumanSupportInsight/
+          mergeEligiblePtIds) — its presence alone is proof of eligibility. */}
+      {recommendation?.professionalSupport && (marketAvailable || (recommendation.professionalSupport.trainers?.length ?? 0) > 0) && (
         <View style={s.block}>
           <ThemedText style={s.header}>GET PROFESSIONAL SUPPORT</ThemedText>
           <ThemedText style={s.title}>{recommendation.professionalSupport.headline}</ThemedText>

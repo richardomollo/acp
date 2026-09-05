@@ -5,7 +5,7 @@ import {
 import { ThemedText } from '@/components/themed-text';
 import { useRouter, Stack, useFocusEffect } from 'expo-router';
 import { palette, radii, fontSize, shadows } from '@/constants/theme';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { authService } from '@/services/auth';
 import { computeStreak, buildAchievements, type Stats, type Achievement } from '@/services/fitnessStats';
@@ -16,6 +16,7 @@ import { interpretProgress } from '@/lib/progress-interpreter';
 import type { ProgressSnapshot, ProgressInterpretation } from '@/lib/progress-types';
 import { getHumanSupportInsight, dismissHumanSupportInsight, type HumanSupportInsight } from '@/services/human-support-service';
 import { useMarketplaceLocation } from '@/contexts/marketplace-location-context';
+import { CityPickerModal } from '@/components/marketplace/marketplace-gate';
 import { nutritionOutcomeIntelligenceService } from '@/services/nutrition-outcome-intelligence-service';
 import { NutritionWhatLanaIsLearning } from '@/components/nutrition/nutrition-what-lana-is-learning';
 import type { OutcomeObservation } from '@/lib/nutrition/nutrition-outcome-intelligence';
@@ -216,9 +217,13 @@ export default function FitnessJourneyScreen() {
   const [progressInsight, setProgressInsight] = useState<ProgressInterpretation | null>(null);
   const [progressSnapshot, setProgressSnapshot] = useState<ProgressSnapshot | null>(null);
   const [humanSupport, setHumanSupport] = useState<HumanSupportInsight | null>(null);
-  // Beta #019 — a specific bookable-trainer CTA only where Lana has supply.
-  const { availability: marketAvailability } = useMarketplaceLocation();
-  const marketAvailable = marketAvailability?.status === 'available';
+  // Beta #019/#019E — a specific bookable-trainer CTA only where Lana has
+  // supply, and a location-aware empty state everywhere else.
+  const marketLoc = useMarketplaceLocation();
+  const marketLocRef = useRef(marketLoc);
+  marketLocRef.current = marketLoc;
+  useEffect(() => { marketLocRef.current.ensureResolved({ requestPermission: false }); }, []);
+  const [locationPickerOpen, setLocationPickerOpen] = useState(false);
   const [dismissingSupport, setDismissingSupport] = useState(false);
   const [outcomeObservations, setOutcomeObservations] = useState<OutcomeObservation[]>([]);
 
@@ -247,7 +252,11 @@ export default function FitnessJourneyScreen() {
       // Day 6 — human-support detection. Context-driven only: this card
       // renders nothing at all unless a real signal fires (never a generic
       // "book a trainer" promotion).
-      getHumanSupportInsight(session.user.id).then(insight => {
+      getHumanSupportInsight(
+        session.user.id,
+        marketLocRef.current.venueScopeIds,
+        marketLocRef.current.availability != null && marketLocRef.current.availability.status !== 'location_unknown',
+      ).then(insight => {
         if (active) setHumanSupport(insight);
       }).catch(() => { /* enhancement-only */ });
 
@@ -389,6 +398,10 @@ export default function FitnessJourneyScreen() {
             <ThemedText style={s.headerTitle}>My Journey</ThemedText>
             <ThemedText style={s.headerSub}>Track your fitness progress</ThemedText>
           </View>
+          <TouchableOpacity style={s.goalsBtn} onPress={() => router.push('/fitness-goals' as any)} hitSlop={12} activeOpacity={0.85}>
+            <Ionicons name="flag-outline" size={16} color={palette.blue600} />
+            <ThemedText style={s.goalsBtnText}>My Goals</ThemedText>
+          </TouchableOpacity>
         </SafeAreaView>
 
         {loading ? (
@@ -503,19 +516,10 @@ export default function FitnessJourneyScreen() {
                 <ThemedText style={s.supportHeadline}>{HUMAN_SUPPORT_HEADLINE[humanSupport.primary.trigger] ?? 'A trainer could help'}</ThemedText>
                 <ThemedText style={s.supportReason}>{humanSupport.primary.reason}</ThemedText>
 
-                {humanSupport.trainerOwned ? null : !marketAvailable ? (
-                  // Beta #019 — no specific bookable trainer where Lana has no
-                  // supply; the advice above still stands. Route to the
-                  // (geo-gated) trainers browser rather than a Nairobi PT.
-                  <TouchableOpacity
-                    style={s.supportCta}
-                    onPress={() => router.push('/(tabs)/trainers' as any)}
-                    activeOpacity={0.85}
-                  >
-                    <ThemedText style={s.supportCtaText}>Explore trainers</ThemedText>
-                    <Ionicons name="arrow-forward" size={14} color="#fff" />
-                  </TouchableOpacity>
-                ) : humanSupport.ptRecommendations[0] ? (
+                {humanSupport.trainerOwned ? null : humanSupport.ptRecommendations[0] ? (
+                  // Beta #019D — already geo-eligible (in-person within scope
+                  // OR an explicit online offering) — never gated on
+                  // marketAvailable alone (§019D/§2: online may cross geography).
                   <TouchableOpacity
                     style={s.supportCta}
                     onPress={() => router.push({ pathname: '/trainer-profile', params: { id: humanSupport.ptRecommendations[0].id } } as any)}
@@ -524,8 +528,27 @@ export default function FitnessJourneyScreen() {
                     <ThemedText style={s.supportCtaText}>See trainers for your goal</ThemedText>
                     <Ionicons name="arrow-forward" size={14} color="#fff" />
                   </TouchableOpacity>
+                ) : humanSupport.supportAvailability === 'error' ? (
+                  // Beta #019E — a genuine query failure, never "not available here".
+                  <ThemedText style={s.supportEmptyText}>We couldn&apos;t load trainer support right now. Please try again.</ThemedText>
+                ) : humanSupport.supportAvailability === 'location_unknown' ? (
+                  <TouchableOpacity style={s.supportCta} onPress={() => setLocationPickerOpen(true)} activeOpacity={0.85}>
+                    <ThemedText style={s.supportCtaText}>Choose a city</ThemedText>
+                    <Ionicons name="arrow-forward" size={14} color="#fff" />
+                  </TouchableOpacity>
                 ) : (
-                  <ThemedText style={s.supportEmptyText}>We couldn&apos;t find a trainer matching this need right now.</ThemedText>
+                  // Beta #019/#019D/#019E — location is known, genuinely no
+                  // reachable trainer (in-person here or online); the advice
+                  // above still stands. Route to the (geo-gated) trainers
+                  // browser rather than naming a Nairobi PT.
+                  <TouchableOpacity
+                    style={s.supportCta}
+                    onPress={() => router.push('/(tabs)/trainers' as any)}
+                    activeOpacity={0.85}
+                  >
+                    <ThemedText style={s.supportCtaText}>Explore trainers</ThemedText>
+                    <Ionicons name="arrow-forward" size={14} color="#fff" />
+                  </TouchableOpacity>
                 )}
 
                 {humanSupport.primary.severity !== 'HIGH' && (
@@ -599,6 +622,7 @@ export default function FitnessJourneyScreen() {
           </ScrollView>
         )}
       </View>
+      <CityPickerModal visible={locationPickerOpen} onClose={() => setLocationPickerOpen(false)} />
     </>
   );
 }
@@ -685,6 +709,12 @@ const s = StyleSheet.create({
     backgroundColor: palette.surfaceMuted,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
+  goalsBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18,
+    backgroundColor: palette.surfaceMuted, flexShrink: 0,
+  },
+  goalsBtnText: { fontSize: 13, fontWeight: '700', color: palette.blue600 },
   headerTitle: { fontSize: 20, fontWeight: '800', letterSpacing: -0.3, color: palette.ink900 },
   headerSub: { fontSize: fontSize.xs, color: palette.gray300, marginTop: 1 },
 

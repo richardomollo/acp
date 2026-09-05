@@ -109,3 +109,80 @@ export function matchProfessionalProviders(
     photoUrl: provider.photoUrl ?? null,
   }));
 }
+
+// ── Beta Feedback #019D — professional-support geography ───────────────────
+//
+// #019 established the marketplace geography contract for venues/classes/
+// trainers; this surfaced a screenshot proving named-professional
+// RECOMMENDATIONS (My Plan/Nutrition/Log Progress/Fitness Journey/Activity
+// Fulfilment) had escaped it — an Amsterdam user was shown specific
+// Kenya-based nutritionists as if bookable. Three call sites
+// (trainers.tsx/discover.tsx/my-plan.tsx) had already independently arrived
+// at the same correct query shape; this is that shape extracted ONCE so
+// every consumer (existing and new) shares one eligibility rule instead of
+// re-deriving it — see services/professional-eligibility-service.ts for the
+// query side (network) that calls this pure merge.
+//
+// Contract: a professional is eligible when EITHER —
+//   • they have an explicit ACTIVE, non-draft ONLINE pt_offering (crosses
+//     geography — never inferred from profession/bio/country/lack of venue), OR
+//   • they are reachable in-person within the CURRENT marketplace scope
+//     (a pt_venue_links row, or an active/non-draft offering, at a venue
+//     inside venueScopeIds).
+//
+// `venueScopeIds`:
+//   • string[] — scope to these venues (may be [] — in-person contributes nothing)
+//   • null     — kill switch off (pre-#019 behaviour): no filter, return null
+
+/** Pure merge of the three raw id lists into the final eligible-id set (or
+ *  `null` when geo-gating is off). Kept separate from the network calls so
+ *  the actual eligibility logic is unit-testable without a database. */
+export function mergeEligiblePtIds(
+  venueScopeIds: string[] | null,
+  linkedVenuePtIds: string[],
+  geoOfferingPtIds: string[],
+  onlineOfferingPtIds: string[],
+): string[] | null {
+  if (venueScopeIds === null) return null; // kill switch off — no filter at all
+  return Array.from(new Set([...linkedVenuePtIds, ...geoOfferingPtIds, ...onlineOfferingPtIds])).filter(Boolean);
+}
+
+// ── Beta Feedback #019E — location-aware professional-support empty states ─
+//
+// #019D correctly hides ineligible professionals, but collapsed every reason
+// for an empty result into one generic "No matching professionals were found
+// right now" — which reads as a search failure even when the real reason is
+// "Lana has no coverage here yet." This is the ONE shared state every
+// professional-support surface (Nutrition, Log Progress, My Plan, Fitness
+// Journey, Activity Fulfilment) resolves to before choosing its copy —
+// see components/marketplace/marketplace-gate.tsx's
+// ProfessionalSupportUnavailableNotice for the shared presentation of it.
+export type ProfessionalSupportAvailability =
+  | 'available'                  // ≥1 professional survived eligibility + goal/category matching
+  | 'no_local_or_online_support' // location is known; genuinely zero eligible professionals
+  | 'location_unknown'           // the marketplace location itself hasn't resolved (never guessed)
+  | 'error';                     // the eligibility/provider query itself failed
+
+/**
+ * Pure state resolution — no network, no geography inference from a
+ * professional's own data (bio/name/country/specialisation). `locationKnown`
+ * and `queryFailed` must come from the existing #019 marketplace-location
+ * state and #019D eligibility query respectively; `matchCount` is the final,
+ * already-matched/ranked professional list length.
+ */
+export function resolveProfessionalSupportAvailability(input: {
+  locationKnown: boolean;
+  queryFailed: boolean;
+  matchCount: number;
+}): ProfessionalSupportAvailability {
+  // §6/§019D — an already-resolved match (which can only ever be an explicit
+  // online offering while location is unresolved — mergeEligiblePtIds never
+  // surfaces an in-person id without a real venue scope) proves eligibility
+  // outright; checked first so online support is never hidden behind an
+  // unresolved location. queryFailed can never coexist with matchCount > 0
+  // in practice (a failed query never got far enough to match anyone).
+  if (input.matchCount > 0) return 'available';
+  if (input.queryFailed) return 'error';
+  if (!input.locationKnown) return 'location_unknown';
+  return 'no_local_or_online_support';
+}

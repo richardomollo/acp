@@ -128,7 +128,11 @@ export const foodLogService = {
    *     nutrient TOTALS for the portion (a homemade / packaged / takeaway
    *     item with no canonical row). Frozen verbatim; blanks stay `null`,
    *     never 0; source_type is 'user_custom'.
-   *   • neither                → a name-only custom entry: no grams, no
+   *   • `nutrients` + `sourceType` (no `userProvidedNutrition`, Beta #022A) →
+   *     a caller-supplied snapshot with a TRUTHFUL non-user source (e.g.
+   *     Lana's own curated meal catalogue). Frozen verbatim like the line
+   *     above, but never marked as the user's own numbers.
+   *   • none of the above       → a name-only custom entry: no grams, no
    *     nutrients, contributes nothing to totals (N1 §13-B).
    *
    * Throws on an unresolvable portion — never persists a fake number.
@@ -159,6 +163,17 @@ export const foodLogService = {
       quantityGrams = input.unit === 'g' && input.quantity > 0 ? input.quantity : null;
       source = HOMEMADE_MEAL_SOURCE;
       sourceType = 'user_custom';
+    } else if (input.nutrients != null && input.sourceType) {
+      // Beta #022A — a truthfully-attributed non-user snapshot (e.g. Lana's
+      // own curated `meals` catalogue, logged via "Log this"). Frozen
+      // verbatim exactly like the userProvidedNutrition path above, but
+      // `user_provided_nutrition` stays false and source/sourceType reflect
+      // where the numbers actually came from — never mislabelled as the
+      // user's own just because the user tapped a button.
+      snapshot = normaliseUserNutrients(input.nutrients);
+      quantityGrams = input.unit === 'g' && input.quantity > 0 ? input.quantity : null;
+      source = input.source ?? null;
+      sourceType = input.sourceType;
     }
 
     const { data, error } = await supabase

@@ -8,7 +8,11 @@ import { authService } from './auth';
 import { getProgressSnapshot } from './progress-service';
 import { evaluateHumanSupport, applySuppression, type DismissalRecord } from '@/lib/human-support-evaluator';
 import type { HumanSupportSignal, RecentCheckInSummary, RecentAdaptationSummary } from '@/lib/human-support-types';
-import { matchProfessionalProviders, type ProviderMatch, type ProfessionalProvider } from '@/lib/professional-support';
+import {
+  matchProfessionalProviders, resolveProfessionalSupportAvailability,
+  type ProviderMatch, type ProfessionalProvider, type ProfessionalSupportAvailability,
+} from '@/lib/professional-support';
+import { getEligiblePersonalTrainerIds } from './professional-eligibility-service';
 import type { PrimaryGoal, PreferredActivity } from '@/lib/onboarding';
 
 async function assertOwnSession(userId: string): Promise<boolean> {
@@ -33,9 +37,33 @@ export interface HumanSupportInsight {
   primary: HumanSupportSignal | null;
   trainerOwned: boolean;
   ptRecommendations: ProviderMatch[];
+  /**
+   * Beta Feedback #019E — WHY `ptRecommendations` is empty (geography vs. an
+   * unresolved location vs. a genuine query failure), so a caller never
+   * falls back to a generic "no matches" message. Only meaningful when
+   * `primary` is set and `trainerOwned` is false — omitted otherwise (no
+   * caller renders a trainer CTA in those cases, so there is nothing for it
+   * to describe).
+   */
+  supportAvailability?: ProfessionalSupportAvailability;
 }
 
-export async function getHumanSupportInsight(userId: string): Promise<HumanSupportInsight | null> {
+/**
+ * `venueScopeIds` — Beta Feedback #019D: pass `useMarketplaceLocation().venueScopeIds`
+ * straight through (string[] to scope, or null when the kill switch is off).
+ * Never recommend a named in-person trainer Lana has no reach to from here —
+ * see mergeEligiblePtIds for the eligibility rule this reuses, shared with
+ * every other surface that can name a specific professional.
+ *
+ * `locationKnown` — Beta Feedback #019E: pass
+ * `useMarketplaceLocation().availability?.status !== 'location_unknown' && availability != null`
+ * straight through — never re-derived here, never guessed.
+ */
+export async function getHumanSupportInsight(
+  userId: string,
+  venueScopeIds: string[] | null,
+  locationKnown: boolean,
+): Promise<HumanSupportInsight | null> {
   if (!(await assertOwnSession(userId))) return null;
 
   const [{ data: program }, { data: profile }, { data: trainerRelationship }] = await Promise.all([
@@ -75,7 +103,22 @@ export async function getHumanSupportInsight(userId: string): Promise<HumanSuppo
     return { primary, trainerOwned: evaluation.trainerOwned, ptRecommendations: [] };
   }
 
-  const { data: trainerRows } = await supabase.from('personal_trainers').select('id, full_name, professional_name, specialisations, photo_url').eq('status', 'approved');
+  const eligibility = await getEligiblePersonalTrainerIds(venueScopeIds);
+  // #019E — a query failure must read as a genuine error, never as "Lana
+  // isn't here yet" or "show everybody".
+  if (!eligibility.ok) {
+    return { primary, trainerOwned: false, ptRecommendations: [], supportAvailability: 'error' };
+  }
+  const eligibleIds = eligibility.ids;
+  if (eligibleIds !== null && eligibleIds.length === 0) {
+    return {
+      primary, trainerOwned: false, ptRecommendations: [],
+      supportAvailability: resolveProfessionalSupportAvailability({ locationKnown, queryFailed: false, matchCount: 0 }),
+    };
+  }
+  let trainerQ = supabase.from('personal_trainers').select('id, full_name, professional_name, specialisations, photo_url').eq('status', 'approved');
+  if (eligibleIds !== null) trainerQ = trainerQ.in('id', eligibleIds);
+  const { data: trainerRows } = await trainerQ;
   const providers: ProfessionalProvider[] = ((trainerRows as any[]) ?? []).map(p => ({
     id: p.id, name: p.professional_name || p.full_name, specialisations: p.specialisations ?? [], photoUrl: p.photo_url ?? null,
   }));
@@ -87,7 +130,10 @@ export async function getHumanSupportInsight(userId: string): Promise<HumanSuppo
     providers,
   );
 
-  return { primary, trainerOwned: false, ptRecommendations };
+  return {
+    primary, trainerOwned: false, ptRecommendations,
+    supportAvailability: resolveProfessionalSupportAvailability({ locationKnown, queryFailed: false, matchCount: ptRecommendations.length }),
+  };
 }
 
 export async function dismissHumanSupportInsight(userId: string, trigger: string): Promise<void> {

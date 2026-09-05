@@ -29,6 +29,7 @@ import {
 import { getFulfilmentForActivity, nextDateForWeekday, type PlanActivityFulfilment, type MarketplaceInventoryItem, type MarketplaceMatch } from '@/lib/fulfilment';
 import { ActivityFulfilmentCard, GymAccessList } from '@/components/activity-fulfilment-card';
 import { useMarketplaceLocation } from '@/contexts/marketplace-location-context';
+import { getEligiblePersonalTrainerIds } from '@/services/professional-eligibility-service';
 import { isMeasurementCheckinEnabled } from '@/lib/flags';
 import { MeasurementCheckinCard } from '@/components/home/measurement-checkin-card';
 import { getMeasurementCheckinState, syncMeasurementCheckinNotification } from '@/services/measurement-checkin-service';
@@ -41,6 +42,7 @@ import {
 import { getHomeIntelligenceInsight, findTodayActivity, selectNextActivity } from '@/lib/home-intelligence';
 import { pickHomeInsight, formatOverallProgress, type CoachingMemoryRow } from '@/lib/coaching-memory';
 import { buildWeeklyCoachingBrief } from '@/lib/coaching';
+import { resolveHomePlanState, resolvePlanCoverage, shouldNeutraliseExerciseRing } from '@/lib/home-plan-state';
 import {
   isPlanReadyForReview, isSundayPlanningWindow, fetchPlanDateUpgrade,
   getScheduledNextPlan, localDateIso, type ScheduledNextPlan,
@@ -574,6 +576,11 @@ export default function HomeScreen() {
   // Day 6 — already-computed longitudinal coaching evidence, read once
   // alongside homeAssessment; never recomputed on Home.
   const [homeCoachingMemory, setHomeCoachingMemory] = useState<CoachingMemoryRow[]>([]);
+  // Beta #021 — canonical "is this the user's first plan?" evidence: a
+  // previous week's fitness_plans row exists, or the user has EVER completed
+  // a programme activity (any plan_id). Deliberately not "this week's
+  // completions are zero" (§3) — that's also true on a legitimate rest day.
+  const [homeIsEstablished, setHomeIsEstablished] = useState(false);
   // True once the load attempt (success or failure) has finished — gates
   // rendering so nothing flashes/shifts layout while it's in flight; per
   // spec, quietly omitting is preferred over a new loading indicator.
@@ -747,6 +754,7 @@ export default function HomeScreen() {
   const homeWeeklyProgress = homeAssessment
     ? getCompletionProgress(homeAssessment.starting_plan.activities.length, homeCompletions)
     : { completed: 0, total: 0, percent: 0 };
+  const homeTodaySkipped = homeTodayIndex >= 0 ? homeSkippedIndexes.has(homeTodayIndex) : false;
 
   // ── Beta Feedback #012 — deterministic "what's next" selection ────────────
   // Pure, no query, no AI. `homeTodayActivity` / `homeTodayCompleted` above
@@ -767,6 +775,32 @@ export default function HomeScreen() {
       : { kind: 'none' as const }),
     [homeAssessment, homeCompletedIndexes, homeSkippedIndexes],
   );
+  // Beta #021B — a fully-completed week must still read as a rest day, not
+  // "programme transition", while today is genuinely inside the ACTIVE
+  // plan's dated week. Reuses the same week_start_date/week_end_date Home
+  // already reads for the lazy date-upgrade above — no new query.
+  const homePlanCoverage = useMemo(() => resolvePlanCoverage(
+    homeAssessment?.starting_plan?.week_start_date ?? null,
+    homeAssessment?.starting_plan?.week_end_date ?? null,
+    localDateIso(new Date()),
+  ), [homeAssessment]);
+  // Beta #021 — which Home state applies. Reuses the exact same evidence the
+  // rest of Home already computes (homeIsEstablished, homeTodayActivity,
+  // homeTodayCompleted/Skipped, homeNextSel) — no re-derivation, no second
+  // geography/plan system. See lib/home-plan-state.ts for the contract.
+  const homePlanState = useMemo(() => resolveHomePlanState({
+    loadError: false,
+    hasAssessment: !!homeAssessment,
+    isEstablished: homeIsEstablished,
+    hasTodayActivity: !!homeTodayActivity,
+    todayCompleted: homeTodayCompleted,
+    todaySkipped: homeTodaySkipped,
+    nextKind: homeNextSel.kind,
+    planCoverage: homePlanCoverage,
+  }), [homeAssessment, homeIsEstablished, homeTodayActivity, homeTodayCompleted, homeTodaySkipped, homeNextSel.kind, homePlanCoverage]);
+  // §6 — on a rest day with nothing else genuinely scheduled, the Exercises
+  // ring must not read as an unmet target the programme never asked for.
+  const neutraliseExerciseRing = shouldNeutraliseExerciseRing(homePlanState.state, exercisesTotal);
   // The "Today's Plan" section's featured activity: the still-unresolved
   // activity dated today (which may be the 2nd of the day, §4/§22-B), else
   // today's activity shown as completed/skipped context, else none.
@@ -839,7 +873,9 @@ export default function HomeScreen() {
         assessment: homeAssessment,
         overall: formatOverallProgress(homeCoachingMemory),
         coachingMemory: homeCoachingMemory,
-        isFirstWeek: homeCoachingMemory.length === 0 && homeWeeklyProgress.completed === 0,
+        // Beta #021 — canonical lifecycle evidence, not "this week's
+        // completions happen to be zero" (true on any legitimate rest day).
+        isFirstWeek: !homeIsEstablished,
       });
       if (brief.provenance.detail === 'neutral') return null;
       return { headline: brief.headline, body: `${brief.observation} ${brief.guidance}`.trim() };
@@ -994,6 +1030,7 @@ export default function HomeScreen() {
         setTodayFulfilment(null);
         setTodayCandidate(null);
         setHomeCoachingMemory([]);
+        setHomeIsEstablished(false);
         setHomeIntelLoaded(true);
         return;
       }
@@ -1002,6 +1039,21 @@ export default function HomeScreen() {
       const planId = data.ai_assessment_generated_at as string;
       setHomeAssessment(assessment);
       setHomePlanId(planId);
+
+      // Beta #021 — established-programme evidence (see homeIsEstablished
+      // above). Two cheap, indexed, single-row-limit reads; non-blocking,
+      // same fail-open pattern as coaching memory below — a transient
+      // failure here just means the neutral/first-plan copy briefly shows
+      // less confidently, never a fabricated "established" claim.
+      Promise.all([
+        supabase.from('fitness_plans').select('plan_id').eq('user_id', userId).neq('plan_id', planId).limit(1),
+        supabase.from('plan_activity_completions').select('id').eq('user_id', userId).limit(1),
+      ]).then(
+        ([{ data: priorPlanRows }, { data: anyCompletionRows }]) => {
+          if (!cancelled) setHomeIsEstablished(!!priorPlanRows?.length || !!anyCompletionRows?.length);
+        },
+        () => { if (!cancelled) setHomeIsEstablished(false); },
+      );
 
       // Day 6 — coaching memory is already fully computed server-side; a
       // plain, non-blocking read, same pattern as the date upgrade below.
@@ -1685,11 +1737,24 @@ export default function HomeScreen() {
     setSearchLoading(true);
     try {
       const term = `%${q.trim()}%`;
+      // Beta #019D — trainer search must obey the same marketplace geography
+      // as trainers/discover/classes: never surface a named Nairobi in-person
+      // trainer to an Amsterdam search. Shared with those — mergeEligiblePtIds.
+      // #019E — a query failure fails closed (no trainer results) rather
+      // than showing every Kenyan trainer to an Amsterdam search.
+      const ptEligibility = await getEligiblePersonalTrainerIds(marketLocRef.current.venueScopeIds);
+      const eligiblePtIds = ptEligibility.ok ? ptEligibility.ids : [];
       const [sessRes, gymRes, expRes, ptRes] = await Promise.all([
         supabase.from('sessions').select('id, name, instructor, date, time, drop_in_price, image_url, gym_id, spots_left, category, gyms(name, deposit_pct)').ilike('name', term).limit(5),
         supabase.from('gyms').select('id, name, location, image_url, description').ilike('name', term).limit(4),
         supabase.from('experiences').select('id, name, tagline, date, start_time, price_kes, discount_kes, spots_left, max_capacity, image_url, category, gym_id, gyms(name)').ilike('name', term).limit(4),
-        supabase.from('personal_trainers').select('id, full_name, professional_name, photo_url, specialisations').ilike('full_name', term).eq('status', 'approved').limit(4),
+        eligiblePtIds !== null && eligiblePtIds.length === 0
+          ? Promise.resolve({ data: [] as any[] })
+          : (() => {
+              let q2 = supabase.from('personal_trainers').select('id, full_name, professional_name, photo_url, specialisations').ilike('full_name', term).eq('status', 'approved').limit(4);
+              if (eligiblePtIds !== null) q2 = q2.in('id', eligiblePtIds);
+              return q2;
+            })(),
       ]);
       setSearchResults({
         sessions: (sessRes.data ?? []) as any,
@@ -1947,19 +2012,23 @@ export default function HomeScreen() {
                   {
                     key: 'exercises',
                     color: RING_COLOR.exercises,
-                    label: 'Exercises',
-                    value: todayIsStrength ? (homeTodayCompleted ? 1 : 0) : exercisesCompleted,
-                    goal: todayIsStrength ? 1 : exercisesTotal,
-                    displayValue: todayIsStrength ? (homeTodayCompleted ? '1' : '0') : `${exercisesCompleted}`,
-                    displayGoal: todayIsStrength ? ' /1' : ` /${exercisesTotal}`,
-                    subtitle: todayIsStrength
+                    label: neutraliseExerciseRing ? 'Recovery' : 'Exercises',
+                    value: neutraliseExerciseRing ? 1 : todayIsStrength ? (homeTodayCompleted ? 1 : 0) : exercisesCompleted,
+                    goal: neutraliseExerciseRing ? 1 : todayIsStrength ? 1 : exercisesTotal,
+                    displayValue: neutraliseExerciseRing ? 'Rest' : todayIsStrength ? (homeTodayCompleted ? '1' : '0') : `${exercisesCompleted}`,
+                    displayGoal: neutraliseExerciseRing ? '' : todayIsStrength ? ' /1' : ` /${exercisesTotal}`,
+                    subtitle: neutraliseExerciseRing
+                      ? 'Rest day'
+                      : todayIsStrength
                       ? `${homeTodayActivity!.title} · ${homeTodayActivity!.duration_minutes} min`
                       : (!isGuest && nextUpItems.length > 0
                         ? `${nextUpItems[0].kind === 'booking'
                           ? nextUpItems[0].booking.sessions?.name
                           : (nextUpItems[0].schedule.workouts?.title ?? 'Workout')} · ${nextUpItems[0].at.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`
                         : undefined),
-                    onPress: todayIsStrength
+                    onPress: neutraliseExerciseRing
+                      ? undefined
+                      : todayIsStrength
                       ? () => router.push('/my-plan' as any)
                       : (!isGuest && nextUpItems.length > 0 ? () => (
                         nextUpItems[0].kind === 'booking'
@@ -2088,6 +2157,49 @@ export default function HomeScreen() {
                 </View>
               </View>
               ); })()}
+            </View>
+          </View>
+        )}
+
+        {/* ─── Beta #021 — REST DAY / PROGRAMME TRANSITION. Fills the exact
+              slot "Today's Plan" leaves empty when the plan has nothing
+              scheduled today, so an established user sees "I'm still in my
+              programme, Lana knows today is rest, here's my weekly
+              progress" instead of blank space — never blank, never a
+              fabricated workout. Only for an ESTABLISHED programme (never
+              during the genuine first-plan period — that card is the
+              intelligence insight above) and only when today has no real
+              activity (the block above already covers that case). "NEXT
+              UP" below already shows the real next activity — this card
+              does not duplicate it. ─── */}
+        {!isGuest && homeIntelLoaded && !homePrimaryRef &&
+          (homePlanState.state === 'rest_day' || homePlanState.state === 'programme_transition') && (
+          <View style={styles.section}>
+            <View style={styles.sectionPad}>
+              <Eyebrow text="Today's focus" />
+            </View>
+            <View style={styles.mealsList}>
+              <View style={styles.todayPlanCard}>
+                <ThemedText style={styles.todayPlanCategory}>
+                  {homePlanState.state === 'rest_day' ? 'Rest day' : 'This week'}
+                </ThemedText>
+                <ThemedText style={styles.restDayTitle}>
+                  {homePlanState.state === 'rest_day' ? 'Rest & recover' : 'Nothing else scheduled this week'}
+                </ThemedText>
+                <ThemedText style={styles.restDayBody}>
+                  {homePlanState.state === 'rest_day'
+                    ? 'Recovery is part of your plan. Take it easy today and give your body time to adapt.'
+                    : 'Check My Plan for what comes next, or plan ahead for next week.'}
+                </ThemedText>
+                {homeWeeklyProgress.total > 0 && (
+                  <ThemedText style={styles.restDayProgress}>
+                    {homeWeeklyProgress.completed} of {homeWeeklyProgress.total} workouts completed this week
+                  </ThemedText>
+                )}
+                <TouchableOpacity onPress={() => router.push('/weekly-plan' as any)} activeOpacity={0.7} style={{ marginTop: 10 }}>
+                  <ThemedText style={styles.todayPlanCta}>View this week&apos;s plan →</ThemedText>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         )}
@@ -2599,7 +2711,7 @@ const styles = StyleSheet.create({
   section: { marginTop: 20 },
   sectionPad: { paddingHorizontal: 20, marginBottom: 16, },
   todaysFocusCard: {
-    backgroundColor: palette.white,
+    backgroundColor: 'transparent',
     borderRadius: radii['2xl'],
     marginHorizontal: 20,
     paddingHorizontal: 16,
@@ -2689,6 +2801,9 @@ const styles = StyleSheet.create({
   todayPlanCompletedRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 4 },
   todayPlanCompletedText: { fontSize: 11, fontWeight: '800', color: palette.success700, letterSpacing: 0.5, textTransform: 'uppercase' },
   todayPlanCta: { fontSize: 13, fontWeight: '700', color: palette.blue600 },
+  restDayTitle: { fontSize: 17, fontWeight: '800', color: palette.ink900, marginTop: 2 },
+  restDayBody: { fontSize: 13, color: palette.gray450, lineHeight: 19, marginTop: 6 },
+  restDayProgress: { fontSize: 12.5, fontWeight: '700', color: palette.ink700, marginTop: 10 },
   upNextRestNote: { fontSize: 12.5, color: palette.gray450, marginTop: 6, lineHeight: 17 },
   // Fulfilment blocks — identical shape/copy conventions to My Plan's, so
   // "do it yourself" / "do it with ACP" read the same on both screens.

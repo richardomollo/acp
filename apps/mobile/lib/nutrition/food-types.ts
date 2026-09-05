@@ -147,6 +147,18 @@ export interface FoodLogInput {
   logGroupId?: string | null;
   /** Nutrition N6 — provenance: this row was logged FROM a saved meal. */
   savedMealId?: string | null;
+  /**
+   * Beta #022A — a caller-supplied nutrient snapshot with a TRUTHFUL,
+   * non-user source (e.g. Lana's own curated `meals` catalogue —
+   * sourceType 'acp_curated'). Only honoured when `foodId` is null AND
+   * `userProvidedNutrition` is NOT true — this is a distinct third case from
+   * N6.5's "the user typed these numbers in" path (§022A §2: a catalogue
+   * recommendation logged via "Log this" must never be mislabelled as
+   * user-provided merely because the user tapped a button). `nutrients` is
+   * still frozen verbatim, exactly like the userProvidedNutrition path.
+   */
+  source?: string | null;
+  sourceType?: FoodSourceType | null;
 }
 
 /** A persisted food log entry (snake_case DB row is mapped to this in the service). */

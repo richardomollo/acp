@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { authService } from '@/services/auth';
 import { useAuthModal } from '@/contexts/auth-modal-context';
 import { useMarketplaceLocation } from '@/contexts/marketplace-location-context';
+import { getEligiblePersonalTrainerIds } from '@/services/professional-eligibility-service';
 import { MarketplaceGate, ExploringBanner } from '@/components/marketplace/marketplace-gate';
 
 const W = Dimensions.get('window').width;
@@ -117,13 +118,14 @@ export default function DiscoverScreen() {
     setSearchLoading(true);
     try {
       const term = `%${q.trim()}%`;
-      // Trainers linked to an in-radius venue (in-person supply only).
-      const localPtIds = scopeIds !== null
-        ? Array.from(new Set(
-            (((await supabase.from('pt_venue_links').select('pt_id').in('gym_id', scopeIds)).data as any[]) ?? [])
-              .map(l => l.pt_id),
-          )).filter(Boolean)
-        : null;
+      // Beta #019D — shared with trainers/my-plan/nutrition/log-progress, see
+      // mergeEligiblePtIds: reachable at a nearby venue (venue link OR an
+      // offering there) OR an explicit active online service — not just a
+      // venue link, so an online-only trainer is now findable too.
+      // #019E — a query failure fails closed (no trainer results) rather
+      // than showing every Kenyan trainer to an Amsterdam search.
+      const ptEligibility = await getEligiblePersonalTrainerIds(scopeIds);
+      const localPtIds = ptEligibility.ok ? ptEligibility.ids : [];
 
       const scopeCol = (b: any, col: string) => (scopeIds !== null ? b.in(col, scopeIds) : b);
       const [sessRes, gymRes, expRes, ptRes] = await Promise.all([

@@ -171,6 +171,78 @@ export function MarketplaceUnavailableNotice({
   );
 }
 
+// ── Beta Feedback #019E — professional-support empty states ────────────────
+// The shared presentation for `ProfessionalSupportAvailability`
+// (lib/professional-support.ts), reused by every surface that recommends a
+// named professional (Nutrition, Log Progress, My Plan, Fitness Journey,
+// Activity Fulfilment) instead of each screen inventing its own copy
+// conditions. Renders nothing for 'available' — the caller renders its own
+// matched-professional list in that case.
+export function ProfessionalSupportUnavailableNotice({
+  availability,
+  /** e.g. "nutrition professionals", "personal trainers" — kept generic so
+   *  this isn't nutrition-specific (§7). */
+  professionalNoun = 'professionals',
+  /** what the user can still do meanwhile, e.g. "Lana's nutrition guidance and meal tracking" */
+  continueWithNoun = "Lana's guidance and tracking tools",
+}: {
+  availability: 'no_local_or_online_support' | 'location_unknown' | 'error';
+  professionalNoun?: string;
+  continueWithNoun?: string;
+}) {
+  const { activeLabel, retry } = useMarketplaceLocation();
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  if (availability === 'error') {
+    return (
+      <View style={s.stateCard}>
+        <Ionicons name="cloud-offline-outline" size={22} color={palette.gray450} />
+        <Text style={s.stateTitle}>We couldn’t load professional support right now.</Text>
+        <Text style={s.stateBody}>Please try again.</Text>
+        <TouchableOpacity style={s.stateBtn} onPress={() => retry()} activeOpacity={0.85}>
+          <Text style={s.stateBtnText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (availability === 'location_unknown') {
+    return (
+      <>
+        <View style={s.stateCard}>
+          <Ionicons name="location-outline" size={22} color={palette.blue600} />
+          <Text style={s.stateTitle}>Choose a city to find support</Text>
+          <Text style={s.stateBody}>Select your location to see professional support available to you.</Text>
+          <TouchableOpacity style={s.stateBtn} onPress={() => setPickerOpen(true)} activeOpacity={0.85}>
+            <Text style={s.stateBtnText}>Choose a city</Text>
+          </TouchableOpacity>
+        </View>
+        <CityPickerModal visible={pickerOpen} onClose={() => setPickerOpen(false)} />
+      </>
+    );
+  }
+
+  // no_local_or_online_support — §8: only interpolate a city we actually
+  // trust (the same #019 activeLabel every other surface uses); otherwise
+  // "your area", never a manufactured or guessed city.
+  const cityBit = activeLabel ? ` in ${activeLabel}` : ' in your area';
+  return (
+    <>
+      <View style={s.stateCard}>
+        <Ionicons name="map-outline" size={22} color={palette.blue600} />
+        <Text style={s.stateTitle}>Not available{cityBit} yet</Text>
+        <Text style={s.stateBody}>
+          We don’t currently have {professionalNoun} available in your area. You can still use {continueWithNoun} in the meantime.
+        </Text>
+        <TouchableOpacity style={s.stateBtn} onPress={() => setPickerOpen(true)} activeOpacity={0.85}>
+          <Text style={s.stateBtnText}>Explore another city</Text>
+        </TouchableOpacity>
+      </View>
+      <CityPickerModal visible={pickerOpen} onClose={() => setPickerOpen(false)} />
+    </>
+  );
+}
+
 // ── The gate ─────────────────────────────────────────────────────────────
 export function MarketplaceGate({
   children,
