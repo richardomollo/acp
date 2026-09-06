@@ -480,6 +480,7 @@ export default function LanaProOnboardingPage() {
       <OnboardingShell
         {...shellProps}
         left={
+          <div>
           <div className="max-w-xl">
             <p className="text-xs font-bold text-gray-400 uppercase tracking-[0.16em] mb-4">for fitness, nutritionists and wellness proffesionals</p>
             <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 leading-[1.1] tracking-tight">
@@ -515,6 +516,37 @@ export default function LanaProOnboardingPage() {
                 </Link>
               </span>
             </div>
+          </div>
+
+          {/* Image collage — same staggered style as /walkthrough */}
+          <div className="mt-12 lg:mt-14">
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 h-[300px] lg:h-[440px]">
+              <div className="flex flex-col gap-3 lg:mt-12">
+                <div className="flex-1 rounded-2xl overflow-hidden">
+                  <img src="/images/ref.jpeg" alt="Fitness" className="w-full h-full object-cover" style={{ objectPosition: "15% center" }} />
+                </div>
+                <div className="flex-1 rounded-2xl overflow-hidden">
+                  <img src="/images/yoga.jpg" alt="Yoga" className="w-full h-full object-cover" style={{ objectPosition: "center top" }} />
+                </div>
+              </div>
+              <div className="flex flex-col gap-3">
+                <div className="flex-1 rounded-2xl overflow-hidden">
+                  <img src="/images/gym.jpg" alt="Gym" className="w-full h-full object-cover" style={{ objectPosition: "center" }} />
+                </div>
+                <div className="flex-1 rounded-2xl overflow-hidden">
+                  <img src="/images/pt.jpeg" alt="personal trainer" className="w-full h-full object-cover" style={{ objectPosition: "center" }} />
+                </div>
+              </div>
+              <div className="hidden lg:flex flex-col gap-3 mt-8">
+                <div className="flex-1 rounded-2xl overflow-hidden">
+                  <img src="/images/padel.webp" alt="Wellness" className="w-full h-full object-cover" style={{ objectPosition: "80% center" }} />
+                </div>
+                <div className="flex-1 rounded-2xl overflow-hidden">
+                  <img src="/images/run.jpg" alt="Training" className="w-full h-full object-cover" style={{ objectPosition: "85% center" }} />
+                </div>
+              </div>
+            </div>
+          </div>
           </div>
         }
       />
