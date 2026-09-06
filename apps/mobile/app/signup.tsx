@@ -116,7 +116,7 @@ export default function SignUpScreen() {
             style={styles.bigLogo}
             resizeMode="contain"
           />
-          <Text style={styles.brandName}>Lana Health</Text>
+          <Text style={styles.brandName}>Lana</Text>
         </View>
 
         {/* Hero */}

@@ -70,6 +70,12 @@ export default Sentry.wrap(function Layout() {
     const route = (data: unknown) => {
       const d = data as { type?: string; url?: string } | null;
       if (d?.type === 'measurement_checkin') router.push((d.url ?? '/log-progress') as never);
+      // Phase 4.5/4.6 — professional continuity pushes land on the
+      // "From your coach" screen (session summaries + agreed actions).
+      // The payload carries no session id, so route to the list, not a detail.
+      else if (d?.type === 'session_completed' || d?.type === 'task_assigned') {
+        router.push('/trainer-tasks' as never);
+      }
     };
     Notifications.getLastNotificationResponseAsync()
       .then(r => { if (r) route(r.notification.request.content.data); })

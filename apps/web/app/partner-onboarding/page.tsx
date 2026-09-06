@@ -5,6 +5,7 @@ import { createBrowserClient } from "@supabase/ssr";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { fetchSessionCategories } from "@/app/lib/lookups";
+import { isLanaProEnabled, LANA_PRO_HOME } from "@/lib/lana-pro-flags";
 
 const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -200,7 +201,7 @@ export default function PartnerOnboardingPage() {
         id: `gymSession-${gym.id}`,
         eyebrow: gym.name,
         title: "Create your first session",
-        subtitle: "A bookable class or slot customers can find on Lana Health. You can add more or fine-tune this one anytime from your dashboard.",
+        subtitle: "A bookable class or slot customers can find on Lana. You can add more or fine-tune this one anytime from your dashboard.",
         canContinue: !!(sessionForm.name.trim() && sessionForm.category && sessionForm.date && sessionForm.time && sessionForm.drop_in_price),
         onContinue: async () => {
           setLoading(true);
@@ -502,18 +503,26 @@ export default function PartnerOnboardingPage() {
                 {total === 0 ? "You're all set!" : "Your profile is complete!"}
               </h2>
               <p className="text-gray-500 mb-8">
-                Your profile is live on Lana Health. You can keep refining it anytime from your dashboard.
+                Your profile is live on Lana. You can keep refining it anytime from your dashboard.
               </p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                {gyms.length > 0 && (
-                  <Link href="/partner-dashboard" className="bg-[#050040] text-white font-semibold px-8 py-3 rounded-full hover:bg-indigo-900 transition text-sm">
-                    Go to My Dashboard →
+                {isLanaProEnabled() ? (
+                  <Link href={LANA_PRO_HOME} className="bg-[#050040] text-white font-semibold px-8 py-3 rounded-full hover:bg-indigo-900 transition text-sm">
+                    Go to Lana Pro →
                   </Link>
-                )}
-                {pt && (
-                  <Link href="/pt-dashboard" className="border border-gray-300 text-gray-700 font-medium px-8 py-3 rounded-full hover:bg-gray-50 transition text-sm">
-                    Go to My Trainer Dashboard →
-                  </Link>
+                ) : (
+                  <>
+                    {gyms.length > 0 && (
+                      <Link href="/partner-dashboard" className="bg-[#050040] text-white font-semibold px-8 py-3 rounded-full hover:bg-indigo-900 transition text-sm">
+                        Go to My Dashboard →
+                      </Link>
+                    )}
+                    {pt && (
+                      <Link href="/pt-dashboard" className="border border-gray-300 text-gray-700 font-medium px-8 py-3 rounded-full hover:bg-gray-50 transition text-sm">
+                        Go to My Trainer Dashboard →
+                      </Link>
+                    )}
+                  </>
                 )}
               </div>
             </div>

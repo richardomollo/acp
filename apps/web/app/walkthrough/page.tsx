@@ -143,19 +143,19 @@ const FITNESS_HUB_CATEGORIES = [
 const TESTIMONIALS = [
   {
     name: "Sarah M.",
-    quote: "Above all, fitness to me means fun — and that's exactly what Lana Health delivers. Some days I train solo, other days I discover new studios with friends!",
+    quote: "Above all, fitness to me means fun — and that's exactly what Lana delivers. Some days I train solo, other days I discover new studios with friends!",
   },
   {
     name: "James K.",
-    quote: "I love yoga — and Lana Health lets me practice like I never thought I could. I try different studios across Nairobi every week.",
+    quote: "I love yoga — and Lana lets me practice like I never thought I could. I try different studios across Nairobi every week.",
   },
   {
     name: "Amara N.",
-    quote: "Exercising keeps me fit and healthy. I love that I can do a gym session and then relax at a spa partner — all through Lana Health.",
+    quote: "Exercising keeps me fit and healthy. I love that I can do a gym session and then relax at a spa partner — all through Lana.",
   },
   {
     name: "David O.",
-    quote: "The Lana Health concept is simple and super practical. I find my sport in the app, scan a QR code, and start training within seconds.",
+    quote: "The Lana concept is simple and super practical. I find my sport in the app, scan a QR code, and start training within seconds.",
   },
 ];
 
@@ -175,7 +175,7 @@ export default function WalkthroughPage() {
             {/* Left: text */}
             <div className="order-2 lg:order-1">
               <p className="text-sm text-gray-500 leading-relaxed mb-8 max-w-md">
-                Lana Health, NAIROBI
+                Lana, NAIROBI
               </p>
               <h1 className="text-4xl lg:text-6xl font-black text-gray-900 leading-[1.05] tracking-tight mb-6">
                 Sports and wellness<br />the way you want it
@@ -273,11 +273,11 @@ export default function WalkthroughPage() {
           </div>
 
           <div className="flex gap-6 overflow-x-auto snap-x snap-mandatory pb-4 -mx-6 px-6 scrollbar-none lg:grid lg:grid-cols-5 lg:overflow-visible lg:pb-0 lg:mx-auto lg:px-0 max-w-5xl">
-            <PhoneFrame src="/images/app/screenshot-home.png" alt="Home screen in the Lana Health app" className="w-40 flex-shrink-0 snap-center lg:w-full" />
-            <PhoneFrame src="/images/app/screenshot-fitness-hub.png" alt="Fitness Hub screen in the Lana Health app" className="w-40 flex-shrink-0 snap-center lg:w-full" />
-            <PhoneFrame src="/images/app/screenshot-workout-detail.png" alt="Workout detail screen in the Lana Health app" className="w-40 flex-shrink-0 snap-center lg:w-full" />
-            <PhoneFrame src="/images/app/screenshot-workout-player.png" alt="Workout player screen in the Lana Health app" className="w-40 flex-shrink-0 snap-center lg:w-full" />
-            <PhoneFrame src="/images/app/screenshot-create-workout.png" alt="Create workout screen in the Lana Health app" className="w-40 flex-shrink-0 snap-center lg:w-full" />
+            <PhoneFrame src="/images/app/screenshot-home.png" alt="Home screen in the Lana app" className="w-40 flex-shrink-0 snap-center lg:w-full" />
+            <PhoneFrame src="/images/app/screenshot-fitness-hub.png" alt="Fitness Hub screen in the Lana app" className="w-40 flex-shrink-0 snap-center lg:w-full" />
+            <PhoneFrame src="/images/app/screenshot-workout-detail.png" alt="Workout detail screen in the Lana app" className="w-40 flex-shrink-0 snap-center lg:w-full" />
+            <PhoneFrame src="/images/app/screenshot-workout-player.png" alt="Workout player screen in the Lana app" className="w-40 flex-shrink-0 snap-center lg:w-full" />
+            <PhoneFrame src="/images/app/screenshot-create-workout.png" alt="Create workout screen in the Lana app" className="w-40 flex-shrink-0 snap-center lg:w-full" />
           </div>
         </div>
       </section>
@@ -298,7 +298,7 @@ export default function WalkthroughPage() {
               <div className="" style={{ maxWidth: "220px"}}>
                 <PhoneFrame
                   src="/images/app/screenshot-home.png"
-                  alt="Lana Health home screen"
+                  alt="Lana home screen"
                   className="w-full t"
                 />
               </div>

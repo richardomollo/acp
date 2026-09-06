@@ -89,3 +89,15 @@ export function isMeasurementCheckinEnabled(): boolean {
 export function isAdaptiveNutritionEnabled(): boolean {
   return process.env.EXPO_PUBLIC_LANA_ADAPTIVE_NUTRITION_ENABLED === 'true';
 }
+
+// Phase 4.5 / 4.6 — professional → consumer continuity: the "From your coach"
+// Home card + agreed-action list, the /coach-update screen, and the evolved
+// /trainer-tasks screen, all fed by get_client_session_feed. Off ONLY when
+// exactly "false" (kill switch, default on). When off: Home makes NO
+// continuity fetch and renders no coach card/actions; the generated plan,
+// measurement check-in and every other Home surface are unchanged; any
+// professional_session_records already written stay in the DB, just not
+// surfaced. Rollback needs no schema change.
+export function isProfessionalContinuityEnabled(): boolean {
+  return process.env.EXPO_PUBLIC_LANA_PROFESSIONAL_CONTINUITY_ENABLED !== 'false';
+}

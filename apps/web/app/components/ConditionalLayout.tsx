@@ -5,7 +5,7 @@ import Header from "./Header";
 import Footer from "./Footer";
 
 const HIDE_CHROME_EXACT = ["/partners/signup", "/partner-signup", "/partner-onboarding", "/partner-login", "/partner-dashboard", "/reset-password", "/trainer-signup"];
-const HIDE_CHROME_PREFIX = ["/pt-dashboard", "/pt-pending", "/trainer-dashboard"];
+const HIDE_CHROME_PREFIX = ["/pt-dashboard", "/pt-pending", "/trainer-dashboard", "/lana-pro", "/join"];
 
 export default function ConditionalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

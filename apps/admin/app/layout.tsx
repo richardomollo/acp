@@ -4,8 +4,8 @@ import { Inter } from 'next/font/google';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata = {
-  title: 'Lana Health Admin',
-  description: 'Admin dashboard for Lana Health',
+  title: 'Lana Admin',
+  description: 'Admin dashboard for Lana',
 };
 
 export default function RootLayout({

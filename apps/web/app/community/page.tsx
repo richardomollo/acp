@@ -5,10 +5,10 @@ import { supabase } from "../lib/supabase";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Community & Clubs | Lana Health",
+  title: "Community & Clubs | Lana",
   description: "Find your people. Join running clubs, cycling crews, yoga circles and more across Nairobi.",
   openGraph: {
-    title: "Community & Clubs | Lana Health",
+    title: "Community & Clubs | Lana",
     description: "Find your people. Join running clubs, cycling crews, yoga circles and more across Nairobi.",
     url: "https://activecitypass.com/community",
   },

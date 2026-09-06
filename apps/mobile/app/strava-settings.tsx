@@ -104,7 +104,7 @@ export default function StravaSettingsScreen() {
                 <ThemedText style={s.title}>Strava connected ✓</ThemedText>
                 <ThemedText style={s.desc}>
                   Supported activities you record on Strava — runs, walks and rides —
-                  are added to your Lana Health activity history and can count
+                  are added to your Lana activity history and can count
                   towards your plan progress. Lana only reads activities; it never
                   starts or changes your Strava recordings.
                 </ThemedText>

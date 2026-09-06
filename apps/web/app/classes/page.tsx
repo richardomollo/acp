@@ -5,11 +5,11 @@ import SessionsClient from "../sessions/SessionsClient";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Browse Classes | Lana Health",
+  title: "Browse Classes | Lana",
   description:
     "Find and book fitness sessions across Nairobi — gym workouts, yoga classes, pilates, swimming, HIIT and more. Filter by date, venue, and activity type.",
   openGraph: {
-    title: "Browse Classes | Lana Health",
+    title: "Browse Classes | Lana",
     description:
       "Find and book fitness sessions across Nairobi — gym workouts, yoga, pilates, swimming, HIIT and more.",
     url: "https://activecitypass.com/classes",

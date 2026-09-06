@@ -102,7 +102,7 @@ export default function FeedbackClient({ type, id }: { type: string; id: string 
       <div className="max-w-md mx-auto px-6 py-24 text-center">
         <div className="text-4xl mb-4">🙌</div>
         <h1 className="text-xl font-bold text-gray-900 mb-2">Thanks for the feedback!</h1>
-        <p className="text-sm text-gray-500">It helps us make Lana Health better.</p>
+        <p className="text-sm text-gray-500">It helps us make Lana better.</p>
       </div>
     );
   }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { createClient } from '../../lib/supabase/server'
+import { isLanaProEnabled, LANA_PRO_HOME } from '@/lib/lana-pro-flags'
 
 // Exchanges the PKCE code for a session right here, server-side. The code
 // verifier cookie set when signInWithOAuth() was initiated only reliably
@@ -28,5 +29,6 @@ export async function GET(request: NextRequest) {
 
   const email = data.session.user.email ?? ''
   const { data: gymData } = await supabase.from('gyms').select('id').ilike('contact_email', email).maybeSingle()
-  return NextResponse.redirect(`${origin}${gymData ? '/partner-dashboard' : '/sessions'}`)
+  const partnerHome = isLanaProEnabled() ? LANA_PRO_HOME : '/partner-dashboard'
+  return NextResponse.redirect(`${origin}${gymData ? partnerHome : '/sessions'}`)
 }

@@ -497,7 +497,7 @@ export default function HomePage() {
       <section className="bg-white pt-14 pb-12 px-6">
         <div className="max-w-7xl mx-auto">
           <p className="text-[11px] font-bold tracking-widest uppercase text-gray-400 mb-3">
-            Lana Health · Nairobi
+            Lana · Nairobi
           </p>
           <h1 className="text-4xl lg:text-6xl font-black text-gray-900 leading-[1.05] tracking-tight mb-4 max-w-3xl">
             Get active, wherever you want.

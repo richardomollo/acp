@@ -4,7 +4,7 @@ import PartnerHeader from "../components/PartnerHeader";
 export const metadata: Metadata = {
   title: "Partner Application",
   description:
-    "Apply to list your sports or wellness venue on Lana Health. Takes 5 minutes and there are no upfront fees.",
+    "Apply to list your sports or wellness venue on Lana Pro. Takes 5 minutes and there are no upfront fees.",
   robots: { index: false, follow: false },
 };
 

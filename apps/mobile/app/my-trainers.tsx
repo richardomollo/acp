@@ -16,11 +16,21 @@ interface TrainerRelationship {
   id: string;
   status: 'pending' | 'active' | 'inactive';
   share_progress: boolean;
+  /** 'pt' → pt_clients (independent) · 'gym' → gym_trainer_clients (employed) */
+  source: 'pt' | 'gym';
+  /** venue name for an employed-professional relationship */
+  venueName?: string | null;
   personal_trainers: { professional_name: string | null; full_name: string } | null;
+  gym_trainers?: { full_name: string | null } | null;
 }
 
 function trainerName(row: TrainerRelationship): string {
+  if (row.source === 'gym') return row.gym_trainers?.full_name || 'Trainer';
   return row.personal_trainers?.professional_name || row.personal_trainers?.full_name || 'Trainer';
+}
+
+function relationTable(row: TrainerRelationship): 'pt_clients' | 'gym_trainer_clients' {
+  return row.source === 'gym' ? 'gym_trainer_clients' : 'pt_clients';
 }
 
 export default function MyTrainersScreen() {
@@ -38,13 +48,34 @@ export default function MyTrainersScreen() {
     const session = await authService.getSession();
     if (!session?.user.id) { setLoading(false); return; }
 
-    const { data } = await supabase
-      .from('pt_clients')
-      .select('id, status, share_progress, personal_trainers(professional_name, full_name)')
-      .eq('client_user_id', session.user.id)
-      .order('created_at', { ascending: false });
+    const [ptRes, gymRes] = await Promise.all([
+      supabase
+        .from('pt_clients')
+        .select('id, status, share_progress, personal_trainers(professional_name, full_name)')
+        .eq('client_user_id', session.user.id)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('gym_trainer_clients')
+        .select('id, status, share_progress, gym_trainers(full_name, gyms(name))')
+        .eq('client_user_id', session.user.id)
+        .order('created_at', { ascending: false }),
+    ]);
 
-    setRows((data as any) ?? []);
+    const ptRows: TrainerRelationship[] = ((ptRes.data as any[]) ?? []).map((r) => ({
+      ...r,
+      source: 'pt' as const,
+    }));
+    const gymRows: TrainerRelationship[] = ((gymRes.data as any[]) ?? []).map((r) => ({
+      id: r.id,
+      status: r.status,
+      share_progress: r.share_progress,
+      source: 'gym' as const,
+      venueName: r.gym_trainers?.gyms?.name ?? null,
+      personal_trainers: null,
+      gym_trainers: { full_name: r.gym_trainers?.full_name ?? null },
+    }));
+
+    setRows([...ptRows, ...gymRows]);
     setLoading(false);
   }, []);
 
@@ -54,7 +85,7 @@ export default function MyTrainersScreen() {
     const next = !row.share_progress;
     setSavingId(row.id);
     setRows(prev => prev.map(r => r.id === row.id ? { ...r, share_progress: next } : r));
-    const { error } = await supabase.from('pt_clients').update({ share_progress: next }).eq('id', row.id);
+    const { error } = await supabase.from(relationTable(row)).update({ share_progress: next }).eq('id', row.id);
     if (error) {
       setRows(prev => prev.map(r => r.id === row.id ? { ...r, share_progress: !next } : r));
     }
@@ -63,7 +94,7 @@ export default function MyTrainersScreen() {
 
   const acceptInvite = async (row: TrainerRelationship) => {
     setSavingId(row.id);
-    const { error } = await supabase.from('pt_clients').update({ status: 'active' }).eq('id', row.id);
+    const { error } = await supabase.from(relationTable(row)).update({ status: 'active' }).eq('id', row.id);
     if (!error) setRows(prev => prev.map(r => r.id === row.id ? { ...r, status: 'active' } : r));
     setSavingId(null);
   };
@@ -75,7 +106,7 @@ export default function MyTrainersScreen() {
         text: 'Decline', style: 'destructive',
         onPress: async () => {
           setSavingId(row.id);
-          const { error } = await supabase.from('pt_clients').delete().eq('id', row.id);
+          const { error } = await supabase.from(relationTable(row)).delete().eq('id', row.id);
           if (!error) setRows(prev => prev.filter(r => r.id !== row.id));
           setSavingId(null);
         },
@@ -125,7 +156,7 @@ export default function MyTrainersScreen() {
             <>
               <ThemedText style={s.sectionLabel}>Pending Invites</ThemedText>
               {pending.map(row => (
-                <View key={row.id} style={s.card}>
+                <View key={`${row.source}:${row.id}`} style={s.card}>
                   <View style={s.avatarCircle}>
                     <ThemedText style={s.avatarText}>{trainerName(row)[0]?.toUpperCase()}</ThemedText>
                   </View>
@@ -164,13 +195,20 @@ export default function MyTrainersScreen() {
             <>
               {pending.length > 0 && <ThemedText style={s.sectionLabel}>Your Trainers</ThemedText>}
               {active.map(row => (
-                <View key={row.id} style={s.card}>
+                <View key={`${row.source}:${row.id}`} style={s.card}>
                   <View style={s.avatarCircle}>
                     <ThemedText style={s.avatarText}>{trainerName(row)[0]?.toUpperCase()}</ThemedText>
                   </View>
                   <View style={{ flex: 1 }}>
                     <ThemedText style={s.trainerName}>{trainerName(row)}</ThemedText>
-                    <ThemedText style={s.shareLabel}>Share my workout progress</ThemedText>
+                    <ThemedText style={s.shareLabel}>
+                      {row.source === 'gym' && row.venueName
+                        ? `Personal Trainer · ${row.venueName}`
+                        : 'Share my workout progress'}
+                    </ThemedText>
+                    {row.source === 'gym' && row.venueName ? (
+                      <ThemedText style={s.shareLabel}>Share progress with {trainerName(row)}</ThemedText>
+                    ) : null}
                   </View>
                   {savingId === row.id ? (
                     <ActivityIndicator size="small" color={palette.blue500} />
@@ -184,6 +222,14 @@ export default function MyTrainersScreen() {
                   )}
                 </View>
               ))}
+              <TouchableOpacity
+                style={s.updatesLink}
+                onPress={() => router.push('/trainer-tasks' as never)}
+                activeOpacity={0.7}
+              >
+                <ThemedText style={s.updatesLinkText}>Recent updates</ThemedText>
+                <Ionicons name="chevron-forward" size={16} color={palette.blue500} />
+              </TouchableOpacity>
             </>
           )}
 
@@ -269,6 +315,12 @@ const s = StyleSheet.create({
     width: 32, height: 32, borderRadius: 16, backgroundColor: palette.surfaceMuted,
     alignItems: 'center', justifyContent: 'center',
   },
+
+  updatesLink: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
+    paddingVertical: 12, marginTop: 2, marginBottom: 8,
+  },
+  updatesLinkText: { fontSize: 13, fontWeight: '700', color: palette.blue500 },
 
   redeemToggle: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,

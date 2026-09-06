@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Lana Health",
+    "name": "Lana",
     "slug": "acitypass",
     "version": "1.0.7",
     "orientation": "portrait",
@@ -19,8 +19,8 @@
       "bundleIdentifier": "com.activecitypass.app",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSPhotoLibraryUsageDescription": "Lana Health needs access to your photo library so you can upload a profile picture and choose meal photos to help log what you ate.",
-        "NSCameraUsageDescription": "Lana Health uses your camera to take a profile photo and to photograph meals so you can log what you ate.",
+        "NSPhotoLibraryUsageDescription": "Lana needs access to your photo library so you can upload a profile picture and choose meal photos to help log what you ate.",
+        "NSCameraUsageDescription": "Lana uses your camera to take a profile photo and to photograph meals so you can log what you ate.",
         "CFBundleURLTypes": [
           {
             "CFBundleURLSchemes": [
@@ -81,8 +81,8 @@
       [
         "@kingstinct/react-native-healthkit",
         {
-          "NSHealthShareUsageDescription": "Lana Health reads your steps, active and resting energy, heart rate, workouts, and body measurements (weight, height, body fat, waist) from Apple Health to show them in your Analytics page.",
-          "NSHealthUpdateUsageDescription": "Lana Health does not write data to Apple Health.",
+          "NSHealthShareUsageDescription": "Lana reads your steps, active and resting energy, heart rate, workouts, and body measurements (weight, height, body fat, waist) from Apple Health to show them in your Analytics page.",
+          "NSHealthUpdateUsageDescription": "Lana does not write data to Apple Health.",
           "background": false
         }
       ],
@@ -90,8 +90,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Lana Health lets you choose a meal photo to help log what you ate. The photo is analysed once and not stored.",
-          "cameraPermission": "Lana Health lets you photograph a meal to help log what you ate. The photo is analysed once and not stored."
+          "photosPermission": "Lana lets you choose a meal photo to help log what you ate. The photo is analysed once and not stored.",
+          "cameraPermission": "Lana lets you photograph a meal to help log what you ate. The photo is analysed once and not stored."
         }
       ],
       [
@@ -99,7 +99,7 @@
         {
           "locationAlwaysAndWhenInUsePermission": false,
           "locationAlwaysPermission": false,
-          "locationWhenInUsePermission": "Lana Health uses your location to show bookable gyms, classes, trainers and experiences available near you. Your workouts, nutrition and progress work without it.",
+          "locationWhenInUsePermission": "Lana uses your location to show bookable gyms, classes, trainers and experiences available near you. Your workouts, nutrition and progress work without it.",
           "isIosBackgroundLocationEnabled": false,
           "isAndroidBackgroundLocationEnabled": false,
           "isAndroidForegroundServiceEnabled": false

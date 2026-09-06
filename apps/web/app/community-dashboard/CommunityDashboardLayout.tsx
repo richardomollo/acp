@@ -103,7 +103,7 @@ export default function CommunityDashboardLayout({
     <div className="flex h-screen bg-gray-50 overflow-hidden">
       <aside className="hidden md:flex flex-col w-64 bg-gray-900 text-white flex-shrink-0">
         <div className="px-6 pt-8 pb-6 border-b border-white/10">
-          <p className="text-xs text-gray-400 uppercase tracking-widest mb-3">Lana Health</p>
+          <p className="text-xs text-gray-400 uppercase tracking-widest mb-3">Lana Pro</p>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-sm font-bold">
               {initials}

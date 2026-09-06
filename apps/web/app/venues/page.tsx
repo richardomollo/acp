@@ -5,11 +5,11 @@ import VenuesClient from "./VenuesClient";
 export const revalidate = 0;
 
 export const metadata: Metadata = {
-  title: "Partner Venues | Lana Health",
+  title: "Partner Venues | Lana",
   description:
-    "Explore 50+ gyms, yoga studios, swimming pools, spas and wellness centres across Nairobi — all bookable with Lana Health.",
+    "Explore 50+ gyms, yoga studios, swimming pools, spas and wellness centres across Nairobi — all bookable with Lana.",
   openGraph: {
-    title: "Partner Venues | Lana Health",
+    title: "Partner Venues | Lana",
     description:
       "Explore 50+ gyms, yoga studios, pools, spas and wellness centres across Nairobi.",
     url: "https://activecitypass.com/venues",
@@ -40,7 +40,7 @@ export default async function GymsPage() {
                 One membership.<br className="hidden sm:block" /> Every gym, studio &amp; spa in Nairobi.
               </h1>
               <p className="text-gray-500 text-sm leading-relaxed max-w-lg">
-                Lana Health gives you access to the full network — gyms, yoga studios, swimming pools,
+                Lana gives you access to the full network — gyms, yoga studios, swimming pools,
                 boxing gyms, spas and more. Walk in, train, and leave. No joining fees, no commitment.
               </p>
             </div>

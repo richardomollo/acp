@@ -74,6 +74,17 @@ async function getTrainer(ptId: string): Promise<{ phone: string | null; name: s
   return { phone: data?.phone ?? null, name: data?.professional_name ?? data?.full_name ?? 'Your trainer' }
 }
 
+// Phase 4.6 — an employed professional (gym_trainers). No public/professional
+// name, just their full name; fall back to a neutral label.
+async function getGymTrainer(gymTrainerId: string): Promise<{ phone: string | null; name: string }> {
+  const { data } = await supabase
+    .from('gym_trainers')
+    .select('phone, full_name')
+    .eq('id', gymTrainerId)
+    .single()
+  return { phone: data?.phone ?? null, name: data?.full_name ?? 'Your coach' }
+}
+
 function formatDueDate(due: string | null): string {
   if (!due) return 'No due date'
   return new Date(due + 'T00:00:00').toLocaleDateString('en-KE', { day: 'numeric', month: 'short' })
@@ -149,6 +160,34 @@ Deno.serve(async (req) => {
       } else {
         console.warn('No client phone — skipped WhatsApp')
       }
+    }
+
+    // ── Phase 4.5: a professional COMPLETED a session ─────────────────
+    // ONE notification per session (the DB trigger sets notified_at as the
+    // idempotency guard and never re-fires). Session-attributed client_tasks
+    // are suppressed at the trigger, so this replaces N task_assigned pushes.
+    if (type === 'session_completed') {
+      const row = record as {
+        personal_trainer_id: string | null
+        gym_trainer_id: string | null
+        client_user_id: string
+        focus: string | null
+      }
+      const resolveAuthor = row.personal_trainer_id
+        ? getTrainer(row.personal_trainer_id)
+        : row.gym_trainer_id
+          ? getGymTrainer(row.gym_trainer_id)
+          : Promise.resolve({ phone: null, name: 'Your coach' })
+      const [trainer, pushTokens] = await Promise.all([
+        resolveAuthor,
+        getPushTokens(row.client_user_id),
+      ])
+      await sendExpoPush(
+        pushTokens,
+        `${trainer.name} added notes from today's session`,
+        row.focus ? `Focus: ${row.focus}` : 'Tap to see your summary and next steps.',
+        { type: 'session_completed', clientUserId: row.client_user_id },
+      )
     }
 
     return new Response(JSON.stringify({ ok: true }), {
