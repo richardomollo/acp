@@ -29,20 +29,8 @@ export default async function TrainerDashboardServerLayout({
 
   const gymName = (trainer as any).gyms?.name ?? "Your gym";
 
-  const { data: communityMembership } = await supabase
-    .from("community_members")
-    .select("communities(review_status)")
-    .eq("user_id", user.id)
-    .in("role", ["owner", "admin"])
-    .eq("status", "active")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  const communityStatus = (communityMembership?.communities as any)?.review_status as
-    | "pending" | "approved" | "rejected" | undefined;
-
   return (
-    <TrainerDashboardLayout trainerName={trainer.full_name} gymName={gymName} communityStatus={communityStatus}>
+    <TrainerDashboardLayout trainerName={trainer.full_name} gymName={gymName}>
       {children}
     </TrainerDashboardLayout>
   );

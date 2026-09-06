@@ -18,27 +18,27 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     .eq("id", id)
     .single();
 
-  if (!offering) return { title: "PT Session | Lana Health" };
+  if (!offering) return { title: "PT Session | Lana" };
 
   const pt = Array.isArray(offering.personal_trainers) ? offering.personal_trainers[0] : offering.personal_trainers as any;
   const name = pt?.professional_name ?? pt?.full_name ?? "Trainer";
   const title = offering.is_programme
     ? `${offering.title} — Programme with ${name}`
     : `${offering.title} with ${name}`;
-  const description = offering.description ?? `Book a personal training session with ${name} on Lana Health in Nairobi.`;
+  const description = offering.description ?? `Book a personal training session with ${name} on Lana in Nairobi.`;
 
   return {
-    title: `${title} | Lana Health`,
+    title: `${title} | Lana`,
     description,
     openGraph: {
-      title: `${title} | Lana Health`,
+      title: `${title} | Lana`,
       description,
       url: `https://activecitypass.com/pt-offerings/${id}`,
       ...(pt?.photo_url ? { images: [{ url: pt.photo_url, width: 1200, height: 630, alt: title }] } : {}),
     },
     twitter: {
       card: "summary_large_image",
-      title: `${title} | Lana Health`,
+      title: `${title} | Lana`,
       description,
       ...(pt?.photo_url ? { images: [pt.photo_url] } : {}),
     },

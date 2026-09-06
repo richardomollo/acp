@@ -7,8 +7,8 @@ import SessionSync from "./components/SessionSync";
 export const metadata: Metadata = {
   metadataBase: new URL("https://activecitypass.com"),
   title: {
-    default: "Lana Health – Sports, Fitness & Wellness in Nairobi",
-    template: "%s | Lana Health",
+    default: "Lana – Sports, Fitness & Wellness in Nairobi",
+    template: "%s | Lana",
   },
   description:
     "One pass, 50+ venues. Book gyms, yoga, pilates, swimming, spas and more across Nairobi. No contracts.",
@@ -17,24 +17,24 @@ export const metadata: Metadata = {
     "fitness pass Nairobi",
     "yoga Nairobi",
     "wellness Nairobi",
-    "Lana Health",
+    "Lana",
     "sports Nairobi",
     "pilates Nairobi",
     "swimming Nairobi",
   ],
   openGraph: {
-    siteName: "Lana Health",
+    siteName: "Lana",
     type: "website",
     locale: "en_KE",
     url: "https://activecitypass.com",
-    title: "Lana Health – Sports, Fitness & Wellness in Nairobi",
+    title: "Lana – Sports, Fitness & Wellness in Nairobi",
     description:
       "One pass, 50+ venues. Book gyms, yoga, pilates, swimming, spas and more across Nairobi. No contracts.",
-    images: [{ url: "/images/og-default.jpg", width: 1200, height: 630, alt: "Lana Health" }],
+    images: [{ url: "/images/og-default.jpg", width: 1200, height: 630, alt: "Lana" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Lana Health – Sports, Fitness & Wellness in Nairobi",
+    title: "Lana – Sports, Fitness & Wellness in Nairobi",
     description:
       "One pass, 50+ venues. Book gyms, yoga, pilates, swimming, spas and more across Nairobi.",
     images: ["/images/og-default.jpg"],

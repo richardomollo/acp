@@ -11,7 +11,7 @@ export default function LoginPage() {
     <h2 className="text-base/7 font-semibold text-gray-900">Quick Recarp</h2>
     <p className="mt-2 text-5xl font-semibold tracking-tight text-balance text-gray-900 sm:text-6xl">Free for 1 month</p>
   </div>
-  <p className="mx-auto mt-6 max-w-2xl text-center text-sm ext-base/7 text-pretty text-gray-600">Your first month is on us! 💪 Try activities for individuals, partners, kids, and families — train, play, and unwind anytime with gyms, classes, and wellness experiences on Lana Health. Free for 1 month. Start today!</p>
+  <p className="mx-auto mt-6 max-w-2xl text-center text-sm ext-base/7 text-pretty text-gray-600">Your first month is on us! 💪 Try activities for individuals, partners, kids, and families — train, play, and unwind anytime with gyms, classes, and wellness experiences on Lana. Free for 1 month. Start today!</p>
   <div className="mx-auto mt-16 grid max-w-lg grid-cols-1 items-center gap-y-6 sm:mt-20 sm:gap-y-0 lg:max-w-4xl lg:grid-cols-2">
     <div className="rounded-3xl rounded-t-3xl bg-white/60 p-8 ring-1 ring-gray-900/10 sm:mx-8 sm:rounded-b-none sm:p-10 lg:mx-0 lg:rounded-tr-none lg:rounded-bl-3xl">
       

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { isLanaProEnabled, LANA_PRO_HOME } from "@/lib/lana-pro-flags";
 
 const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -99,7 +100,8 @@ export default function UserLoginPage() {
         router.push(redirectTo);
       } else {
         const { data: gymData } = await supabase.from("gyms").select("id").ilike("contact_email", normalizedEmail).maybeSingle();
-        router.push(gymData ? "/partner-dashboard" : "/sessions");
+        const partnerHome = isLanaProEnabled() ? LANA_PRO_HOME : "/partner-dashboard";
+        router.push(gymData ? partnerHome : "/sessions");
       }
       router.refresh();
     } catch (err: any) {
@@ -307,9 +309,9 @@ export default function UserLoginPage() {
               ))}
             </div>
             <p className="text-white/50 text-sm italic leading-relaxed mb-2">
-              "Gym on Monday, yoga on Wednesday, spa on Friday — all through Lana Health. I've never been this consistent."
+              "Gym on Monday, yoga on Wednesday, spa on Friday — all through Lana. I've never been this consistent."
             </p>
-            <p className="text-white/30 text-xs font-semibold">Amara N. — Lana Health member</p>
+            <p className="text-white/30 text-xs font-semibold">Amara N. — Lana member</p>
           </div>
         </div>
 

@@ -61,7 +61,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title,
     description,
     openGraph: {
-      title: `${title} | Lana Health`,
+      title: `${title} | Lana`,
       description,
       url: `https://activecitypass.com/experiences/${canonicalSlug}`,
       ...(exp.image_url ? { images: [{ url: exp.image_url, width: 1200, height: 630, alt: title }] } : {}),

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import AppStoreBadge from "./AppStoreBadge";
+import { partnerSignupEntry } from "@/lib/lana-pro-flags";
 
 const PARTNER_APP_STORE_URL = "https://apps.apple.com/nl/app/active-urban-pass-partners/id6760468404?l=en-GB";
 
@@ -22,9 +23,9 @@ export default function PartnerHeader() {
 
           {/* Logo + badge */}
           <Link href="/partners/signup" className="flex items-center gap-2 flex-shrink-0">
-            <img src="/images/logo-white.png" alt="Lana Health" className="h-8 w-auto" />
-            <span className="hidden sm:inline-block text-xs font-medium text-white/40 border border-white/20 rounded px-1.5 py-0.5">
-              for Partners
+            <img src="/images/lana-wordmark.png" alt="Lana Pro" className="h-6 w-auto brightness-0 invert" />
+            <span className="hidden sm:inline-block text-xs font-bold uppercase tracking-[0.14em] text-white/40 border border-white/20 rounded px-1.5 py-0.5">
+              Pro
             </span>
           </Link>
 
@@ -58,7 +59,7 @@ export default function PartnerHeader() {
               Sign in
             </Link>
             <Link
-              href="/partner-signup"
+              href={partnerSignupEntry()}
               className="px-5 py-2 text-sm font-semibold bg-white text-black rounded-full hover:bg-gray-100 transition-colors"
             >
               Become a Partner
@@ -115,7 +116,7 @@ export default function PartnerHeader() {
                 Sign in
               </button>
             </Link>
-            <Link href="/partner-signup" onClick={() => setMobileOpen(false)}>
+            <Link href={partnerSignupEntry()} onClick={() => setMobileOpen(false)}>
               <button className="w-full bg-white text-black text-sm font-semibold h-11 rounded-full hover:bg-gray-100 transition-colors">
                 Become a Partner
               </button>

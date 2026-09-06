@@ -27,7 +27,7 @@ export const WALKTHROUGH_KEY = 'walkthrough_complete';
 const SLIDES = [
   {
     id: '1',
-    eyebrow: 'Welcome to Lana Health',
+    eyebrow: 'Welcome to Lana',
     headline: 'Fitness built around you',
     body: 'Tell us what you want to achieve. Lana creates a personalised plan around your goals, experience, schedule and preferences.',
   },
@@ -115,7 +115,7 @@ export default function Walkthrough() {
         </TouchableOpacity>
       </View>
 
-      {/* Lana Health wordmark — fixed across all slides. Transparent so it
+      {/* Lana wordmark — fixed across all slides. Transparent so it
           sits on the same background as the rest of the screen (like Home). */}
       <View style={styles.markWrap}>
         <Image
@@ -225,7 +225,7 @@ const styles = StyleSheet.create({
     color: palette.gray300,
   },
 
-  // Lana Health mark — sits low, roughly centred on the page
+  // Lana mark — sits low, roughly centred on the page
   markWrap: {
     alignItems: 'center',
     justifyContent: 'center',

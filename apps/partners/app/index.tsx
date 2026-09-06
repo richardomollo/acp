@@ -60,7 +60,7 @@ export default function Splash() {
       {/* Content */}
       <View style={styles.content}>
         <View style={styles.logoContainer}>
-          <Text style={styles.logo}>Lana Health</Text>
+          <Text style={styles.logo}>Lana Pro</Text>
           <View style={styles.badge}>
             <Text style={styles.badgeText}>For Partners</Text>
           </View>

@@ -101,7 +101,7 @@ export default function StravaSettingsScreen() {
               <>
                 <ThemedText style={s.title}>Strava Connected ✓</ThemedText>
                 <ThemedText style={s.desc}>
-                  Your activities are syncing with Lana Health.
+                  Your activities are syncing with Lana.
                 </ThemedText>
                 {status.lastSyncedAt && (
                   <ThemedText style={s.metaText}>
@@ -142,7 +142,7 @@ export default function StravaSettingsScreen() {
                 <ThemedText style={s.title}>Connect Strava</ThemedText>
                 <ThemedText style={s.desc}>
                   Connect your Strava account to automatically bring your runs, walks and
-                  rides into Lana Health.
+                  rides into Lana.
                 </ThemedText>
 
                 <TouchableOpacity

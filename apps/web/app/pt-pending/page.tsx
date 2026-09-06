@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/app/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { isLanaProEnabled, LANA_PRO_HOME } from "@/lib/lana-pro-flags";
 
 export default async function PTPendingPage() {
   const supabase = await createClient();
@@ -17,7 +18,7 @@ export default async function PTPendingPage() {
     .maybeSingle();
 
   if (!pt) redirect("/partner-login");
-  if (pt.status !== "pending") redirect("/pt-dashboard");
+  if (pt.status !== "pending") redirect(isLanaProEnabled() ? LANA_PRO_HOME : "/pt-dashboard");
 
   const name = pt.professional_name || pt.full_name || "Trainer";
 
@@ -62,7 +63,7 @@ export default async function PTPendingPage() {
           </form>
         </div>
         <Link href="/" className="mt-6 inline-block text-xs text-gray-400 hover:text-gray-600">
-          ← Back to Lana Health
+          ← Back to Lana
         </Link>
       </div>
     </div>

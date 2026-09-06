@@ -30,8 +30,11 @@ import { getFulfilmentForActivity, nextDateForWeekday, type PlanActivityFulfilme
 import { ActivityFulfilmentCard, GymAccessList } from '@/components/activity-fulfilment-card';
 import { useMarketplaceLocation } from '@/contexts/marketplace-location-context';
 import { getEligiblePersonalTrainerIds } from '@/services/professional-eligibility-service';
-import { isMeasurementCheckinEnabled } from '@/lib/flags';
+import { isMeasurementCheckinEnabled, isProfessionalContinuityEnabled } from '@/lib/flags';
 import { MeasurementCheckinCard } from '@/components/home/measurement-checkin-card';
+import { CoachUpdateCard, HomeCoachActions } from '@/components/home/coach-update-card';
+import { loadContinuityModel } from '@/services/professional-continuity-service';
+import { EMPTY_CONTINUITY_MODEL, type ContinuityModel } from '@/lib/professional-continuity';
 import { getMeasurementCheckinState, syncMeasurementCheckinNotification } from '@/services/measurement-checkin-service';
 import type { MeasurementCheckinStatus } from '@/lib/progress/measurement-checkin';
 import { ExerciseMedia } from '@/components/exercise-media';
@@ -465,7 +468,7 @@ function GuestHero({ onSearch }: { onSearch: () => void }) {
   return (
     <View style={styles.guestHero}>
       <ThemedText style={styles.guestHeadline}>
-        Lana Health — your plan for staying active and healthy.
+        Lana — your plan for staying active and healthy.
       </ThemedText>
       <ThemedText style={styles.guestSub}>
         Set a goal and Lana builds a personalised plan to move, eat, connect and track your progress — then adapts it around your real life. Gyms, studios, classes, coaches and experiences across Nairobi help you follow it through.
@@ -527,6 +530,8 @@ export default function HomeScreen() {
   const [todayMood, setTodayMood] = useState<number | null>(null);
   // Beta #020 — weekly measurement check-in due state (in-app source of truth).
   const [measurementCheckin, setMeasurementCheckin] = useState<MeasurementCheckinStatus | null>(null);
+  // Phase 4.5 — professional → consumer continuity (fails soft to empty).
+  const [continuity, setContinuity] = useState<ContinuityModel>(EMPTY_CONTINUITY_MODEL);
   const [goalStatus, setGoalStatus] = useState<'not_set' | 'incomplete' | 'complete'>('complete');
   const [goalSummary, setGoalSummary] = useState<{ goalLine: string; icon: string } | null>(null);
   // "Your goal" banner — user can dismiss it once their goal is set; it comes
@@ -1665,6 +1670,10 @@ export default function HomeScreen() {
 
         setTasks((taskData as TaskRow[]) ?? []);
 
+        if (isProfessionalContinuityEnabled()) {
+          loadContinuityModel().then(setContinuity).catch(() => setContinuity(EMPTY_CONTINUITY_MODEL));
+        }
+
         const { data: historyData } = await supabase
           .from('workout_history')
           .select('workout_id, completed_at, duration_minutes')
@@ -1695,6 +1704,7 @@ export default function HomeScreen() {
         setWorkoutSchedules([]);
         setCompletedWorkoutKeys(new Set());
         setTasks([]);
+        setContinuity(EMPTY_CONTINUITY_MODEL);
         setFitnessStats({ totalWorkouts: 0, totalMinutes: 0, streakDays: 0, longestStreak: 0 });
         setTodayGoals({ steps: 0, waterCups: 0, sleepHours: 0 });
         setStepsGoal(STEPS_GOAL);
@@ -1946,6 +1956,20 @@ export default function HomeScreen() {
               state) and above Today's Focus. Renders only when due/overdue;
               disappears the moment a measurement is saved (Home reloads on
               focus). Independent of notification permission. ─── */}
+        {/* ─── Phase 4.5 — "From your coach": a transient continuity element.
+              Shows only when the latest completed professional session is
+              completed_today. Never replaces Lana's primary activity card;
+              never touches resolveHomePlanState / the generated plan. ─── */}
+        {!isGuest && isProfessionalContinuityEnabled() && (
+          <>
+            <CoachUpdateCard model={continuity} />
+            <HomeCoachActions
+              model={continuity}
+              onChanged={() => loadContinuityModel().then(setContinuity).catch(() => {})}
+            />
+          </>
+        )}
+
         {!isGuest && measurementCheckin && (
           <MeasurementCheckinCard status={measurementCheckin} />
         )}

@@ -102,21 +102,6 @@ const navLinks = [
     ),
   },
   {
-    label: "Experiences",
-    href: "/pt-dashboard/experiences",
-    exact: false,
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
-        />
-      </svg>
-    ),
-  },
-  {
     label: "Availability",
     href: "/pt-dashboard/availability",
     exact: false,
@@ -137,28 +122,17 @@ interface PTDashboardLayoutProps {
   children: React.ReactNode;
   ptId: string;
   ptName: string;
-  hasVenueRole?: boolean;
-  communityStatus?: "pending" | "approved" | "rejected";
 }
 
 export default function PTDashboardLayout({
   children,
   ptId,
   ptName,
-  hasVenueRole,
-  communityStatus,
 }: PTDashboardLayoutProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
-
-  const communityCta =
-    communityStatus === "approved"
-      ? { href: "/community-dashboard", label: "Community Dashboard" }
-      : communityStatus === "pending" || communityStatus === "rejected"
-      ? { href: "/community-onboarding/pending", label: "Community Status" }
-      : { href: "/community-onboarding", label: "Start a Community" };
 
   const isActive = (link: (typeof navLinks)[0]) => {
     if (link.exact) return pathname === link.href;
@@ -186,7 +160,7 @@ export default function PTDashboardLayout({
         {/* Brand */}
         <div className="px-6 pt-8 pb-6 border-b border-white/10">
           <p className="text-xs text-gray-400 uppercase tracking-widest mb-3">
-            Lana Health
+            Lana Pro
           </p>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-sm font-bold">
@@ -217,28 +191,8 @@ export default function PTDashboardLayout({
           ))}
         </nav>
 
-        {/* Role switcher + Sign out */}
+        {/* Sign out */}
         <div className="px-3 py-4 border-t border-white/10 space-y-1">
-          {hasVenueRole && (
-            <Link
-              href="/partner-dashboard"
-              className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 hover:bg-white/5 hover:text-white transition-colors"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-              </svg>
-              Switch to Venue
-            </Link>
-          )}
-          <Link
-            href={communityCta.href}
-            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 hover:bg-white/5 hover:text-white transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 100-8 4 4 0 000 8zm6 5v-2a4 4 0 00-3-3.87m-9.6 0A4 4 0 006 15.13V17" />
-            </svg>
-            {communityCta.label}
-          </Link>
           <button
             onClick={handleSignOut}
             disabled={signingOut}
@@ -313,28 +267,6 @@ export default function PTDashboardLayout({
                 ))}
               </div>
               <div className="px-3 py-4 border-t border-white/10 space-y-1">
-                {hasVenueRole && (
-                  <Link
-                    href="/partner-dashboard"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:text-white transition-colors"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                    </svg>
-                    Switch to Venue
-                  </Link>
-                )}
-                <Link
-                  href={communityCta.href}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:text-white transition-colors"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 100-8 4 4 0 000 8zm6 5v-2a4 4 0 00-3-3.87m-9.6 0A4 4 0 006 15.13V17" />
-                  </svg>
-                  {communityCta.label}
-                </Link>
                 <button
                   onClick={handleSignOut}
                   disabled={signingOut}

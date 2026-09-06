@@ -349,7 +349,7 @@ export default function ProfileScreen() {
           </ThemedText>
         </TouchableOpacity>
 
-        <ThemedText style={styles.version}>Lana Health Partners · v1.0</ThemedText>
+        <ThemedText style={styles.version}>Lana Pro · v1.0</ThemedText>
       </ScrollView>
     </View>
   );

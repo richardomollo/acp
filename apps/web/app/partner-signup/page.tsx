@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { APIProvider, useMapsLibrary } from "@vis.gl/react-google-maps";
 import { fetchVenueTypes, fetchPTSpecialisations } from "@/app/lib/lookups";
 import { NEIGHBOURHOOD_LABELS } from "@/app/lib/neighbourhoods";
@@ -105,17 +104,9 @@ const TYPE_OPTIONS: { key: PartnerType; label: string; sub: string; icon: React.
       </svg>
     ),
   },
-  {
-    key: "experience",
-    label: "Wellness & Fitness Experiences",
-    sub: "Unique events, retreats, outdoor activities, or group experiences",
-    icon: (
-      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
-          d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-      </svg>
-    ),
-  },
+  // "Wellness & Fitness Experiences" is out of the Lana Pro MVP — the option is
+  // withdrawn from signup; the downstream experience-branch code stays dormant
+  // for existing records.
 ];
 
 const TRAIN_LOCATION_OPTIONS = [
@@ -161,7 +152,6 @@ type Question = {
 };
 
 export default function PartnerSignupPage() {
-  const router = useRouter();
   const [partnerTypes, setPartnerTypes] = useState<PartnerType[]>([]);
   const toggleType = (t: PartnerType) =>
     setPartnerTypes(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
@@ -551,29 +541,8 @@ export default function PartnerSignupPage() {
                 </button>
               );
             })}
-            <button
-              type="button"
-              onClick={() => router.push("/community-onboarding")}
-              className="relative text-left rounded-2xl p-5 transition border-2 border-gray-200 hover:border-gray-400 flex flex-col justify-start"
-            >
-              <div className="absolute top-4 right-4 text-gray-300">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                </svg>
-              </div>
-              <div className="flex flex-col items-start gap-3">
-                <div className="w-11 h-11 rounded-xl flex-shrink-0 flex items-center justify-center bg-gray-100 text-gray-600">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
-                      d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 100-8 4 4 0 000 8zm6 5v-2a4 4 0 00-3-3.87m-9.6 0A4 4 0 006 15.13V17" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900 text-sm leading-snug mb-1 pr-6">Community & Clubs</h3>
-                  <p className="text-xs text-gray-500">Running clubs, cycling crews, yoga circles, or any activity group — this is a separate, quicker signup</p>
-                </div>
-              </div>
-            </button>
+            {/* "Community & Clubs" is a separate product, out of the Lana Pro
+                MVP partner funnel — its signup entry is withdrawn here. */}
           </div>
         </div>
       ),
@@ -604,7 +573,7 @@ export default function PartnerSignupPage() {
       title: isSecondBusiness
         ? (isPureExperience ? "Now, what's your experience called?" : "Now, what's your venue called?")
         : (isPureExperience ? "What's your experience called?" : "What's your venue called?"),
-      subtitle: "This is the name customers will see on Lana Health.",
+      subtitle: "This is the name customers will see on Lana.",
       canContinue: formData.gymName.trim().length > 0,
       content: (
         <input
@@ -699,7 +668,7 @@ export default function PartnerSignupPage() {
         id: "ptBio",
         eyebrow: ptEyebrow,
         title: isSecondBusiness ? "Now, tell us about yourself as a trainer" : "Tell us about yourself as a trainer",
-        subtitle: "This is what customers will see when browsing trainers on Lana Health — make it personal.",
+        subtitle: "This is what customers will see when browsing trainers on Lana — make it personal.",
         canContinue: formData.ptBio.trim().length > 0,
         content: (
           <textarea

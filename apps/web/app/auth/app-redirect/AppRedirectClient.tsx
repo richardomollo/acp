@@ -29,7 +29,7 @@ export default function AppRedirectClient() {
       <div className="max-w-sm w-full text-center">
         <img
           src="/images/logo-black.png"
-          alt="Lana Health"
+          alt="Lana"
           className="h-8 w-auto mx-auto mb-8"
           onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
         />
@@ -46,7 +46,7 @@ export default function AppRedirectClient() {
           <>
             <h1 className="text-lg font-semibold text-gray-900 mb-2">Open the app to continue</h1>
             <p className="text-sm text-gray-500 mb-6">
-              Tap the button below to open Lana Health and reset your password.
+              Tap the button below to open Lana and reset your password.
             </p>
             {deepLink && (
               <a

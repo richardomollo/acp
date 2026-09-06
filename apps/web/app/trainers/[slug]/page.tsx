@@ -24,19 +24,19 @@ export async function generateMetadata({ params }: Props): Promise<import("next"
   const { slug } = await params;
   const pt = await fetchTrainer(slug);
 
-  if (!pt) return { title: "Personal Trainer | Lana Health" };
+  if (!pt) return { title: "Personal Trainer | Lana" };
 
   const name = pt.professional_name ?? pt.full_name;
   const description =
     pt.bio ??
-    `Book sessions with ${name}, a certified personal trainer on Lana Health in Nairobi.`;
+    `Book sessions with ${name}, a certified personal trainer on Lana in Nairobi.`;
   const canonicalSlug = pt.slug ?? pt.id;
 
   return {
-    title: `${name} | Personal Trainer | Lana Health`,
+    title: `${name} | Personal Trainer | Lana`,
     description,
     openGraph: {
-      title: `${name} | Lana Health`,
+      title: `${name} | Lana`,
       description,
       url: `https://activecitypass.com/trainers/${canonicalSlug}`,
       ...(pt.photo_url
@@ -45,7 +45,7 @@ export async function generateMetadata({ params }: Props): Promise<import("next"
     },
     twitter: {
       card: "summary_large_image",
-      title: `${name} | Lana Health`,
+      title: `${name} | Lana`,
       description,
       ...(pt.photo_url ? { images: [pt.photo_url] } : {}),
     },

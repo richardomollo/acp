@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 import Link from "next/link";
+import { isLanaProEnabled, LANA_PRO_HOME, partnerSignupEntry } from "@/lib/lana-pro-flags";
+import { PrimaryButton, fieldClass, fieldErrorClass } from "../lana-pro/onboarding/OnboardingShell";
 
 const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -42,6 +44,10 @@ export default function PartnerLoginPage() {
       }
 
       const redirect = new URLSearchParams(window.location.search).get("redirect");
+      // Lana Pro is the partner/professional product surface. Every partner
+      // branch below lands in the Lana Pro workspace unless the cutover flag is
+      // off, in which case the classic dashboards take over verbatim.
+      const lanaPro = isLanaProEnabled();
 
       // 1. Check gym-employed staff trainer first (most restricted account type)
       const { data: gymTrainer } = await supabase
@@ -57,7 +63,7 @@ export default function PartnerLoginPage() {
           setLoading(false);
           return;
         }
-        window.location.href = redirect || "/trainer-dashboard";
+        window.location.href = redirect || (lanaPro ? LANA_PRO_HOME : "/trainer-dashboard");
         return;
       }
 
@@ -80,10 +86,13 @@ export default function PartnerLoginPage() {
           return;
         }
         if (ptRecord.status === "pending") {
-          window.location.href = "/pt-pending";
+          // The Lana Pro workspace is not pending-gated (unlike /pt-dashboard),
+          // so pending pros go straight in; the classic flow still parks them
+          // on /pt-pending.
+          window.location.href = lanaPro ? LANA_PRO_HOME : "/pt-pending";
           return;
         }
-        window.location.href = redirect || "/pt-dashboard";
+        window.location.href = redirect || (lanaPro ? LANA_PRO_HOME : "/pt-dashboard");
         return;
       }
 
@@ -106,8 +115,10 @@ export default function PartnerLoginPage() {
         return;
       }
 
-      // 4. Not a trainer or community organiser — send to partner dashboard (it handles "no venues" gracefully)
-      window.location.href = redirect || "/partner-dashboard";
+      // 4. Not a trainer or community organiser — venue owner (or a partner with
+      // no venues yet). Lana Pro's workspace handles both; the classic partner
+      // dashboard is the fallback when the cutover is off.
+      window.location.href = redirect || (lanaPro ? LANA_PRO_HOME : "/partner-dashboard");
     } catch (err: any) {
       setError(err.message || "Login failed. Please check your credentials and try again.");
       setLoading(false);
@@ -133,147 +144,154 @@ export default function PartnerLoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 bg-gray-50">
-      <div className="max-w-md w-full">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-gray-900 mt-4">Partner & Trainer Login</h1>
-          <p className="text-gray-600 mt-2">
-            Sign in as a venue partner or personal trainer
-          </p>
-        </div>
-
-        {/* Card */}
-        <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100">
-          {error && (
-            <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm">
-              {error}
-            </div>
-          )}
-
-          {resetSent && (
-            <div className="bg-green-50 text-green-600 p-3 rounded-lg mb-4 text-sm">
-              Password reset email sent! Check your inbox.
-            </div>
-          )}
-
-          {!showForgotPassword ? (
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email Address
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition"
-                  placeholder="you@example.com"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Password
-                </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition"
-                  placeholder="••••••••"
-                  required
-                />
-              </div>
-
-              <div className="text-right">
-                <button
-                  type="button"
-                  onClick={() => { setShowForgotPassword(true); setError(""); }}
-                  className="text-sm text-blue-500 hover:text-blue-600"
-                >
-                  Forgot password?
-                </button>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-black text-white py-3 rounded-full text-sm font-medium hover:bg-gray-900 transition-all disabled:bg-gray-400 disabled:cursor-not-allowed"
-              >
-                {loading ? "Signing in..." : "Sign In"}
-              </button>
-            </form>
-          ) : (
-            <form onSubmit={handleForgotPassword} className="space-y-4">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-1">Reset Password</h3>
-                <p className="text-sm text-gray-600">
-                  Enter your email and we'll send you a reset link.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email Address
-                </label>
-                <input
-                  type="email"
-                  value={resetEmail}
-                  onChange={(e) => setResetEmail(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition"
-                  placeholder="you@example.com"
-                  required
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-black text-white py-3 rounded-full text-sm font-medium hover:bg-gray-900 transition-all disabled:bg-gray-400 disabled:cursor-not-allowed"
-              >
-                {loading ? "Sending..." : "Send Reset Link"}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => { setShowForgotPassword(false); setResetSent(false); setError(""); }}
-                className="w-full text-sm text-blue-500 hover:text-blue-600 text-center"
-              >
-                Back to Sign In
-              </button>
-            </form>
-          )}
-
-          <div className="mt-6 pt-6 border-t border-gray-100 space-y-2">
-            <p className="text-sm text-gray-600 text-center">
-              New venue partner?{" "}
-              <Link href="/partner-signup" className="text-blue-500 hover:text-blue-600">
-                Sign up here
-              </Link>
-            </p>
-            <p className="text-sm text-gray-600 text-center">
-              Looking for member login?{" "}
-              <Link href="/login" className="text-blue-500 hover:text-blue-600">
-                Member Login
-              </Link>
-            </p>
-            <p className="text-sm text-gray-600 text-center">
-              Run a club or activity group?{" "}
-              <Link href="/community-onboarding" className="text-blue-500 hover:text-blue-600">
-                Start a Community
-              </Link>
-            </p>
-          </div>
-        </div>
-
-        <div className="text-center mt-6">
-          <Link href="/partners/signup" className="text-sm text-gray-600 hover:text-gray-800 underline">
-            ← Back to Partner Information
+    <div
+      className="min-h-screen flex flex-col text-[#111]"
+      style={{
+        background:
+          "linear-gradient(180deg, #d0e0ff 0%, rgba(208,224,255,0) 460px), #ffffff",
+      }}
+    >
+      {/* Lana Pro top bar */}
+      <header className="border-b border-gray-100">
+        <div className="mx-auto max-w-6xl px-5 sm:px-8 h-16 flex items-center justify-between">
+          <Link href="/lana-pro/onboarding" className="flex items-center gap-2">
+            <img src="/images/lana-wordmark.png" alt="Lana" className="h-6 w-auto" />
+            <span className="text-[11px] font-bold text-[#050040]/50 uppercase tracking-[0.16em]">
+              Pro
+            </span>
+          </Link>
+          <Link
+            href={partnerSignupEntry()}
+            className="text-sm text-gray-500 hover:text-gray-800 transition"
+          >
+            Create an account
           </Link>
         </div>
-      </div>
+      </header>
+
+      {/* Content */}
+      <main className="flex-1">
+        <div className="mx-auto max-w-6xl px-5 sm:px-8 py-14 sm:py-20 flex justify-center">
+          <div className="w-full max-w-md">
+            <div className="mb-8">
+              <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 leading-[1.15] tracking-tight">
+                {showForgotPassword ? "Reset your password" : "Welcome back"}
+              </h1>
+              <p className="text-gray-500 mt-3 text-[15px] leading-relaxed">
+                {showForgotPassword
+                  ? "Enter your email and we'll send you a reset link."
+                  : "Sign in to your Lana Pro workspace."}
+              </p>
+            </div>
+
+            {error && (
+              <div className="rounded-xl bg-red-50 text-red-600 text-sm px-4 py-3 mb-4">{error}</div>
+            )}
+            {resetSent && (
+              <div className="rounded-xl bg-blue-50 border border-blue-100 text-blue-700 text-sm px-4 py-3 mb-4">
+                Password reset email sent — check your inbox.
+              </div>
+            )}
+
+            {!showForgotPassword ? (
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Email</label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className={error ? fieldErrorClass : fieldClass}
+                    placeholder="you@email.com"
+                    autoComplete="email"
+                    autoFocus
+                    required
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-baseline justify-between mb-2">
+                    <label className="block text-sm font-semibold text-gray-700">Password</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowForgotPassword(true);
+                        setError("");
+                      }}
+                      className="text-xs font-semibold text-[#050040] hover:underline"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className={error ? fieldErrorClass : fieldClass}
+                    placeholder="••••••••"
+                    autoComplete="current-password"
+                    required
+                  />
+                </div>
+
+                <div className="pt-2">
+                  <PrimaryButton type="submit" disabled={loading}>
+                    {loading ? "Signing in…" : "Sign in"}
+                  </PrimaryButton>
+                </div>
+              </form>
+            ) : (
+              <form onSubmit={handleForgotPassword} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Email</label>
+                  <input
+                    type="email"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    className={fieldClass}
+                    placeholder="you@email.com"
+                    autoComplete="email"
+                    autoFocus
+                    required
+                  />
+                </div>
+
+                <div className="pt-2 flex items-center gap-4">
+                  <PrimaryButton type="submit" disabled={loading}>
+                    {loading ? "Sending…" : "Send reset link"}
+                  </PrimaryButton>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowForgotPassword(false);
+                      setResetSent(false);
+                      setError("");
+                    }}
+                    className="text-sm text-gray-500 hover:text-gray-800 transition"
+                  >
+                    Back to sign in
+                  </button>
+                </div>
+              </form>
+            )}
+
+            <div className="mt-8 pt-6 border-t border-gray-100 text-sm text-gray-500">
+              <p>
+                New to Lana Pro?{" "}
+                <Link href={partnerSignupEntry()} className="font-semibold text-[#050040] hover:underline">
+                  Create an account
+                </Link>
+              </p>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <footer className="border-t border-gray-100">
+        <div className="mx-auto max-w-6xl px-5 sm:px-8 py-5 text-xs text-gray-400">
+          By signing in you agree to Lana&apos;s Terms of Service and Privacy Policy.
+        </div>
+      </footer>
     </div>
   );
 }

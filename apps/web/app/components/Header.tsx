@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { createBrowserClient } from "@supabase/ssr";
+import { partnerSignupEntry } from "@/lib/lana-pro-flags";
 
 const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -61,11 +62,9 @@ export default function Header() {
 
       {/* Top announcement strip */}
       <div className="bg-black text-white text-xs font-medium px-6 py-2.5 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-center">
-        <span className="text-white/70">Are you a gym, personal trainer, coach, studio, wellness venue or fitness experiences provider?</span>
+        <span className="text-white/70">Are you a gym, personal trainer, coach, studio or wellness venue?</span>
         <Link
-          href="/partners/signup"
-          target="_blank"
-          rel="noopener noreferrer"
+          href={partnerSignupEntry()}
           className="flex-shrink-0 underline underline-offset-2 font-semibold text-white hover:text-white/80 transition-colors"
         >
           Become a Partner →
@@ -77,7 +76,7 @@ export default function Header() {
 
           {/* Logo */}
           <Link href={user ? "/sessions" : "/"} className="flex-shrink-0">
-            <img src="/images/logo.png" alt="Lana Health" className="h-8 w-auto" />
+            <img src="/images/lana-wordmark.png" alt="Lana" className="h-6 w-auto" />
           </Link>
 
           {/* Search */}

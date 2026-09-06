@@ -42,7 +42,7 @@ export default function LoginScreen() {
           style={styles.bigLogo}
           resizeMode="contain"
         />
-        <Text style={styles.brandName}>Lana Health</Text>
+        <Text style={styles.brandName}>Lana</Text>
         <Text style={styles.title}>Your goals. Your plan. Your active healthy life.</Text>
         <Text style={styles.subtitle}>Science-backed wellness, fitness, nutrition and experiences</Text>
       </View>

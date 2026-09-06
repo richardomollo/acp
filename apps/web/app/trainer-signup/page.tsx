@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 import { useRouter } from "next/navigation";
+import { isLanaProEnabled, LANA_PRO_HOME } from "@/lib/lana-pro-flags";
 
 const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -84,7 +85,7 @@ export default function TrainerSignupPage() {
       const { error: claimError } = await supabase.rpc("claim_trainer_invite", { p_token: token });
       if (claimError) throw claimError;
 
-      router.push("/trainer-dashboard");
+      router.push(isLanaProEnabled() ? LANA_PRO_HOME : "/trainer-dashboard");
     } catch (err: any) {
       setError(err.message || "Something went wrong.");
       setSubmitting(false);

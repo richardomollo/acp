@@ -100,8 +100,8 @@ export function StravaConnectCard({ returnTo }: { returnTo: string }) {
           </h3>
           <p className="text-xs text-ink-600">
             {status.connected
-              ? "Your activities are syncing with Lana Health."
-              : "Bring your runs, walks and rides into Lana Health."}
+              ? "Your activities are syncing with Lana."
+              : "Bring your runs, walks and rides into Lana."}
           </p>
         </div>
       </div>

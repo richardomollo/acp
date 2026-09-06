@@ -1,8 +1,8 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "Privacy Policy | Lana Health",
-  description: "How Lana Health collects, uses, and protects your personal information.",
+  title: "Privacy Policy | Lana",
+  description: "How Lana collects, uses, and protects your personal information.",
 };
 
 const LAST_UPDATED = "4 June 2026";
@@ -23,7 +23,7 @@ export default function PrivacyPolicyPage() {
       <div className="max-w-3xl mx-auto px-6 py-16 prose prose-gray max-w-none">
 
         <p className="text-gray-600 text-base leading-relaxed">
-          Lana Health ("<strong>we</strong>", "<strong>us</strong>", or "<strong>our</strong>") operates the Lana Health platform, including our website at{" "}
+          Lana ("<strong>we</strong>", "<strong>us</strong>", or "<strong>our</strong>") operates the Lana platform, including our website at{" "}
           <a href="https://activecitypass.com" className="text-blue-600 hover:underline">activecitypass.com</a> and our mobile application (collectively, the "<strong>Service</strong>").
           This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our Service.
         </p>
@@ -71,7 +71,7 @@ export default function PrivacyPolicyPage() {
           <ul>
             <li><strong>Partner venues:</strong> we share your name and booking details with the venue hosting your session so they can manage attendance.</li>
             <li><strong>Service providers:</strong> we use trusted third-party providers including Supabase (database &amp; authentication), Stripe and M-Pesa (payments), and Expo/Apple/Google (mobile app delivery). These providers process data only on our behalf under data processing agreements.</li>
-            <li><strong>Legal requirements:</strong> we may disclose your information where required by law, regulation, court order, or to protect the rights and safety of Lana Health, our users, or others.</li>
+            <li><strong>Legal requirements:</strong> we may disclose your information where required by law, regulation, court order, or to protect the rights and safety of Lana, our users, or others.</li>
             <li><strong>Business transfers:</strong> in the event of a merger, acquisition, or sale of assets, your information may be transferred. We will notify you before your data becomes subject to a different privacy policy.</li>
           </ul>
         </Section>
@@ -121,7 +121,7 @@ export default function PrivacyPolicyPage() {
         <Section title="10. Contact Us">
           <p>If you have questions, concerns, or requests regarding this Privacy Policy, please contact us:</p>
           <address className="not-italic text-gray-700 mt-3 space-y-1">
-            <p><strong>Lana Health</strong></p>
+            <p><strong>Lana</strong></p>
             <p>Nairobi, Kenya</p>
             <p>Email: <a href="mailto:privacy@activecitypass.com" className="text-blue-600 hover:underline">privacy@activecitypass.com</a></p>
             <p>General: <a href="mailto:info@activecitypass.com" className="text-blue-600 hover:underline">info@activecitypass.com</a></p>
