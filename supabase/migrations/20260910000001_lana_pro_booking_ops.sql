@@ -17,6 +17,8 @@
 -- through this policy still does NOT grant progress-sharing consent —
 -- pt_clients.share_progress stays whatever it was (default false).
 
+
+begin;
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -64,3 +66,5 @@ END $$;
 
 COMMENT ON POLICY "PTs create bookings for their active clients" ON public.pt_bookings IS
   'Lana Pro Phase 4.3: professional-created direct bookings for an already-active client. Additive; does not weaken the consumer INSERT policy or imply share_progress consent.';
+
+commit;

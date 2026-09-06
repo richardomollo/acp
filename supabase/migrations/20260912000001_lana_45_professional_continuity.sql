@@ -23,6 +23,8 @@
 -- updated by the client (client_user_id = auth.uid()) rather than by the
 -- owning trainer. Trainer edits (auth.uid() = the pt's user) are untouched.
 
+
+begin;
 CREATE OR REPLACE FUNCTION public.client_tasks_guard_consumer_update()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -123,6 +125,8 @@ ALTER TABLE public.professional_session_records
 ALTER TABLE public.professional_session_records
   DROP CONSTRAINT IF EXISTS professional_session_records_check;
 ALTER TABLE public.professional_session_records
+  DROP CONSTRAINT IF EXISTS professional_session_records_kind_ids_check;
+ALTER TABLE public.professional_session_records
   ADD CONSTRAINT professional_session_records_kind_ids_check CHECK (
     (professional_kind = 'personal_trainer' AND gym_trainer_id IS NULL)
     OR
@@ -200,3 +204,5 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+
+commit;

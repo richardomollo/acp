@@ -23,6 +23,8 @@
 
 -- ── gym_access_passes ─────────────────────────────────────────────────────
 
+
+begin;
 CREATE TABLE IF NOT EXISTS public.gym_access_passes (
   id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   gym_id           uuid NOT NULL REFERENCES public.gyms(id) ON DELETE CASCADE,
@@ -141,3 +143,5 @@ DROP TRIGGER IF EXISTS gym_services_updated_at ON public.gym_services;
 CREATE TRIGGER gym_services_updated_at
   BEFORE UPDATE ON public.gym_services
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+commit;

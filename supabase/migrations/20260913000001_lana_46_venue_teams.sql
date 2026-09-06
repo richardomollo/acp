@@ -185,7 +185,7 @@ create trigger gym_service_bookings_guard_trg
 -- 2. professional_session_records — enable professional_kind='gym_trainer'
 -- ─────────────────────────────────────────────────────────────────────────
 alter table public.professional_session_records
-  drop constraint professional_session_records_booking_source_check;
+  drop constraint if exists professional_session_records_booking_source_check;
 alter table public.professional_session_records
   add constraint professional_session_records_booking_source_check
   check (booking_source in ('pt_booking','gym_service_booking'));

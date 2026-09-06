@@ -16,6 +16,8 @@
 
 -- ── pt_clients: invitation metadata (all additive, all nullable) ────────────
 
+
+begin;
 ALTER TABLE public.pt_clients
   ADD COLUMN IF NOT EXISTS invited_email text,
   ADD COLUMN IF NOT EXISTS invited_phone text,
@@ -99,3 +101,5 @@ $$;
 
 REVOKE ALL ON FUNCTION public.preview_pt_invite(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.preview_pt_invite(text) TO anon, authenticated;
+
+commit;

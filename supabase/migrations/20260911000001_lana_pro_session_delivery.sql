@@ -14,6 +14,8 @@
 
 -- ── 1. professional_session_records ─────────────────────────────────────────
 
+
+begin;
 CREATE TABLE IF NOT EXISTS public.professional_session_records (
   id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
 
@@ -185,3 +187,5 @@ GRANT EXECUTE ON FUNCTION public.get_client_session_feed(int) TO authenticated;
 
 COMMENT ON FUNCTION public.get_client_session_feed(int) IS
   'Phase 4.4 consumer read contract. Client-visible session fields ONLY — never private_notes or session_exercises. Consumer mobile UI is Phase 4.5.';
+
+commit;

@@ -23,8 +23,12 @@
 -- which is not something an admin-editable flat list models well. A
 -- pt_client_goals lookup can be added later if curation is needed.
 
+
+begin;
 ALTER TABLE public.personal_trainers
   ADD COLUMN IF NOT EXISTS client_goals text[] NOT NULL DEFAULT '{}';
 
 COMMENT ON COLUMN public.personal_trainers.client_goals IS
   'Client outcomes this professional supports ("who do you help"), captured at Lana Pro onboarding. Distinct from specialisations ("what I do").';
+
+commit;
