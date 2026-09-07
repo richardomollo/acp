@@ -64,6 +64,32 @@ describe('selectExerciseForRequirement', () => {
     assert.equal(result.exercise.equipment, 'bodyweight'); // home context → bodyweight movement
   });
 
+  test('TestFlight incident fix — skipNetwork bypasses the provider entirely and goes straight to the Tier 5 fallback', async () => {
+    let fetchCalled = false;
+    globalThis.fetch = (async () => { fetchCalled = true; return { ok: true, json: async () => [{ id: 99, name: 'Should never be seen', primary_muscles: ['Quads'], category: 'Barbell' }] } as any; }) as any;
+    const result = await selectExerciseForRequirement(
+      requirement({ bodyPart: 'legs-skipnet', muscleHint: 'no-match-skipnet' }), 'home', 'beginner', new Set(), { skipNetwork: true },
+    );
+    assert.equal(fetchCalled, false, 'skipNetwork must never call the exercise provider');
+    assert.equal(result.fallbackUsed, true);
+    assert.ok(result.exercise.id.startsWith('fallback-squat'), result.exercise.id);
+    assert.match(result.fallbackReason ?? '', /time budget/i);
+  });
+
+  test('skipNetwork still folds into an already-selected fallback rather than emitting a duplicate row', async () => {
+    // The curated 'squat' bodyweight pool has exactly two entries (Bodyweight
+    // Squat, Split Squat) — seed both as already-used so a budget-exceeded
+    // call for the same pattern has no distinct curated option left and must
+    // fold, exactly like the network path already does when its pool is
+    // exhausted (Beta #016).
+    const alreadySelected = new Set(['name:bodyweight squat', 'name:split squat']);
+    const result = await selectExerciseForRequirement(
+      requirement({ bodyPart: 'legs-skipnet2' }), 'home', 'beginner', alreadySelected, { skipNetwork: true },
+    );
+    assert.equal(result.duplicate, true);
+    assert.match(result.fallbackReason ?? '', /already in this session/i);
+  });
+
   test('never throws when the provider errors — falls back instead', async () => {
     globalThis.fetch = (async () => { throw new Error('network down'); }) as any;
     const result = await selectExerciseForRequirement(requirement({ bodyPart: 'chest-t5', pattern: 'horizontal_push', muscleHint: 'no-match-t5' }), 'home', 'beginner', new Set());

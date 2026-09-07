@@ -270,6 +270,24 @@ async function weeklyStrengthExerciseKeys(
  * sort_order rather than assuming 0, so a partial prior attempt's rows
  * aren't overwritten or order-collided.
  */
+// TestFlight incident, 2026-09 — root cause: for a fresh (never-before-
+// generated) session, each of ~11 requirements is selected SEQUENTIALLY, and
+// each can cost up to 2 real exercise-provider network round-trips (Tier 1 +
+// Tier 2 in exercise-selection-service.ts; Tier 3 reuses Tier 2's response
+// via the provider's own cache), every one capped at a 15s client timeout.
+// With no ceiling on the whole loop, a slow/degraded provider could compound
+// across every requirement — worst case ~11 × 2 × 15s ≈ 5.5 minutes — with
+// the UI showing nothing but "Preparing your workout…" the entire time,
+// indistinguishable from being permanently stuck. This budget bounds the
+// WHOLE session's worth of provider lookups to a predictable ceiling: once
+// elapsed time crosses it, every REMAINING requirement skips the network
+// entirely and resolves straight to ACP's own curated fallback exercise
+// (exercise-selection-service.ts's existing Tier 5 — already the same safe,
+// context-aware fallback used for an outright provider outage, Beta #017),
+// rather than adding another slow lookup. Requirements already in flight or
+// already resolved are untouched; this only changes what happens NEXT.
+const GENERATION_TIME_BUDGET_MS = 45_000;
+
 async function populateExerciseWorkout(
   workoutId: string, requirements: ExerciseRequirement[], context: GenerationContext,
   // Beta #016 (§9/§11) — normalized names of ACCESSORY/CORE exercises already
@@ -282,6 +300,7 @@ async function populateExerciseWorkout(
   const alreadySelected = new Set<string>();
   let sortOrder = await countWorkoutExercises(workoutId);
   let exerciseCount = 0;
+  const startedAt = Date.now();
 
   for (const requirement of requirements) {
     const isCompound = requirement.role === 'compound';
@@ -292,7 +311,8 @@ async function populateExerciseWorkout(
       ? alreadySelected
       : new Set<string>([...alreadySelected, ...weeklyAccessoryExclusions]);
 
-    const picked = await selectExerciseForRequirement(requirement, context.equipmentLocation, context.experience, exclude);
+    const skipNetwork = Date.now() - startedAt > GENERATION_TIME_BUDGET_MS;
+    const picked = await selectExerciseForRequirement(requirement, context.equipmentLocation, context.experience, exclude, { skipNetwork });
 
     // Beta #016 invariant + Beta #017 §16/§17 — a requirement that can only
     // be satisfied by an exercise already in this session is DROPPED, not

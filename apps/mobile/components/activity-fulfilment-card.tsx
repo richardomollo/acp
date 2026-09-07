@@ -116,6 +116,13 @@ export function ActivityFulfilmentCard({
   useEffect(() => { mlRef.current.ensureResolved({ requestPermission: false }); }, []);
   const [recommendation, setRecommendation] = useState<ActivityRecommendation | null>(null);
   const [loading, setLoading] = useState(false);
+  // TestFlight incident, 2026-09 — a genuine first-time session generation
+  // can legitimately take tens of seconds (sequential exercise-provider
+  // lookups; see activity-recommendation-service.ts's GENERATION_TIME_
+  // BUDGET_MS for the bounded worst case). Without this, that healthy-but-
+  // slow wait was visually IDENTICAL to being permanently stuck. Flips once,
+  // 12s into a load; never implies anything is actually wrong.
+  const [slowLoading, setSlowLoading] = useState(false);
   // Debounces the primary CTA (section 5) — reset whenever this screen
   // regains focus, so coming back from workout-detail re-enables it rather
   // than leaving it permanently disabled after one tap.
@@ -126,15 +133,17 @@ export function ActivityFulfilmentCard({
     if (!userId) return;
     let active = true;
     setLoading(true);
+    setSlowLoading(false);
     setRecommendation(null); // clear any stale recommendation from a previous activity identity before the new fetch resolves
+    const slowTimer = setTimeout(() => { if (active) setSlowLoading(true); }, 12_000);
     getActivityRecommendation(
       userId, activity, mlRef.current.venueScopeIds,
       mlRef.current.availability != null && mlRef.current.availability.status !== 'location_unknown',
     )
       .then(rec => { if (active) setRecommendation(rec); })
       .catch(() => { /* failure behaviour (section 25): stay null, fall through to the existing fulfilment route below */ })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
+      .finally(() => { if (active) { setLoading(false); clearTimeout(slowTimer); } });
+    return () => { active = false; clearTimeout(slowTimer); };
     // activity.day + activity.activity is a stable identity for one plan slot
     // across re-renders of the same assessment — intentionally narrower than
     // the whole `activity` object, which is a fresh reference every render.
@@ -218,7 +227,9 @@ export function ActivityFulfilmentCard({
       {loading && !recommendation ? (
         <View style={s.block}>
           {!onDark && <ThemedText style={s.header}>{header}</ThemedText>}
-          <ThemedText style={s.meta}>{LOADING_COPY[key] ?? 'Preparing your session…'}</ThemedText>
+          <ThemedText style={s.meta}>
+            {slowLoading ? 'Still preparing — this can take a little longer the first time…' : (LOADING_COPY[key] ?? 'Preparing your session…')}
+          </ThemedText>
         </View>
       ) : acpRecommended ? (
         <>
