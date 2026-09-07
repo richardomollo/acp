@@ -17,6 +17,7 @@ import {
 import type { LanaClientBrief } from "@/lib/lana-pro-intelligence/client-brief";
 import { primaryAction } from "@/lib/lana-pro-intelligence/client-brief";
 import { clientResponseLabel, planIntentLabel } from "@/lib/lana-pro-intelligence/labels";
+import { CLIENT_TASKS_ENABLED } from "@/lib/flags";
 
 type ExistingRecord = {
   id: string;
@@ -172,6 +173,7 @@ export function SessionWorkspace(props: {
         sessionExercises: exercises,
         proposedActions: isGymTrainer ? [] : actions.filter((a) => a.trim()).map((a) => ({ title: a })),
         existingSessionActions: (existingSessionTasks ?? []).map((t) => ({ id: t.id, title: t.title, sessionRecordId: t.session_record_id })),
+        tasksEnabled: CLIENT_TASKS_ENABLED,
         nowIso: new Date().toISOString(),
         clientResponse,
         planIntent,
@@ -243,7 +245,7 @@ export function SessionWorkspace(props: {
           </Field>
 
           {cfg.showExercises && <ExerciseEditor exercises={exercises} setExercises={setExercises} />}
-          {!isGymTrainer && <ActionEditor actions={actions} setActions={setActions} />}
+          {!isGymTrainer && CLIENT_TASKS_ENABLED && <ActionEditor actions={actions} setActions={setActions} />}
 
           <button
             type="button"
@@ -270,7 +272,7 @@ export function SessionWorkspace(props: {
           setSummary={setSummary}
           followUp={followUp}
           setFollowUp={setFollowUp}
-          actions={actions.filter((a) => a.trim())}
+          actions={CLIENT_TASKS_ENABLED ? actions.filter((a) => a.trim()) : []}
           clientResponse={clientResponse}
           setClientResponse={setClientResponse}
           planIntent={planIntent}

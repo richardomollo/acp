@@ -32,7 +32,7 @@ describe('operational kill switches', () => {
 
   test('flagSnapshot reflects current env', () => {
     process.env.ACP_EXECUTION_FEEDBACK_ENABLED = 'false';
-    assert.deepEqual(flagSnapshot(), { weeklyAdaptation: true, rag: true, executionFeedback: false, nutritionCoaching: true, nutritionCamera: true, nutritionSavedMeals: true, nutritionFitnessContext: true, nutritionAdviceEffectiveness: true, nutritionOutcomeIntelligence: true });
+    assert.deepEqual(flagSnapshot(), { weeklyAdaptation: true, rag: true, executionFeedback: false, nutritionCoaching: true, nutritionCamera: false, nutritionSavedMeals: true, nutritionFitnessContext: true, nutritionAdviceEffectiveness: true, nutritionOutcomeIntelligence: true });
   });
 
   test('ACP_NUTRITION_COACHING_ENABLED — off only for exactly "false"', () => {
@@ -45,16 +45,17 @@ describe('operational kill switches', () => {
     delete process.env.ACP_NUTRITION_COACHING_ENABLED;
   });
 
-  test('ACP_NUTRITION_CAMERA_ENABLED — off only for exactly "false"', () => {
+  test('ACP_NUTRITION_CAMERA_ENABLED — product decision, off by default, on only for exactly "true"', () => {
     delete process.env.ACP_NUTRITION_CAMERA_ENABLED;
-    assert.equal(isNutritionCameraEnabled(), true);
-    process.env.ACP_NUTRITION_CAMERA_ENABLED = 'true';
-    assert.equal(isNutritionCameraEnabled(), true);
-    process.env.ACP_NUTRITION_CAMERA_ENABLED = '0';
-    assert.equal(isNutritionCameraEnabled(), true);
-    process.env.ACP_NUTRITION_CAMERA_ENABLED = 'false';
     assert.equal(isNutritionCameraEnabled(), false);
     assert.equal(flagSnapshot().nutritionCamera, false);
+    process.env.ACP_NUTRITION_CAMERA_ENABLED = 'false';
+    assert.equal(isNutritionCameraEnabled(), false);
+    process.env.ACP_NUTRITION_CAMERA_ENABLED = '1';
+    assert.equal(isNutritionCameraEnabled(), false);
+    process.env.ACP_NUTRITION_CAMERA_ENABLED = 'true';
+    assert.equal(isNutritionCameraEnabled(), true);
+    assert.equal(flagSnapshot().nutritionCamera, true);
     delete process.env.ACP_NUTRITION_CAMERA_ENABLED;
   });
 

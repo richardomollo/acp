@@ -19,11 +19,12 @@ export function isNutritionCoachingEnabled(): boolean {
   return process.env.EXPO_PUBLIC_ACP_NUTRITION_COACHING_ENABLED !== 'false';
 }
 
-// Nutrition N5 — camera-assisted food logging. Off only when exactly "false".
-// When off, Log-food hides its "Take a photo" / "Choose from library" entry
+// Nutrition N5 — camera-assisted food logging. Product decision — turned
+// OFF by default (was on-by-default); on only if explicitly set to exactly
+// "true". Log-food hides its "Take a photo" / "Choose from library" entry
 // and logging works by search exactly as before; nothing downstream changes.
 export function isNutritionCameraEnabled(): boolean {
-  return process.env.EXPO_PUBLIC_ACP_NUTRITION_CAMERA_ENABLED !== 'false';
+  return process.env.EXPO_PUBLIC_ACP_NUTRITION_CAMERA_ENABLED === 'true';
 }
 
 // Nutrition N6 — saved meals ("My meals"). Off only when exactly "false".
@@ -91,13 +92,16 @@ export function isAdaptiveNutritionEnabled(): boolean {
 }
 
 // Phase 4.5 / 4.6 — professional → consumer continuity: the "From your coach"
-// Home card + agreed-action list, the /coach-update screen, and the evolved
-// /trainer-tasks screen, all fed by get_client_session_feed. Off ONLY when
-// exactly "false" (kill switch, default on). When off: Home makes NO
-// continuity fetch and renders no coach card/actions; the generated plan,
+// Home card + agreed-action list, the /coach-update screen, and the
+// /trainer-tasks screen, all fed by get_client_session_feed. Turned OFF by
+// default (product decision, see the "kill this functionality" request) —
+// on only if explicitly set to exactly "true". When off: Home makes NO
+// continuity fetch and renders no coach card/actions, /trainer-tasks
+// renders its empty state without fetching either; the generated plan,
 // measurement check-in and every other Home surface are unchanged; any
-// professional_session_records already written stay in the DB, just not
-// surfaced. Rollback needs no schema change.
+// client_tasks/professional_session_records already written stay in the DB,
+// just not surfaced. Rollback needs no schema change — flip back to
+// `!== 'false'` (default on) or set the env var to re-enable.
 export function isProfessionalContinuityEnabled(): boolean {
-  return process.env.EXPO_PUBLIC_LANA_PROFESSIONAL_CONTINUITY_ENABLED !== 'false';
+  return process.env.EXPO_PUBLIC_LANA_PROFESSIONAL_CONTINUITY_ENABLED === 'true';
 }

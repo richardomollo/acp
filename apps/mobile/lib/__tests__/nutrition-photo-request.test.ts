@@ -1,4 +1,4 @@
-import { test, describe, afterEach } from 'node:test';
+import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { analysePhoto } from '../nutrition/nutrition-photo-request.ts';
 
@@ -13,6 +13,12 @@ function errorResponse(status: number): Response {
   return { ok: false, status, json: async () => ({ error: 'x' }) } as unknown as Response;
 }
 
+// The camera flag now defaults OFF (product decision, see lib/flags.ts) —
+// every test in this file except "CASE B" below is about analysePhoto's
+// OWN behaviour (mime/size validation, network/HTTP-status mapping,
+// timeout) once the feature is reached, so the flag is forced on here and
+// CASE B overrides it back off to test the disabled path specifically.
+beforeEach(() => { process.env.EXPO_PUBLIC_ACP_NUTRITION_CAMERA_ENABLED = 'true'; });
 afterEach(() => { delete process.env.EXPO_PUBLIC_ACP_NUTRITION_CAMERA_ENABLED; });
 
 describe('analysePhoto (§53 — bounded single attempt, never throws)', () => {
