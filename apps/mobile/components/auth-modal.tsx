@@ -185,7 +185,7 @@ export function GlobalAuthModal() {
                 >
                   {loading
                     ? <ActivityIndicator color={palette.white} />
-                    : <ThemedText style={styles.ctaBtnText}>Create account</ThemedText>
+                    : <ThemedText style={styles.ctaBtnText} numberOfLines={1} maxFontSizeMultiplier={1.3}>Create account</ThemedText>
                   }
                 </TouchableOpacity>
 
@@ -266,7 +266,7 @@ export function GlobalAuthModal() {
                 >
                   {loading
                     ? <ActivityIndicator color={palette.white} />
-                    : <ThemedText style={styles.ctaBtnText}>Sign in</ThemedText>
+                    : <ThemedText style={styles.ctaBtnText} numberOfLines={1} maxFontSizeMultiplier={1.3}>Sign in</ThemedText>
                   }
                 </TouchableOpacity>
 
@@ -321,7 +321,7 @@ export function GlobalAuthModal() {
                       If an account exists for <ThemedText style={styles.sentEmail}>{email}</ThemedText>, you'll receive a reset link shortly.
                     </ThemedText>
                     <TouchableOpacity style={[styles.ctaBtn, { alignSelf: 'stretch' }]} onPress={() => setTab('login')}>
-                      <ThemedText style={styles.ctaBtnText}>Back to sign in</ThemedText>
+                      <ThemedText style={styles.ctaBtnText} numberOfLines={1} maxFontSizeMultiplier={1.3}>Back to sign in</ThemedText>
                     </TouchableOpacity>
                   </View>
                 ) : (
@@ -346,7 +346,7 @@ export function GlobalAuthModal() {
                     >
                       {loading
                         ? <ActivityIndicator color={palette.white} />
-                        : <ThemedText style={styles.ctaBtnText}>Send reset link</ThemedText>
+                        : <ThemedText style={styles.ctaBtnText} numberOfLines={1} maxFontSizeMultiplier={1.3}>Send reset link</ThemedText>
                       }
                     </TouchableOpacity>
                   </>

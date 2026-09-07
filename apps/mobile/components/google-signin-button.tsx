@@ -19,6 +19,16 @@ const IOS_REDIRECT_URI = IOS_CLIENT_ID
   ? `com.googleusercontent.apps.${IOS_CLIENT_ID.replace('.apps.googleusercontent.com', '')}:/oauth2redirect/google`
   : undefined;
 
+// Same requirement on Android — without this, expo-auth-session falls back to a
+// redirect URI nothing on-device is registered to intercept, so after Google finishes
+// authenticating in the browser, control never returns to the app (it was silently
+// falling through to this reversed-client-id scheme's own already-registered Android
+// intentFilter in app.json, which nothing here was ever requesting). Mirrors
+// IOS_REDIRECT_URI exactly, just for ANDROID_CLIENT_ID.
+const ANDROID_REDIRECT_URI = ANDROID_CLIENT_ID
+  ? `com.googleusercontent.apps.${ANDROID_CLIENT_ID.replace('.apps.googleusercontent.com', '')}:/oauth2redirect/google`
+  : undefined;
+
 // expo-auth-session's Google provider throws synchronously on mount if the client ID for
 // the *current* platform isn't set (ios -> iosClientId, android -> androidClientId,
 // else -> webClientId) — callers must skip rendering this button entirely in that case,
@@ -41,7 +51,11 @@ export function GoogleSignInButton({ onSuccess, onError, disabled }: GoogleSignI
       androidClientId: ANDROID_CLIENT_ID,
       webClientId: WEB_CLIENT_ID,
     },
-    Platform.OS === 'ios' && IOS_REDIRECT_URI ? { native: IOS_REDIRECT_URI } : {}
+    Platform.select({
+      ios: IOS_REDIRECT_URI ? { native: IOS_REDIRECT_URI } : {},
+      android: ANDROID_REDIRECT_URI ? { native: ANDROID_REDIRECT_URI } : {},
+      default: {},
+    })
   );
 
   useEffect(() => {

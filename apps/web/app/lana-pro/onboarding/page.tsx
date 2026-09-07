@@ -518,8 +518,11 @@ export default function LanaProOnboardingPage() {
             </div>
           </div>
 
-          {/* Image collage — same staggered style as /walkthrough */}
-          <div className="mt-12 lg:mt-14">
+          {/* Image collage — same staggered style as /walkthrough. Capped to
+              the same max-w-xl as the text block above so the whole column
+              reads as one aligned unit on desktop, instead of the (uncapped)
+              grid stretching wider than the text and reading as off-alignment. */}
+          <div className="mt-12 lg:mt-14 max-w-xl">
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 h-[300px] lg:h-[440px]">
               <div className="flex flex-col gap-3 lg:mt-12">
                 <div className="flex-1 rounded-2xl overflow-hidden">

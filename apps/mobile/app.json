@@ -67,7 +67,7 @@
         "expo-splash-screen",
         {
           "image": "./assets/images/lana-wordmark.png",
-          "imageWidth": 300,
+          "imageWidth": 150,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
           "dark": {
