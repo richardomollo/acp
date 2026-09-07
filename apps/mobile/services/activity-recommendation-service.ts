@@ -28,7 +28,7 @@ import { normalizeActivity, type NormalizedActivityKey } from '@/lib/fulfilment'
 import type { StartingPlanActivity } from '@/lib/ai-assessment';
 import type { ActivityRecommendation, ProfessionalSupportRecommendation, SessionType } from '@/lib/activity-recommendation-types';
 import {
-  buildProfessionalSupport, isSupportedActivity, matchesExistingSession, findReusableSuggestedSession, toLocalDateKey,
+  buildProfessionalSupport, isSupportedActivity, selectExistingSessionMatch, findReusableSuggestedSession, toLocalDateKey,
   isValidSuggestedSession, SUGGESTED_WORKOUT_TYPE, suggestedStrengthWorkoutType, SESSION_HEADLINE, SESSION_TITLE, SESSION_REASON, SESSION_DURATION_MINUTES,
   classifyRunSlot, needsExperienceHeal, type SupportedActivityKey,
 } from '@/lib/activity-recommendation';
@@ -168,9 +168,23 @@ async function estimateWorkoutDuration(workoutId: string): Promise<number | null
  * TRAINER_MODIFIED all route here identically, section 5/22), and
  * regardless of whether `key` is one ACP can itself generate (a
  * trainer-created session for an otherwise-unsupported activity still wins).
+ *
+ * Lana-precedence fix (Workout Prescription root-cause audit, product
+ * decision): `hasLanaWeeklyActivity` is true at this function's one real
+ * call site below, since getActivityRecommendation is always invoked with a
+ * genuine fitness_profile.ai_assessment.starting_plan.activities[] entry —
+ * the Lana Intelligence weekly plan is authoritative for workout execution
+ * whenever such an activity exists. Passed through to
+ * matchesExistingSession to suppress ONLY the coarse structural match on
+ * the legacy System-1 generator's generic full_body_a/full_body_b types
+ * (which has no upper/lower/support concept and was the confirmed root
+ * cause of multiple distinct weekly-plan activities all resolving to the
+ * same legacy row). A genuinely custom/trainer-authored session still
+ * matches via the text-keyword fallback either way, so real trainer
+ * ownership is unaffected.
  */
 async function findExistingSession(
-  userId: string, key: NormalizedActivityKey,
+  userId: string, key: NormalizedActivityKey, hasLanaWeeklyActivity: boolean,
 ): Promise<{ id: string; title: string; isActivityBlock: boolean; durationMinutes: number; exerciseCount?: number } | null> {
   const overview = await programmeService.getActiveProgramme(userId);
   if (!overview) return null;
@@ -182,9 +196,16 @@ async function findExistingSession(
   const currentWeek = overview.weeks.find((w: any) => w.week_number === currentWeekNumber);
   if (!currentWeek) return null;
 
-  const candidates = overview.workouts.filter((w: any) => w.program_week_id === currentWeek.id);
-  const match = candidates.find((w: any) =>
-    matchesExistingSession({ title: w.title, description: w.description, workout_type: w.workout_type }, key));
+  interface CandidateWorkoutRow {
+    id: string; title: string; description: string | null; workout_type: string | null;
+    is_activity_block: boolean; duration_minutes: number; program_week_id: string;
+  }
+  const candidates = (overview.workouts as CandidateWorkoutRow[]).filter(w => w.program_week_id === currentWeek.id);
+  const match = selectExistingSessionMatch(
+    candidates.map(w => ({ id: w.id, title: w.title, description: w.description, workout_type: w.workout_type, is_activity_block: w.is_activity_block, duration_minutes: w.duration_minutes })),
+    key,
+    { allowLegacyGenericMatch: !hasLanaWeeklyActivity },
+  );
   if (!match) return null;
 
   const isActivityBlock = !!match.is_activity_block;
@@ -621,7 +642,10 @@ export async function getActivityRecommendation(
   if (!(await assertOwnSession(userId))) return fallback();
 
   const [existing, insight] = await Promise.all([
-    findExistingSession(userId, key),
+    // `activity` is always a genuine fitness_profile.ai_assessment.
+    // starting_plan.activities[] entry at this call site (rawActivity's
+    // type is non-optional StartingPlanActivity) — Lana precedence applies.
+    findExistingSession(userId, key, /* hasLanaWeeklyActivity */ true),
     getHumanSupportInsight(userId, venueScopeIds, locationKnown).catch(() => null),
   ]);
   const professionalSupport = buildProfessionalSupport(insight);

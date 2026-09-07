@@ -114,10 +114,52 @@ export interface ExistingSessionCandidate {
  * workout_type first; text-keyword match (reusing fulfilment.ts's existing
  * alias table) as the fallback for a trainer-created or otherwise untyped
  * workout whose title/description names the activity directly.
+ *
+ * Lana-precedence fix (Workout Prescription root-cause audit): the
+ * structural branch above matches ANY workout typed 'full_body_a'/
+ * 'full_body_b' — the legacy System-1 generic multi-week Programme
+ * generator's own fixed template types (lib/programme-generator.ts's
+ * WORKOUT_TYPE_SPECS). That generator has no upper/lower/support concept —
+ * every strength day in a legacy programme is one of only two generic
+ * types — so with 2+ candidate workouts in the current week, this
+ * structural match alone can't tell WHICH of a user's several distinct
+ * weekly-plan activities (e.g. "Lower Strength — Heavy" vs "Upper Strength
+ * — Push/Pull") a given legacy row actually belongs to; the caller's
+ * `.find()` then returns the same one for every activity tapped (the
+ * confirmed root cause). When the caller has a genuine Lana Intelligence
+ * weekly-plan activity to fulfil (`allowLegacyGenericMatch: false`), this
+ * coarse structural match is skipped — the legacy system no longer
+ * intercepts a Lana-plan activity merely because both are category 'gym'.
+ * A genuinely custom/trainer-authored session (untyped, or typed something
+ * other than the two generic values) still matches via the text-keyword
+ * fallback either way — trainer ownership is untouched (section 23/33,
+ * still tested below).
  */
-export function matchesExistingSession(workout: ExistingSessionCandidate, key: NormalizedActivityKey): boolean {
-  if (workout.workout_type && PROGRAMME_WORKOUT_TYPES[key]?.includes(workout.workout_type)) return true;
+export function matchesExistingSession(
+  workout: ExistingSessionCandidate,
+  key: NormalizedActivityKey,
+  opts?: { allowLegacyGenericMatch?: boolean },
+): boolean {
+  const allowLegacyGenericMatch = opts?.allowLegacyGenericMatch ?? true;
+  if (allowLegacyGenericMatch && workout.workout_type && PROGRAMME_WORKOUT_TYPES[key]?.includes(workout.workout_type)) return true;
   return textMatchesActivityKeyword(`${workout.title} ${workout.description ?? ''}`, key);
+}
+
+/**
+ * Selects, among this week's candidate programme workouts, the one (if any)
+ * that satisfies the given activity key — the exact selection
+ * findExistingSession (services/activity-recommendation-service.ts)
+ * performs, pulled out as a pure function so the Richard-collision
+ * regression (multiple same-week candidates, day-blind selection) is
+ * directly unit-testable without a database. Zero behaviour change from
+ * the inline `.find()` this replaces.
+ */
+export function selectExistingSessionMatch<T extends ExistingSessionCandidate>(
+  candidates: T[],
+  key: NormalizedActivityKey,
+  opts?: { allowLegacyGenericMatch?: boolean },
+): T | undefined {
+  return candidates.find(w => matchesExistingSession(w, key, opts));
 }
 
 // ── Standalone suggested-session identity (section 12) ──────────────────────

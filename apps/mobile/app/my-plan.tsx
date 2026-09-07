@@ -84,12 +84,14 @@ export default function MyPlanScreen() {
   // earlier plan (they just stop matching by planId).
   const [planId, setPlanId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
-  // Day 7 — reconciles "My Plan" (this screen: general active-life guidance,
-  // nutrition, support) with "My Programme" (workout_programs: the actual
-  // day-by-day structured training schedule) so they never read as two
-  // competing workout plans. Independent/isolated from the rest of this
-  // screen's data loading on purpose — a failure here must never affect the
-  // plan itself.
+  // Day 7 — surfaces a link to a legacy "My Programme" (workout_programs)
+  // for users who already have one from before Lana Intelligence's weekly
+  // plan existed. Workout Prescription durable fix (Lana precedence,
+  // product decision): THIS screen's weekly plan is now the authoritative
+  // day-by-day source — the banner below is compatibility/history access
+  // only, not a claim that My Programme is where day-by-day exercises live.
+  // Independent/isolated from the rest of this screen's data loading on
+  // purpose — a failure here must never affect the plan itself.
   const [hasWorkoutProgramme, setHasWorkoutProgramme] = useState(false);
   useEffect(() => {
     (async () => {
@@ -1172,8 +1174,8 @@ export default function MyPlanScreen() {
                   activeOpacity={0.85}
                 >
                   <View style={{ flex: 1 }}>
-                    <ThemedText style={styles.programmeBannerTitle}>You have a structured Workout Programme</ThemedText>
-                    <ThemedText style={styles.programmeBannerSub}>For day-by-day exercises and sets, follow your Workout Programme — this page covers your broader goal, nutrition and support.</ThemedText>
+                    <ThemedText style={styles.programmeBannerTitle}>You also have a saved Workout Programme</ThemedText>
+                    <ThemedText style={styles.programmeBannerSub}>From before your weekly plan — it's kept for reference here. Your current day-by-day workouts are the plan below.</ThemedText>
                   </View>
                 </TouchableOpacity>
               )}

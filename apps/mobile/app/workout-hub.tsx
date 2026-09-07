@@ -400,25 +400,15 @@ export default function WorkoutHubScreen() {
             </>
           )}
 
-          {/* ── Your Programme (ACP Intelligence™) ── */}
-          <View style={s.bodyPartHeader}>
-            <ThemedText style={s.bodyPartEyebrow}>LANA</ThemedText>
-            <ThemedText style={s.bodyPartTitle}>Your Programme</ThemedText>
-          </View>
-          <TouchableOpacity
-            style={s.createCta}
-            onPress={() => router.push('/my-programme' as any)}
-            activeOpacity={0.85}
-          >
-            <View style={s.createCtaIcon}>
-              <Ionicons name="sparkles-outline" size={22} color={palette.blue500} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <ThemedText style={s.createCtaTitle}>Your personalised programme</ThemedText>
-              <ThemedText style={s.createCtaSub}>A structured, multi-week plan built from your goal</ThemedText>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={palette.gray300} />
-          </TouchableOpacity>
+          {/* Workout Prescription durable fix (Lana precedence, product
+              decision) — the "Your Programme" CTA that lived here invited
+              users into the legacy System-1 multi-week Programme generator
+              (workout_programs), a disconnected, generic full_body_a/b
+              track with no upper/lower/support concept. Lana Intelligence's
+              own weekly plan is now the authoritative source for workout
+              execution, so this entry point is no longer surfaced. Existing
+              legacy programmes are untouched (no data deleted) and remain
+              reachable from My Plan for users who already have one. */}
 
           {/* ── Upcoming Workouts ── */}
           {upcoming.length > 0 && (
