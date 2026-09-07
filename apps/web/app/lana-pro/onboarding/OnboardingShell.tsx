@@ -99,8 +99,15 @@ export function OnboardingShell({
                 <div className="rounded-2xl bg-gray-50 border border-gray-100 p-6 sm:p-7">{right}</div>
               </aside>
             </div>
+          ) : wide ? (
+            // No extra cap — uses the full width of this <main>'s own
+            // max-w-6xl frame, so a step building its own internal
+            // side-by-side layout gets all the room that frame offers
+            // (max-w-2xl below is deliberately narrower, for plain
+            // single-column form steps).
+            left
           ) : (
-            <div className={wide ? "max-w-5xl" : "max-w-2xl"}>{left}</div>
+            <div className="max-w-2xl">{left}</div>
           )}
         </div>
       </main>

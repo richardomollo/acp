@@ -521,10 +521,13 @@ export default function LanaProOnboardingPage() {
 
           {/* Image collage — same staggered style as /walkthrough, now the
               right-hand column of a text/image split on desktop (stacks
-              below the text on mobile). Two sub-columns rather than three,
-              since this column is only half the page width now. */}
+              below the text on mobile). All 6 original photos restored
+              across 3 sub-columns, same lg: breakpoint as the text/image
+              split itself — this step's container is now full-width (no
+              extra max-width cap beyond the shell's own max-w-6xl frame),
+              so there's no benefit to gating the 3rd column any further out. */}
           <div className="mt-12 lg:mt-0">
-            <div className="grid grid-cols-2 gap-3 h-[300px] lg:h-[380px]">
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 h-[300px] lg:h-[420px]">
               <div className="flex flex-col gap-3 lg:mt-10">
                 <div className="flex-1 rounded-2xl overflow-hidden">
                   <img src="/images/ref.jpeg" alt="Fitness" className="w-full h-full object-cover" style={{ objectPosition: "15% center" }} />
@@ -539,6 +542,14 @@ export default function LanaProOnboardingPage() {
                 </div>
                 <div className="flex-1 rounded-2xl overflow-hidden">
                   <img src="/images/pt.jpeg" alt="personal trainer" className="w-full h-full object-cover" style={{ objectPosition: "center" }} />
+                </div>
+              </div>
+              <div className="hidden lg:flex flex-col gap-3 mt-8">
+                <div className="flex-1 rounded-2xl overflow-hidden">
+                  <img src="/images/padel.webp" alt="Wellness" className="w-full h-full object-cover" style={{ objectPosition: "80% center" }} />
+                </div>
+                <div className="flex-1 rounded-2xl overflow-hidden">
+                  <img src="/images/run.jpg" alt="Training" className="w-full h-full object-cover" style={{ objectPosition: "85% center" }} />
                 </div>
               </div>
             </div>
