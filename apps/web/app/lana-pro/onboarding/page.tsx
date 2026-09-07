@@ -479,9 +479,10 @@ export default function LanaProOnboardingPage() {
     return (
       <OnboardingShell
         {...shellProps}
+        wide
         left={
+          <div className="lg:grid lg:grid-cols-2 lg:gap-x-14 lg:items-center">
           <div>
-          <div className="max-w-xl">
             <p className="text-xs font-bold text-gray-400 uppercase tracking-[0.16em] mb-4">for fitness, nutritionists and wellness proffesionals</p>
             <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 leading-[1.1] tracking-tight">
               Grow your business.
@@ -518,13 +519,13 @@ export default function LanaProOnboardingPage() {
             </div>
           </div>
 
-          {/* Image collage — same staggered style as /walkthrough. Capped to
-              the same max-w-xl as the text block above so the whole column
-              reads as one aligned unit on desktop, instead of the (uncapped)
-              grid stretching wider than the text and reading as off-alignment. */}
-          <div className="mt-12 lg:mt-14 max-w-xl">
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 h-[300px] lg:h-[440px]">
-              <div className="flex flex-col gap-3 lg:mt-12">
+          {/* Image collage — same staggered style as /walkthrough, now the
+              right-hand column of a text/image split on desktop (stacks
+              below the text on mobile). Two sub-columns rather than three,
+              since this column is only half the page width now. */}
+          <div className="mt-12 lg:mt-0">
+            <div className="grid grid-cols-2 gap-3 h-[300px] lg:h-[380px]">
+              <div className="flex flex-col gap-3 lg:mt-10">
                 <div className="flex-1 rounded-2xl overflow-hidden">
                   <img src="/images/ref.jpeg" alt="Fitness" className="w-full h-full object-cover" style={{ objectPosition: "15% center" }} />
                 </div>
@@ -538,14 +539,6 @@ export default function LanaProOnboardingPage() {
                 </div>
                 <div className="flex-1 rounded-2xl overflow-hidden">
                   <img src="/images/pt.jpeg" alt="personal trainer" className="w-full h-full object-cover" style={{ objectPosition: "center" }} />
-                </div>
-              </div>
-              <div className="hidden lg:flex flex-col gap-3 mt-8">
-                <div className="flex-1 rounded-2xl overflow-hidden">
-                  <img src="/images/padel.webp" alt="Wellness" className="w-full h-full object-cover" style={{ objectPosition: "80% center" }} />
-                </div>
-                <div className="flex-1 rounded-2xl overflow-hidden">
-                  <img src="/images/run.jpg" alt="Training" className="w-full h-full object-cover" style={{ objectPosition: "85% center" }} />
                 </div>
               </div>
             </div>

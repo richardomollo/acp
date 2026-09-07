@@ -20,6 +20,7 @@ export function OnboardingShell({
   onSignOut,
   left,
   right,
+  wide,
 }: {
   /** 0..1 */
   progress: number;
@@ -29,6 +30,8 @@ export function OnboardingShell({
   left: ReactNode;
   /** contextual panel — omit for full-width steps (e.g. the welcome hero) */
   right?: ReactNode;
+  /** Widens the single-column (no `right`) container from max-w-2xl to max-w-5xl — for a step that builds its own internal side-by-side layout (e.g. the welcome hero's text/image split), rather than the narrow single-column form steps. No effect when `right` is provided. */
+  wide?: boolean;
 }) {
   return (
     <div
@@ -97,7 +100,7 @@ export function OnboardingShell({
               </aside>
             </div>
           ) : (
-            <div className="max-w-2xl">{left}</div>
+            <div className={wide ? "max-w-5xl" : "max-w-2xl"}>{left}</div>
           )}
         </div>
       </main>
