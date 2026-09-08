@@ -7,12 +7,16 @@ import { getPostAuthDestination } from '@/lib/onboarding-auth';
 import { WALKTHROUGH_KEY } from './walkthrough';
 import { palette } from '@/constants/theme';
 
+// TEMP: forces the walkthrough to show on every launch while we're
+// iterating on its redesign today. Set back to false when done.
+const FORCE_WALKTHROUGH = true;
+
 export default function Index() {
   const router = useRouter();
 
   useEffect(() => {
     const bootstrap = async () => {
-      const seen = await AsyncStorage.getItem(WALKTHROUGH_KEY);
+      const seen = FORCE_WALKTHROUGH ? null : await AsyncStorage.getItem(WALKTHROUGH_KEY);
       if (!seen) {
         router.replace('/walkthrough');
         return;

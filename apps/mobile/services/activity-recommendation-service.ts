@@ -132,7 +132,7 @@ export async function hydrateWorkoutExerciseMedia(workoutId: string): Promise<st
 }
 
 /** Real count of persisted workout_exercises rows for a workout — never inferred/assumed from the requirement list, since a requirement can fail to persist (Day 2 section 11's silent-continue-on-failure). */
-async function countWorkoutExercises(workoutId: string): Promise<number> {
+export async function countWorkoutExercises(workoutId: string): Promise<number> {
   const { count } = await supabase
     .from('workout_exercises')
     .select('id', { count: 'exact', head: true })
@@ -337,6 +337,73 @@ async function populateExerciseWorkout(
   return exerciseCount;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// TestFlight incident follow-up, 2026-09 — SHARED WORKOUT CONCURRENCY FIX.
+// Root cause: findReusableSuggested's repair branch (below) reads
+// workout_exercises count, and if 0, ran populateExerciseWorkout()
+// unconditionally. Multiple ActivityFulfilmentCard instances (Home's up to
+// 2 + My Plan's up to N, routinely mounted at once — Expo Router keeps
+// visited tabs/screens mounted) can all read count=0 for the SAME workout_id
+// before any of them has inserted a row, and each independently ran the
+// full population loop against the same row — appending, never replacing.
+// Production evidence: a workout with 38 workout_exercises rows vs. 11/6 on
+// sibling sessions (a normal pass is ~11-13 rows; 38 ≈ 3 duplicate passes).
+//
+// `population_claimed_at` (20260919000001) makes population itself an
+// atomic claim, the same way claimStandaloneWorkoutSlot already makes ROW
+// CREATION an atomic claim (via a unique index) — Postgres's row-level
+// locking on a plain `UPDATE ... WHERE population_claimed_at IS NULL (or
+// stale) ... RETURNING id` guarantees only one concurrent caller can win it;
+// every other concurrent caller's UPDATE matches zero rows. No RPC needed.
+const POPULATION_CLAIM_STALE_MS = 90_000; // comfortably longer than GENERATION_TIME_BUDGET_MS + the card's 75s hard ceiling — a claim older than this is treated as abandoned (e.g. the app was killed mid-generation), never as a still-legitimate in-progress attempt.
+const POPULATION_WAIT_POLL_MS = 750;
+const POPULATION_WAIT_MAX_ATTEMPTS = 6; // ~4.5s bounded wait — never an indefinite wait (section 6)
+
+/** Atomically claims the right to populate `workoutId`'s exercises. Returns
+ *  true only for the ONE caller (across any number of concurrent callers,
+ *  processes, or devices) whose UPDATE actually matched a row — every other
+ *  concurrent caller's identical UPDATE matches zero rows and gets false. */
+export async function claimPopulation(workoutId: string): Promise<boolean> {
+  const staleBefore = new Date(Date.now() - POPULATION_CLAIM_STALE_MS).toISOString();
+  // An RPC (20260919000001_workouts_population_claim.sql), not a client-built
+  // `.or()` PATCH filter — verified live that combining `.or()` with an
+  // UPDATE fails against this project's PostgREST version regardless of
+  // which column is referenced, while the same two-condition WHERE inside a
+  // single server-side SQL statement works and is equally atomic (the RPC
+  // is SECURITY INVOKER, so the existing per-user workouts RLS policy still
+  // applies exactly as it does for this file's other direct .update() calls).
+  const { data, error } = await supabase.rpc('claim_workout_population', {
+    p_workout_id: workoutId, p_stale_before: staleBefore,
+  });
+  if (error) return false; // fail closed — never populate on an uncertain claim result
+  return Array.isArray(data) && data.length > 0;
+}
+
+/** Clears a claim this caller took but did not finish successfully with (an
+ *  exception, or population still 0 after running), so the NEXT caller can
+ *  retry immediately instead of waiting out the full staleness window. */
+export async function releasePopulationClaim(workoutId: string): Promise<void> {
+  await supabase.from('workouts').update({ population_claimed_at: null }).eq('id', workoutId);
+}
+
+/** A caller that LOST the claim waits briefly, bounded (section 6 — never
+ *  indefinitely), for the winning caller to finish, polling the real
+ *  persisted count rather than guessing. Returns the final count either way
+ *  — 0 if the winner hasn't finished (or failed) within the bound, in which
+ *  case the caller's existing "not safely reusable" fallback applies,
+ *  exactly as it already does for any other unpopulated row. */
+export async function waitForPopulation(workoutId: string): Promise<number> {
+  for (let attempt = 0; attempt < POPULATION_WAIT_MAX_ATTEMPTS; attempt++) {
+    await sleep(POPULATION_WAIT_POLL_MS);
+    const count = await countWorkoutExercises(workoutId);
+    if (count > 0) return count;
+  }
+  return 0;
+}
+
 /**
  * A same-day standalone suggested session for this activity, if one exists
  * AND is actually valid (Chunk 4.5A — a claimed workouts row from a prior,
@@ -347,7 +414,7 @@ async function populateExerciseWorkout(
  * per attempt) before being treated as unusable. Activity blocks are always
  * valid the moment the row exists (section 6) and are never repaired.
  */
-async function findReusableSuggested(
+export async function findReusableSuggested(
   userId: string, key: SupportedActivityKey, requirements: ExerciseRequirement[] | null, context: GenerationContext,
   activity?: StartingPlanActivity,
   workoutType: string = SUGGESTED_WORKOUT_TYPE[key],
@@ -424,9 +491,26 @@ async function findReusableSuggested(
 
   let exerciseCount = await countWorkoutExercises(reused.id);
   if (!isValidSuggestedSession({ isActivityBlock: false, exerciseCount })) {
-    exerciseCount = await populateExerciseWorkout(reused.id, requirements, context);
+    // SHARED WORKOUT CONCURRENCY FIX — only the caller that atomically wins
+    // this row's population claim actually runs populateExerciseWorkout.
+    // Every other concurrent caller (any number, across Home + My Plan)
+    // waits briefly for the winner instead of also populating — required
+    // invariant: N concurrent resolutions of the same workout_id produce
+    // ONE populated exercise set, never N appended sets.
+    const won = await claimPopulation(reused.id);
+    if (won) {
+      try {
+        exerciseCount = await populateExerciseWorkout(reused.id, requirements, context);
+        if (exerciseCount === 0) await releasePopulationClaim(reused.id); // nothing persisted — let the next caller retry immediately rather than wait out the staleness window
+      } catch (e) {
+        await releasePopulationClaim(reused.id); // never leave a failed attempt's claim blocking every future repair for POPULATION_CLAIM_STALE_MS
+        throw e;
+      }
+    } else {
+      exerciseCount = await waitForPopulation(reused.id);
+    }
   }
-  if (!isValidSuggestedSession({ isActivityBlock: false, exerciseCount })) return null; // repair didn't help — not safely reusable (section 9)
+  if (!isValidSuggestedSession({ isActivityBlock: false, exerciseCount })) return null; // repair didn't help (or another caller's attempt didn't, within the wait bound) — not safely reusable (section 9)
 
   // Self-heal a stale stored duration. Pre-fix rows carry a flat
   // experience-tier band (e.g. 70) that never matched the real prescription;
