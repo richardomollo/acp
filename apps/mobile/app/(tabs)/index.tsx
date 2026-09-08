@@ -611,8 +611,25 @@ export default function HomeScreen() {
       f && !marketAvailable ? { ...f, marketplaceMatches: [] } : f,
     [marketAvailable],
   );
-  const todayFulfilmentGated = gateFulfilment(todayFulfilment);
-  const upcomingFulfilmentGated = gateFulfilment(upcomingFulfilment);
+  // "Maximum update depth exceeded" fix (2026-09) — when !marketAvailable,
+  // gateFulfilment's `{ ...f, marketplaceMatches: [] }` spread returns a
+  // BRAND NEW object reference on every single call, even for the exact
+  // same `f`. Calling it directly in the render body (not memoized) meant
+  // ActivityFulfilmentCard's `fulfilment` prop was a fresh reference every
+  // render of this screen — which its own onResolved effect (deps include
+  // `fulfilment`) re-fired on every render as a result, calling onResolved
+  // -> setUpNextWorkoutId/setUpNextGymAccess (real state updates here) ->
+  // re-render of THIS component -> a fresh gated object again -> the
+  // child's effect fires again -> infinite loop. This is also very likely
+  // why "Preparing your workout…" never visibly resolved: the card was
+  // stuck in this render/effect thrash rather than ever settling. useMemo
+  // makes the returned object referentially STABLE whenever neither the
+  // underlying fulfilment state nor marketAvailable has actually changed,
+  // which breaks the loop at its source without touching gateFulfilment's
+  // own logic, ActivityFulfilmentCard, or the recommendation/prescription
+  // pipeline at all.
+  const todayFulfilmentGated = useMemo(() => gateFulfilment(todayFulfilment), [gateFulfilment, todayFulfilment]);
+  const upcomingFulfilmentGated = useMemo(() => gateFulfilment(upcomingFulfilment), [gateFulfilment, upcomingFulfilment]);
   const [experiences, setExperiences] = useState<Experience[]>([]);
   const [loading, setLoading] = useState(true);
   const calSelected = new Date().toISOString().split('T')[0];

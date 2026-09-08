@@ -136,9 +136,22 @@ export default function WeeklyPlanScreen() {
     let active = true;
     (async () => {
       setLoading(true);
+      // LANA IOS — hard loading-termination invariant (audit finding B):
+      // this screen previously had no try/finally and no hard ceiling, so
+      // a thrown exception anywhere below would leave the full-screen
+      // spinner active forever. setLoading(false) now lives in a `finally`
+      // (below) rather than only at each individual return point, matching
+      // the same pattern already used in app/next-week-plan.tsx and
+      // app/today-nutrition.tsx. This is belt-and-braces on top of the
+      // real fix (the shared bounded Supabase fetch in lib/supabase.tsx),
+      // not a substitute for it — every plain supabase.from(...) call in
+      // this function already resolves (never rejects) on a timeout, since
+      // nothing here uses .throwOnError(); this `finally` protects against
+      // a genuine throw elsewhere in the function instead.
+      try {
       const session = await authService.getSession();
       if (!session?.user.id) {
-        if (active) { setUserId(null); setAssessment(null); setLoading(false); }
+        if (active) { setUserId(null); setAssessment(null); }
         return;
       }
       if (active) setUserId(session.user.id);
@@ -154,7 +167,6 @@ export default function WeeklyPlanScreen() {
       // plan yet" — same safety rule Home/My Plan already apply.
       if (!data?.ai_assessment || !isValidAssessment(data.ai_assessment) || !data.ai_assessment_generated_at) {
         setAssessment(null);
-        setLoading(false);
         return;
       }
 
@@ -245,8 +257,9 @@ export default function WeeklyPlanScreen() {
       const todayHasActivity = !!todayDayName
         && validAssessment.starting_plan.activities.some(a => a.day.trim().toLowerCase() === todayDayName.toLowerCase());
       setExpandedDayIndex(todayHasActivity ? todayIndex : null);
-
-      setLoading(false);
+      } finally {
+        if (active) setLoading(false);
+      }
     })();
     return () => { active = false; };
   }, []));
