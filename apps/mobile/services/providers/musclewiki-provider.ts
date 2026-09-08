@@ -118,7 +118,25 @@ async function callProxy(path: string, params: Record<string, string | number | 
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  // TestFlight incident follow-up, 2026-09 — reproduced on real iOS builds
+  // (worked on web) with the session-generation budget fix in place, which
+  // only helps if EACH individual request is actually bounded; it wasn't.
+  // `controller.abort()` alone depends on the platform's fetch honouring the
+  // AbortSignal to ever settle the promise — some React Native/iOS network
+  // stacks don't reliably do that for a request that never got a response at
+  // all (as opposed to one that's actively transferring), so a stalled
+  // connection can leave `fetch()` itself pending forever regardless of the
+  // abort call. Racing a plain timer promise alongside it guarantees this
+  // function itself always settles within REQUEST_TIMEOUT_MS — the caller
+  // proceeds either way; abort() is still called too, as a best-effort
+  // attempt to free the underlying connection where the platform does honour it.
+  let timeoutHandle: ReturnType<typeof setTimeout>;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutHandle = setTimeout(() => {
+      controller.abort();
+      reject(new ExerciseProviderError('timeout', 'MuscleWiki request timed out'));
+    }, REQUEST_TIMEOUT_MS);
+  });
 
   // Safe diagnostics only — the request path/params are just body-part and
   // muscle-name text, never a credential (the permanent key never reaches
@@ -127,13 +145,17 @@ async function callProxy(path: string, params: Record<string, string | number | 
 
   let res: Response;
   try {
-    res = await fetch(`${PROXY_BASE}?${qs.toString()}`, { signal: controller.signal });
+    res = await Promise.race([
+      fetch(`${PROXY_BASE}?${qs.toString()}`, { signal: controller.signal }),
+      timeoutPromise,
+    ]);
   } catch (e: any) {
     console.warn(`[musclewiki] fetch failed for path=${path}: ${e?.name ?? 'Error'} ${e?.message ?? ''}`);
+    if (e instanceof ExerciseProviderError) throw e; // the race's own timeout, already the right shape
     if (e?.name === 'AbortError') throw new ExerciseProviderError('timeout', 'MuscleWiki request timed out');
     throw new ExerciseProviderError('network_error', e?.message ?? 'Network request failed');
   } finally {
-    clearTimeout(timeout);
+    clearTimeout(timeoutHandle!);
   }
 
   console.log(`[musclewiki] response path=${path} status=${res.status}`);
@@ -218,9 +240,17 @@ export const musclewikiProvider: ExerciseProvider = {
  */
 export async function getMuscleWikiMediaToken(): Promise<{ token: string; expiresInSeconds: number } | null> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  // Same hard-timeout race as callProxy above — abort() alone isn't a
+  // guaranteed bound on every platform's fetch implementation.
+  let timeoutHandle: ReturnType<typeof setTimeout>;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutHandle = setTimeout(() => { controller.abort(); reject(new Error('timeout')); }, REQUEST_TIMEOUT_MS);
+  });
   try {
-    const res = await fetch(`${PROXY_BASE}/media-token`, { method: 'POST', signal: controller.signal });
+    const res = await Promise.race([
+      fetch(`${PROXY_BASE}/media-token`, { method: 'POST', signal: controller.signal }),
+      timeoutPromise,
+    ]);
     if (!res.ok) return null;
     const body = await res.json();
     if (typeof body?.token !== 'string') return null;
@@ -228,7 +258,7 @@ export async function getMuscleWikiMediaToken(): Promise<{ token: string; expire
   } catch {
     return null;
   } finally {
-    clearTimeout(timeout);
+    clearTimeout(timeoutHandle!);
   }
 }
 

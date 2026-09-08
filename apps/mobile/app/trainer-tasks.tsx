@@ -16,6 +16,7 @@ import {
   isTaskDoneForPeriod, professionalDisplayName, attributionLabel,
   type ContinuityModel, type ContinuityTaskRow, type ContinuitySessionRow,
 } from '@/lib/professional-continuity';
+import { isProfessionalContinuityEnabled } from '@/lib/flags';
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '';
@@ -31,6 +32,7 @@ export default function CoachUpdatesScreen() {
   const [overrides, setOverrides] = useState<Record<string, boolean>>({});
 
   const load = useCallback(async () => {
+    if (!isProfessionalContinuityEnabled()) { setLoading(false); return; } // kill switch — no continuity fetch at all
     setLoading(true);
     setModel(await loadContinuityModel());
     setOverrides({});
@@ -68,7 +70,13 @@ export default function CoachUpdatesScreen() {
         </View>
       </SafeAreaView>
 
-      {loading || !model ? (
+      {!isProfessionalContinuityEnabled() ? (
+        <View style={s.empty}>
+          <Ionicons name="chatbox-ellipses-outline" size={40} color={palette.gray300} />
+          <ThemedText style={s.emptyText}>Nothing here yet</ThemedText>
+          <ThemedText style={s.emptySub}>Notes and next steps from your sessions will show up here.</ThemedText>
+        </View>
+      ) : loading || !model ? (
         <ActivityIndicator size="large" color={palette.blue500} style={{ marginTop: 60 }} />
       ) : !model.hasAny ? (
         <View style={s.empty}>

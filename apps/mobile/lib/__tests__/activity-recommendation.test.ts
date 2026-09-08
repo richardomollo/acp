@@ -1,7 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  buildProfessionalSupport, isSupportedActivity, matchesExistingSession, findReusableSuggestedSession,
+  buildProfessionalSupport, isSupportedActivity, matchesExistingSession, selectExistingSessionMatch, findReusableSuggestedSession,
   classifyActivityStrategy, isValidSuggestedSession, SUPPORTED_ACTIVITY_KEYS, classifyRunSlot, needsExperienceHeal,
   type HumanSupportInsightLike,
 } from '../activity-recommendation.ts';
@@ -87,6 +87,83 @@ describe('matchesExistingSession', () => {
   test('does not cross-match an unrelated activity', () => {
     assert.equal(matchesExistingSession({ title: 'Full Body A', description: null, workout_type: 'full_body_a' }, 'running'), false);
     assert.equal(matchesExistingSession({ title: 'Yoga Flow', description: null, workout_type: null }, 'gym'), false);
+  });
+});
+
+// Workout Prescription durable fix — Lana Intelligence precedence over the
+// legacy System-1 generic full_body_a/full_body_b programme generator.
+describe('matchesExistingSession — allowLegacyGenericMatch (Lana precedence, Test D — no fallback leakage)', () => {
+  test('default (omitted opts) preserves the original structural match, unchanged', () => {
+    assert.equal(matchesExistingSession({ title: 'Full Body A', description: null, workout_type: 'full_body_a' }, 'gym'), true);
+    assert.equal(matchesExistingSession({ title: 'Full Body B', description: null, workout_type: 'full_body_b' }, 'gym'), true);
+  });
+
+  test('allowLegacyGenericMatch: false suppresses the structural full_body_a/b match', () => {
+    assert.equal(matchesExistingSession({ title: 'Full Body A', description: null, workout_type: 'full_body_a' }, 'gym', { allowLegacyGenericMatch: false }), false);
+    assert.equal(matchesExistingSession({ title: 'Full Body B', description: null, workout_type: 'full_body_b' }, 'gym', { allowLegacyGenericMatch: false }), false);
+  });
+
+  test('a valid Lana activity resolution can never land on workout_type full_body_a or full_body_b (Test D invariant)', () => {
+    for (const workout_type of ['full_body_a', 'full_body_b']) {
+      assert.equal(
+        matchesExistingSession({ title: workout_type === 'full_body_a' ? 'Full Body A' : 'Full Body B', description: null, workout_type }, 'gym', { allowLegacyGenericMatch: false }),
+        false,
+        `${workout_type} must never match when a Lana weekly activity exists`,
+      );
+    }
+  });
+
+  test('genuinely custom/trainer-authored content still matches via the text-keyword fallback, even with allowLegacyGenericMatch: false — trainer ownership is unaffected', () => {
+    assert.equal(matchesExistingSession({ title: 'Coach Assigned Strength', description: null, workout_type: null }, 'gym', { allowLegacyGenericMatch: false }), true);
+    assert.equal(matchesExistingSession({ title: 'Strength Circuit', description: null, workout_type: 'full_body_a' }, 'gym', { allowLegacyGenericMatch: false }), true); // title keyword-matches independent of the (now-suppressed) structural branch
+  });
+
+  test('run_easy/run_intervals structural matching is untouched — this fix targets only the generic strength types', () => {
+    assert.equal(matchesExistingSession({ title: 'Easy Run', description: null, workout_type: 'run_easy' }, 'running', { allowLegacyGenericMatch: false }), true);
+  });
+});
+
+describe('selectExistingSessionMatch — the Richard collision, at the selection layer (Test A/D)', () => {
+  const richardLegacyCandidates = [
+    { id: 'legacy-full-body-a', title: 'Full Body A', description: null, workout_type: 'full_body_a' },
+    { id: 'legacy-full-body-b', title: 'Full Body B', description: null, workout_type: 'full_body_b' },
+  ];
+
+  test('BEFORE the fix (allowLegacyGenericMatch left at its default true) — every one of 3 distinct activities collides on the same legacy row, reproducing the production bug', () => {
+    const monday = selectExistingSessionMatch(richardLegacyCandidates, 'gym');
+    const wednesday = selectExistingSessionMatch(richardLegacyCandidates, 'gym');
+    const friday = selectExistingSessionMatch(richardLegacyCandidates, 'gym');
+    assert.ok(monday);
+    // The bug: identical selection for every distinct activity, because
+    // nothing here can tell them apart.
+    assert.equal(monday!.id, wednesday!.id);
+    assert.equal(monday!.id, friday!.id);
+  });
+
+  test('AFTER the fix (allowLegacyGenericMatch: false, the real call-site behaviour) — none of the 3 activities resolve to the legacy row at all', () => {
+    const opts = { allowLegacyGenericMatch: false };
+    const monday = selectExistingSessionMatch(richardLegacyCandidates, 'gym', opts);
+    const wednesday = selectExistingSessionMatch(richardLegacyCandidates, 'gym', opts);
+    const friday = selectExistingSessionMatch(richardLegacyCandidates, 'gym', opts);
+    assert.equal(monday, undefined);
+    assert.equal(wednesday, undefined);
+    assert.equal(friday, undefined);
+    // Falling through to undefined is exactly what makes
+    // getActivityRecommendation proceed to System 2's structure-aware
+    // classifyStrengthStructure/fitStrengthSessionForStructure path.
+  });
+
+  test('a genuine trainer-owned session (untyped, real title) is still found and still wins — precedence for real human coaching is preserved', () => {
+    const candidates = [
+      ...richardLegacyCandidates,
+      { id: 'trainer-row', title: 'Coach Assigned Strength', description: null, workout_type: null },
+    ];
+    const match = selectExistingSessionMatch(candidates, 'gym', { allowLegacyGenericMatch: false });
+    assert.equal(match?.id, 'trainer-row');
+  });
+
+  test('empty candidate list (no legacy programme at all) — no match, no error', () => {
+    assert.equal(selectExistingSessionMatch([], 'gym', { allowLegacyGenericMatch: false }), undefined);
   });
 });
 

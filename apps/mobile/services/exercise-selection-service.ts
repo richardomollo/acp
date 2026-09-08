@@ -273,6 +273,34 @@ async function fetchCandidates(query: string, difficulty?: ExerciseDifficulty, e
   }
 }
 
+/** Generation-time-budget fix — the exact same Tier 5 curated fallback +
+ *  duplicate-folding logic `selectExerciseForRequirement` falls through to
+ *  when the provider has no fit-passing candidate, reached directly (no
+ *  network call) once the caller's overall time budget has already passed. */
+function budgetExceededFallback(
+  requirement: ExerciseRequirement,
+  rx: { sets: number; reps: number; restSeconds: number; notes: string },
+  equipmentLocation: 'home' | 'gym',
+  alreadySelected: Set<string>,
+): SelectedExercise {
+  const fallbackExercise = buildFallbackExercise(requirement, { equipmentLocation, alreadySelected });
+  if (isAlreadySelected(fallbackExercise, alreadySelected)) {
+    return {
+      exercise: fallbackExercise,
+      ...rx,
+      fallbackUsed: true,
+      duplicate: true,
+      fallbackReason: `Only candidate for ${requirement.bodyPart} (${requirement.pattern}) is already in this session — folded its volume into the existing exercise instead of adding a duplicate row.`,
+    };
+  }
+  return {
+    exercise: fallbackExercise,
+    ...rx,
+    fallbackUsed: true,
+    fallbackReason: `Session generation time budget reached before ${requirement.bodyPart} (${requirement.pattern}) could be looked up — used built-in fallback rather than keep waiting.`,
+  };
+}
+
 /**
  * Relaxation ladder: location -> difficulty -> equipment -> duplicate
  * avoidance -> hardcoded safe fallback. At every tier, candidates are
@@ -287,6 +315,22 @@ export async function selectExerciseForRequirement(
   equipmentLocation: 'home' | 'gym',
   difficulty: ExerciseDifficulty,
   alreadySelected: Set<string>,
+  opts?: {
+    /**
+     * Generation-time-budget fix (TestFlight incident, 2026-09) — set once a
+     * caller's overall session-generation deadline has already passed. Skips
+     * every provider network call for THIS requirement and goes straight to
+     * the same Tier 5 curated fallback used when the provider genuinely has
+     * no fit-passing candidate — never a new/different exercise pool, just a
+     * bounded path to it. See populateExerciseWorkout's GENERATION_TIME_
+     * BUDGET_MS for why this exists: each requirement can cost up to 2 real
+     * network round-trips (Tier 1 + Tier 2; Tier 3 reuses Tier 2's response
+     * via exerciseService's own cache), sequentially, one requirement at a
+     * time — an unreachable/slow provider could otherwise compound across
+     * every exercise in the session with no ceiling.
+     */
+    skipNetwork?: boolean;
+  },
 ): Promise<SelectedExercise> {
   // Beta #015B — a compound row's sets/reps/rest scale with experience so an
   // advanced primary session's stored prescription matches its estimated
@@ -295,6 +339,11 @@ export async function selectExerciseForRequirement(
     ? { ...REPS_BY_ROLE.compound, ...compoundPrescription(difficulty) } // keep the coaching note, scale sets/reps/rest
     : REPS_BY_ROLE[requirement.role];
   const primaryQuery = requirement.muscleHint ?? requirement.bodyPart;
+
+  if (opts?.skipNetwork) {
+    return budgetExceededFallback(requirement, rx, equipmentLocation, alreadySelected);
+  }
+
   const pool = await fetchCandidates(primaryQuery, difficulty);
   const byLocation = pool.filter(ex => matchesLocation(equipmentLocation, ex.equipment));
 

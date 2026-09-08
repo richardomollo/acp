@@ -199,6 +199,12 @@ export interface CompletionInput {
   proposedActions: ProposedAction[];
   /** client_tasks already linked to THIS session (for idempotent re-complete). */
   existingSessionActions: ExistingActionRow[];
+  /** Product kill switch for client task creation ("From your coach" agreed
+   *  actions) — defaults true so this pure function stays fully testable in
+   *  isolation; the real caller (SessionWorkspace) passes the actual UI-level
+   *  flag value. When false, taskInserts is always empty regardless of
+   *  proposedActions. */
+  tasksEnabled?: boolean;
   nowIso: string;
   /** Phase 6 (Step 6) — optional. Anything not one of the allowed values is
    *  dropped to null (the DB CHECK is the backstop). */
@@ -238,9 +244,10 @@ const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
  * skipped) — so repeated "Complete session" is idempotent (§13).
  */
 export function buildCompletionPlan(input: CompletionInput): CompletionPlan {
+  const tasksEnabled = input.tasksEnabled ?? true;
   const seen = new Set(input.existingSessionActions.map((a) => norm(a.title)));
   const taskInserts: CompletionPlan['taskInserts'] = [];
-  if (input.clientUserId && input.personalTrainerId) {
+  if (tasksEnabled && input.clientUserId && input.personalTrainerId) {
     for (const a of input.proposedActions) {
       const title = a.title.trim();
       if (title.length === 0) continue;

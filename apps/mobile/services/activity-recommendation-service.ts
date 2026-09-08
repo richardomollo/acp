@@ -28,7 +28,7 @@ import { normalizeActivity, type NormalizedActivityKey } from '@/lib/fulfilment'
 import type { StartingPlanActivity } from '@/lib/ai-assessment';
 import type { ActivityRecommendation, ProfessionalSupportRecommendation, SessionType } from '@/lib/activity-recommendation-types';
 import {
-  buildProfessionalSupport, isSupportedActivity, matchesExistingSession, findReusableSuggestedSession, toLocalDateKey,
+  buildProfessionalSupport, isSupportedActivity, selectExistingSessionMatch, findReusableSuggestedSession, toLocalDateKey,
   isValidSuggestedSession, SUGGESTED_WORKOUT_TYPE, suggestedStrengthWorkoutType, SESSION_HEADLINE, SESSION_TITLE, SESSION_REASON, SESSION_DURATION_MINUTES,
   classifyRunSlot, needsExperienceHeal, type SupportedActivityKey,
 } from '@/lib/activity-recommendation';
@@ -168,9 +168,23 @@ async function estimateWorkoutDuration(workoutId: string): Promise<number | null
  * TRAINER_MODIFIED all route here identically, section 5/22), and
  * regardless of whether `key` is one ACP can itself generate (a
  * trainer-created session for an otherwise-unsupported activity still wins).
+ *
+ * Lana-precedence fix (Workout Prescription root-cause audit, product
+ * decision): `hasLanaWeeklyActivity` is true at this function's one real
+ * call site below, since getActivityRecommendation is always invoked with a
+ * genuine fitness_profile.ai_assessment.starting_plan.activities[] entry —
+ * the Lana Intelligence weekly plan is authoritative for workout execution
+ * whenever such an activity exists. Passed through to
+ * matchesExistingSession to suppress ONLY the coarse structural match on
+ * the legacy System-1 generator's generic full_body_a/full_body_b types
+ * (which has no upper/lower/support concept and was the confirmed root
+ * cause of multiple distinct weekly-plan activities all resolving to the
+ * same legacy row). A genuinely custom/trainer-authored session still
+ * matches via the text-keyword fallback either way, so real trainer
+ * ownership is unaffected.
  */
 async function findExistingSession(
-  userId: string, key: NormalizedActivityKey,
+  userId: string, key: NormalizedActivityKey, hasLanaWeeklyActivity: boolean,
 ): Promise<{ id: string; title: string; isActivityBlock: boolean; durationMinutes: number; exerciseCount?: number } | null> {
   const overview = await programmeService.getActiveProgramme(userId);
   if (!overview) return null;
@@ -182,9 +196,16 @@ async function findExistingSession(
   const currentWeek = overview.weeks.find((w: any) => w.week_number === currentWeekNumber);
   if (!currentWeek) return null;
 
-  const candidates = overview.workouts.filter((w: any) => w.program_week_id === currentWeek.id);
-  const match = candidates.find((w: any) =>
-    matchesExistingSession({ title: w.title, description: w.description, workout_type: w.workout_type }, key));
+  interface CandidateWorkoutRow {
+    id: string; title: string; description: string | null; workout_type: string | null;
+    is_activity_block: boolean; duration_minutes: number; program_week_id: string;
+  }
+  const candidates = (overview.workouts as CandidateWorkoutRow[]).filter(w => w.program_week_id === currentWeek.id);
+  const match = selectExistingSessionMatch(
+    candidates.map(w => ({ id: w.id, title: w.title, description: w.description, workout_type: w.workout_type, is_activity_block: w.is_activity_block, duration_minutes: w.duration_minutes })),
+    key,
+    { allowLegacyGenericMatch: !hasLanaWeeklyActivity },
+  );
   if (!match) return null;
 
   const isActivityBlock = !!match.is_activity_block;
@@ -249,6 +270,24 @@ async function weeklyStrengthExerciseKeys(
  * sort_order rather than assuming 0, so a partial prior attempt's rows
  * aren't overwritten or order-collided.
  */
+// TestFlight incident, 2026-09 — root cause: for a fresh (never-before-
+// generated) session, each of ~11 requirements is selected SEQUENTIALLY, and
+// each can cost up to 2 real exercise-provider network round-trips (Tier 1 +
+// Tier 2 in exercise-selection-service.ts; Tier 3 reuses Tier 2's response
+// via the provider's own cache), every one capped at a 15s client timeout.
+// With no ceiling on the whole loop, a slow/degraded provider could compound
+// across every requirement — worst case ~11 × 2 × 15s ≈ 5.5 minutes — with
+// the UI showing nothing but "Preparing your workout…" the entire time,
+// indistinguishable from being permanently stuck. This budget bounds the
+// WHOLE session's worth of provider lookups to a predictable ceiling: once
+// elapsed time crosses it, every REMAINING requirement skips the network
+// entirely and resolves straight to ACP's own curated fallback exercise
+// (exercise-selection-service.ts's existing Tier 5 — already the same safe,
+// context-aware fallback used for an outright provider outage, Beta #017),
+// rather than adding another slow lookup. Requirements already in flight or
+// already resolved are untouched; this only changes what happens NEXT.
+const GENERATION_TIME_BUDGET_MS = 45_000;
+
 async function populateExerciseWorkout(
   workoutId: string, requirements: ExerciseRequirement[], context: GenerationContext,
   // Beta #016 (§9/§11) — normalized names of ACCESSORY/CORE exercises already
@@ -261,6 +300,7 @@ async function populateExerciseWorkout(
   const alreadySelected = new Set<string>();
   let sortOrder = await countWorkoutExercises(workoutId);
   let exerciseCount = 0;
+  const startedAt = Date.now();
 
   for (const requirement of requirements) {
     const isCompound = requirement.role === 'compound';
@@ -271,7 +311,8 @@ async function populateExerciseWorkout(
       ? alreadySelected
       : new Set<string>([...alreadySelected, ...weeklyAccessoryExclusions]);
 
-    const picked = await selectExerciseForRequirement(requirement, context.equipmentLocation, context.experience, exclude);
+    const skipNetwork = Date.now() - startedAt > GENERATION_TIME_BUDGET_MS;
+    const picked = await selectExerciseForRequirement(requirement, context.equipmentLocation, context.experience, exclude, { skipNetwork });
 
     // Beta #016 invariant + Beta #017 §16/§17 — a requirement that can only
     // be satisfied by an exercise already in this session is DROPPED, not
@@ -621,7 +662,10 @@ export async function getActivityRecommendation(
   if (!(await assertOwnSession(userId))) return fallback();
 
   const [existing, insight] = await Promise.all([
-    findExistingSession(userId, key),
+    // `activity` is always a genuine fitness_profile.ai_assessment.
+    // starting_plan.activities[] entry at this call site (rawActivity's
+    // type is non-optional StartingPlanActivity) — Lana precedence applies.
+    findExistingSession(userId, key, /* hasLanaWeeklyActivity */ true),
     getHumanSupportInsight(userId, venueScopeIds, locationKnown).catch(() => null),
   ]);
   const professionalSupport = buildProfessionalSupport(insight);

@@ -44,14 +44,16 @@ export function isNutritionCoachingEnabled(): boolean {
   return !isOff('ACP_NUTRITION_COACHING_ENABLED');
 }
 
-//   ACP_NUTRITION_CAMERA_ENABLED=false
-//     → the nutrition-photo-analysis route returns 503; the mobile Log-food
-//       screen hides its "Take a photo" / "Choose from library" entry via the
-//       matching EXPO_PUBLIC_ flag and users log foods by search exactly as
-//       before. The camera only ever assists creating normal N1 food
-//       evidence — nothing downstream depends on it (N5 §4/§37).
+//   Product decision — photo-based meal logging turned OFF by default (was
+//   on-by-default; off only for exactly "false"). Set
+//   ACP_NUTRITION_CAMERA_ENABLED=true to re-enable. When off: the
+//   nutrition-photo-analysis route returns 503; the mobile Log-food screen
+//   hides its "Take a photo" / "Choose from library" entry via the matching
+//   EXPO_PUBLIC_ flag and users log foods by search exactly as before. The
+//   camera only ever assisted creating normal N1 food evidence — nothing
+//   downstream depends on it (N5 §4/§37).
 export function isNutritionCameraEnabled(): boolean {
-  return !isOff('ACP_NUTRITION_CAMERA_ENABLED');
+  return process.env.ACP_NUTRITION_CAMERA_ENABLED === 'true';
 }
 
 //   ACP_NUTRITION_SAVED_MEALS_ENABLED=false
@@ -94,6 +96,21 @@ export function isNutritionAdviceEffectivenessEnabled(): boolean {
 export function isNutritionOutcomeIntelligenceEnabled(): boolean {
   return !isOff('ACP_OUTCOME_INTELLIGENCE_ENABLED');
 }
+
+// Product decision — client task assignment ("From your coach" agreed
+// actions / the client_tasks table) is disabled on both the PT-authoring
+// side (this constant, checked in SessionWorkspace.tsx, session-model.ts's
+// buildCompletionPlan, and the legacy /pt-dashboard client page) and the
+// customer-facing side (apps/mobile's isProfessionalContinuityEnabled(),
+// same product decision, gated separately since mobile is a different app).
+// Hardcoded rather than env-based, unlike the flags above — the surfaces
+// this gates run in client components across TWO separate Next.js apps
+// (this one and apps/partners, which has its own equivalent constant in
+// lib/flags.ts), where an env var would need separate dashboard
+// configuration in each app and could silently drift out of sync. Existing
+// client_tasks rows are untouched; only new creation is blocked. Rollback:
+// flip back to true, no schema change needed.
+export const CLIENT_TASKS_ENABLED = false;
 
 /** Snapshot for a single structured log line at request start. */
 export function flagSnapshot(): { weeklyAdaptation: boolean; rag: boolean; executionFeedback: boolean; nutritionCoaching: boolean; nutritionCamera: boolean; nutritionSavedMeals: boolean; nutritionFitnessContext: boolean; nutritionAdviceEffectiveness: boolean; nutritionOutcomeIntelligence: boolean } {

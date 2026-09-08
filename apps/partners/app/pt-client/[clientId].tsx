@@ -7,6 +7,7 @@ import { useState, useCallback } from 'react';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
+import { CLIENT_TASKS_ENABLED } from '@/lib/flags';
 
 type ClientInfo = { name: string | null; email: string | null };
 type PtClientRow = { id: string; share_progress: boolean };
@@ -232,6 +233,7 @@ export default function PTClientDetailScreen() {
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const handleAddTask = async () => {
+    if (!CLIENT_TASKS_ENABLED) return;
     const title = newTaskTitle.trim();
     if (!title || !ptId || !clientId) return;
     if (newTaskRecurrence === 'weekly' && newTaskWeekdays.length === 0) {
@@ -428,6 +430,8 @@ export default function PTClientDetailScreen() {
             </View>
           )}
 
+          {CLIENT_TASKS_ENABLED && (
+          <>
           <View style={styles.tasksHeader}>
             <ThemedText style={[styles.sectionTitle, { marginBottom: 0 }]}>Tasks</ThemedText>
             <TouchableOpacity onPress={() => setAddingTask(o => !o)} hitSlop={8}>
@@ -529,6 +533,8 @@ export default function PTClientDetailScreen() {
                 );
               })}
             </View>
+          )}
+          </>
           )}
 
           {ptClient?.share_progress && (

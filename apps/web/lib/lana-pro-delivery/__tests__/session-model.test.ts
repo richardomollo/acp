@@ -156,6 +156,17 @@ describe('buildCompletionPlan — idempotent (§13, §21)', () => {
     assert.equal(plan.recordUpdate.session_status, 'completed');
   });
 
+  test('tasksEnabled: false (product kill switch) → no task inserts even with real proposedActions, record + booking still update', () => {
+    const plan = buildCompletionPlan({ ...base, tasksEnabled: false });
+    assert.equal(plan.taskInserts.length, 0);
+    assert.equal(plan.recordUpdate.session_status, 'completed');
+  });
+
+  test('tasksEnabled omitted defaults to true (backward-compatible for existing/other callers)', () => {
+    const plan = buildCompletionPlan(base);
+    assert.ok(plan.taskInserts.length > 0);
+  });
+
   test('empty fields become null, not empty string', () => {
     const plan = buildCompletionPlan({ ...base, focus: '  ', privateNotes: '', clientSummary: '', sessionExercises: [] });
     assert.equal(plan.recordUpdate.focus, null);

@@ -11,6 +11,7 @@ import { Avatar } from "../../../components/ui/Avatar";
 import { Chip } from "../../../components/ui/Chip";
 import { ListHeader } from "../../../components/ui/ListHeader";
 import { EmptyState } from "../../../components/ui/EmptyState";
+import { CLIENT_TASKS_ENABLED } from "@/lib/flags";
 
 const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -250,6 +251,7 @@ export default function PTClientDetailPage({ params }: { params: Promise<{ clien
   useEffect(() => { load(); }, [load]);
 
   const handleAddTask = async () => {
+    if (!CLIENT_TASKS_ENABLED) return;
     const title = newTaskTitle.trim();
     if (!title || !ptId || !clientId) return;
     if (newTaskRecurrence === "weekly" && newTaskWeekdays.length === 0) {
@@ -387,7 +389,9 @@ export default function PTClientDetailPage({ params }: { params: Promise<{ clien
         </div>
       )}
 
-      {/* Tasks */}
+      {/* Tasks — product kill switch, see lib/flags.ts's CLIENT_TASKS_ENABLED */}
+      {CLIENT_TASKS_ENABLED && (
+        <>
       <ListHeader
         title="Tasks"
         action={
@@ -478,6 +482,8 @@ export default function PTClientDetailPage({ params }: { params: Promise<{ clien
             );
           })}
         </div>
+      )}
+        </>
       )}
 
       {/* Body stats + mood */}
