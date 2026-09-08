@@ -1,38 +1,21 @@
-// Overrides Expo Router's default "Unmatched Route" screen.
+// Overrides Expo Router's default "Unmatched Route" screen for a genuinely
+// unrecognised deep link.
 //
-// Root cause this specifically works around: on Android, the Google
-// sign-in redirect (expo-auth-session, via google-signin-button.tsx) lands
-// back in the app as a real incoming URL — but Expo Router's own linking
-// listener treats ANY unrecognised incoming URL as ordinary in-app
-// navigation, landing here, at the same time expo-web-browser's own
-// listener (WebBrowser.maybeCompleteAuthSession(), already called at
-// google-signin-button.tsx's module scope) is independently trying to
-// resolve the pending auth-session promise from that same URL. Sign-in
-// itself very likely already completes in the background either way — this
-// screen's job is just to not strand the user on a scary dead-end 404 with
-// a raw OAuth code printed in the URL text, and to give
-// maybeCompleteAuthSession() one more explicit chance to fire.
-import { useEffect } from 'react';
-import { View, ActivityIndicator } from 'react-native';
-import { useRouter } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
-import { palette } from '@/constants/theme';
+// The Android Google OAuth redirect that used to land here (see this file's
+// git history) now has its own dedicated route —
+// app/oauth2redirect/google.tsx — which is the correct fix (an expected,
+// first-class part of the app's routing surface should never be handled as
+// a 404 special case). This screen goes back to being a plain, generic
+// "somewhere else" recovery for any OTHER unmatched path.
+//
+// Declarative <Redirect>, never an imperative router.replace()/push() —
+// the same lifecycle-safe pattern used in app/index.tsx and
+// app/oauth2redirect/google.tsx, so a genuinely unmatched deep link
+// reached before the root navigator has finished mounting can never
+// reintroduce "Attempted to navigate before mounting the Root Layout
+// component."
+import { Redirect } from 'expo-router';
 
 export default function NotFoundScreen() {
-  const router = useRouter();
-
-  useEffect(() => {
-    WebBrowser.maybeCompleteAuthSession();
-    const timeout = setTimeout(() => {
-      if (router.canGoBack()) router.back();
-      else router.replace('/');
-    }, 150);
-    return () => clearTimeout(timeout);
-  }, [router]);
-
-  return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.white }}>
-      <ActivityIndicator color={palette.ink700} />
-    </View>
-  );
+  return <Redirect href="/" />;
 }

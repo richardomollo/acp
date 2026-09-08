@@ -13,7 +13,8 @@ import {
 } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { authService } from '@/services/auth';
 import { useAuthModal } from '@/contexts/auth-modal-context';
@@ -21,8 +22,14 @@ import { GoogleSignInButton, isGoogleSignInSupported } from '@/components/google
 import { AppleSignInButton } from '@/components/apple-signin-button';
 import { palette, radii, fontSize } from '@/constants/theme';
 
+// Cross-platform auth keyboard occlusion fix (2026-09) — space kept visible
+// above a focused input once it's scrolled into view, so the field itself
+// (not just its very top edge) clears the keyboard.
+const FOCUSED_INPUT_SCROLL_MARGIN = 24;
+
 export function GlobalAuthModal() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { visible, defaultTab, redirectTo, hideAuthModal, _notifySuccess } = useAuthModal();
 
   const [tab, setTab] = useState<'login' | 'signup' | 'forgot'>(defaultTab);
@@ -31,6 +38,32 @@ export function GlobalAuthModal() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [forgotSent, setForgotSent] = useState(false);
+
+  // Focused-input visibility (§4) — KeyboardAvoidingView shrinks the
+  // available space so the SHEET stops being covered, but on a taller form
+  // (signup: name/email/password) that alone doesn't guarantee a field near
+  // the top of the sheet is still on-screen once the keyboard takes the
+  // bottom ~40% — this scrolls whichever field was just focused into view,
+  // using React Native's own TextInput.measureLayout (no new dependency,
+  // no setTimeout — it runs directly off onFocus, by which point the input
+  // is already laid out).
+  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollToInput = (inputRef: React.RefObject<TextInput | null>) => {
+    const input = inputRef.current;
+    const scrollNode = scrollViewRef.current;
+    if (!input || !scrollNode) return;
+    input.measureLayout(
+      scrollNode as any,
+      (_x: number, y: number) => scrollNode.scrollTo({ y: Math.max(0, y - FOCUSED_INPUT_SCROLL_MARGIN), animated: true }),
+      () => {},
+    );
+  };
+  const nameInputRef = useRef<TextInput>(null);
+  const signupEmailInputRef = useRef<TextInput>(null);
+  const signupPasswordInputRef = useRef<TextInput>(null);
+  const loginEmailInputRef = useRef<TextInput>(null);
+  const loginPasswordInputRef = useRef<TextInput>(null);
+  const forgotEmailInputRef = useRef<TextInput>(null);
 
   useEffect(() => { if (visible) setTab(defaultTab); }, [visible, defaultTab]);
 
@@ -121,11 +154,21 @@ export function GlobalAuthModal() {
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
       <KeyboardAvoidingView
         style={styles.overlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        // Cross-platform auth keyboard occlusion fix — the previous
+        // `undefined` on Android meant KeyboardAvoidingView did nothing at
+        // all there (its own documented behaviour): the sheet, anchored at
+        // the bottom via justifyContent:'flex-end', was simply covered by
+        // the keyboard sliding up over it. 'height' is the standard
+        // Android counterpart to iOS's 'padding' for exactly this
+        // bottom-sheet-in-a-Modal shape, and — unlike the native
+        // windowSoftInputMode config — works reliably inside a <Modal> on
+        // Android, which renders as its own Dialog window and does not
+        // reliably inherit the host Activity's soft-input resize mode.
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={handleClose} />
 
-        <View style={styles.sheet}>
+        <View style={[styles.sheet, { paddingBottom: insets.bottom + (Platform.OS === 'ios' ? 24 : 16) }]}>
           {/* Handle */}
           <View style={styles.handle} />
 
@@ -134,7 +177,13 @@ export function GlobalAuthModal() {
             <Ionicons name="close" size={20} color={palette.gray450} />
           </TouchableOpacity>
 
-          <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <ScrollView
+            ref={scrollViewRef}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
+          >
 
             {/* ── Sign Up view ── */}
             {tab === 'signup' && (
@@ -147,6 +196,8 @@ export function GlobalAuthModal() {
                 <ThemedText style={styles.subheadline}>Access gyms, studios & wellness across Nairobi</ThemedText>
 
                 <TextInput
+                  ref={nameInputRef}
+                  onFocus={() => scrollToInput(nameInputRef)}
                   style={styles.input}
                   placeholder="Full name"
                   placeholderTextColor={palette.gray300}
@@ -156,6 +207,8 @@ export function GlobalAuthModal() {
                   editable={!loading}
                 />
                 <TextInput
+                  ref={signupEmailInputRef}
+                  onFocus={() => scrollToInput(signupEmailInputRef)}
                   style={styles.input}
                   placeholder="Email address"
                   placeholderTextColor={palette.gray300}
@@ -166,6 +219,8 @@ export function GlobalAuthModal() {
                   editable={!loading}
                 />
                 <TextInput
+                  ref={signupPasswordInputRef}
+                  onFocus={() => scrollToInput(signupPasswordInputRef)}
                   style={styles.input}
                   placeholder="Password (min. 6 characters)"
                   placeholderTextColor={palette.gray300}
@@ -230,6 +285,8 @@ export function GlobalAuthModal() {
                 <ThemedText style={styles.subheadline}>Let’s keep working towards your goals.</ThemedText>
 
                 <TextInput
+                  ref={loginEmailInputRef}
+                  onFocus={() => scrollToInput(loginEmailInputRef)}
                   style={styles.input}
                   placeholder="Email address"
                   placeholderTextColor={palette.gray300}
@@ -240,6 +297,8 @@ export function GlobalAuthModal() {
                   editable={!loading}
                 />
                 <TextInput
+                  ref={loginPasswordInputRef}
+                  onFocus={() => scrollToInput(loginPasswordInputRef)}
                   style={styles.input}
                   placeholder="Password"
                   placeholderTextColor={palette.gray300}
@@ -327,6 +386,8 @@ export function GlobalAuthModal() {
                 ) : (
                   <>
                     <TextInput
+                      ref={forgotEmailInputRef}
+                      onFocus={() => scrollToInput(forgotEmailInputRef)}
                       style={styles.input}
                       placeholder="Email address"
                       placeholderTextColor={palette.gray300}
@@ -370,9 +431,17 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingHorizontal: 24,
-    paddingBottom: Platform.OS === 'ios' ? 48 : 32,
+    // paddingBottom is set inline (insets.bottom-based, never a hardcoded
+    // device height — see the sheet's own style prop) so the CTA/legal text
+    // never sits under the home indicator/nav bar on any device.
     maxHeight: '93%',
   },
+  // flexGrow:1 lets a SHORT tab (e.g. forgot-password, one field) still
+  // fill the sheet's available height rather than shrink-wrapping to
+  // content — matters once KeyboardAvoidingView has already reduced that
+  // available height, so the remaining space is real, scrollable room
+  // rather than empty space below a shrink-wrapped ScrollView.
+  scrollContent: { flexGrow: 1 },
   handle: {
     width: 40, height: 4, backgroundColor: palette.borderFaint,
     borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 6,
