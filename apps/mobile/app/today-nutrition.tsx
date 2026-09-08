@@ -123,9 +123,24 @@ export default function TodayNutritionScreen() {
     let active = true;
     (async () => {
       setLoading(true);
+      // LANA IOS — hard loading invariant: setLoading(false) lives in a
+      // `finally` (below) rather than at each individual return point, so
+      // this screen structurally cannot get stuck showing a spinner no
+      // matter which awaited call returns early, throws, or is added later
+      // — belt-and-braces on top of the actual fix (the shared bounded
+      // Supabase fetch in lib/supabase.tsx), not a substitute for it: every
+      // plain `supabase.from(...)` call here already resolves (never
+      // rejects) on a timeout, since nothing in this file uses
+      // `.throwOnError()` — postgrest-js's default behaviour converts a
+      // timed-out request into `{ data: null, error }`, which this
+      // screen's existing `?? []` / `?.` handling already tolerates as
+      // "nothing found". This `finally` protects against a genuine throw
+      // (e.g. a bug elsewhere in this function), not against the shared
+      // fetch itself.
+      try {
       const session = await authService.getSession();
       if (!session?.user.id) {
-        if (active) { setUserId(null); setItems([]); setAssessment(null); setLoading(false); }
+        if (active) { setUserId(null); setItems([]); setAssessment(null); }
         return;
       }
       if (active) setUserId(session.user.id);
@@ -327,8 +342,9 @@ export default function TodayNutritionScreen() {
         setIsSuggested(true);
         setLoggedIds(new Set());
       }
-
-      if (active) setLoading(false);
+      } finally {
+        if (active) setLoading(false);
+      }
     })();
     return () => { active = false; };
   }, []));
