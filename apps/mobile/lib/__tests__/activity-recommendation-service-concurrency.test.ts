@@ -38,13 +38,20 @@ const TEST_USER_ID = '99999999-0000-0000-0000-000000000001';
 
 // globalThis.fetch is ALSO how supabase-js itself makes every real request
 // (the workouts/workout_exercises calls this test is actually trying to
-// observe) — so the mock must only intercept calls bound for the MuscleWiki
-// proxy and pass everything else through to the real fetch untouched.
+// observe) — so the mock must only intercept calls bound for an exercise
+// provider and pass everything else through to the real fetch untouched.
+// ExerciseDB Primary / MuscleWiki Optional — populateExerciseWorkout now
+// resolves exercises via exercisedb-provider.ts by default (MuscleWiki is
+// reachable only through the separate media-enrichment path, never here),
+// so BOTH hosts are intercepted; without this, a REQUIREMENTS call would
+// otherwise fall through to the real, rate-limited exercisedb.p.rapidapi.com
+// during a plain test run.
 const realFetch = globalThis.fetch;
 const MUSCLEWIKI_PREFIX = 'https://activecitypass.com/api/musclewiki';
+const EXERCISEDB_PREFIX = 'https://exercisedb.p.rapidapi.com';
 function mockSearchResponse(exercises: any[]) {
   return (async (url: any, init?: any) => {
-    if (typeof url === 'string' && url.startsWith(MUSCLEWIKI_PREFIX)) {
+    if (typeof url === 'string' && (url.startsWith(MUSCLEWIKI_PREFIX) || url.startsWith(EXERCISEDB_PREFIX))) {
       return { ok: true, json: async () => exercises, text: async () => JSON.stringify(exercises) } as any;
     }
     return realFetch(url, init);

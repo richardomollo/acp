@@ -7,9 +7,12 @@ function requirement(overrides: Partial<ExerciseRequirement> = {}): ExerciseRequ
   return { pattern: 'squat', bodyPart: 'upper legs', muscleHint: 'quad', role: 'compound', ...overrides };
 }
 
-// Real MuscleWiki contract (Beta Readiness Step 1): /search returns a bare
-// array of full exercise objects, muscles live in `primary_muscles`, and
-// `category` is the equipment field (e.g. "Barbell", "Dumbbell", "Bodyweight").
+// ExerciseDB Primary / MuscleWiki Optional (2026-09) — exercise-service.ts's
+// activeProvider is now exercisedbProvider, so fetchCandidates ultimately
+// hits ExerciseDB's real contract: every list endpoint returns a bare array
+// of full exercise objects, muscle lives in `target`, and `equipment` is its
+// own field (e.g. "barbell", "dumbbell", "body weight") — see
+// services/providers/exercisedb-provider.ts's raw shape.
 function mockSearchResponse(exercises: any[]) {
   return (async () => ({ ok: true, json: async () => exercises } as any)) as any;
 }
@@ -23,8 +26,8 @@ describe('selectExerciseForRequirement', () => {
 
   test('picks a candidate matching muscle hint, location, and difficulty (tier 1)', async () => {
     globalThis.fetch = mockSearchResponse([
-      { id: 1, name: 'Bodyweight Squat', primary_muscles: ['Quads'], category: 'Bodyweight', difficulty: 'Beginner' },
-      { id: 2, name: 'Leg Press', primary_muscles: ['Quads'], category: 'Machine', difficulty: 'Beginner' },
+      { id: 1, name: 'Bodyweight Squat', bodyPart: 'upper legs', target: 'quads', equipment: 'body weight' },
+      { id: 2, name: 'Leg Press', bodyPart: 'upper legs', target: 'quads', equipment: 'leverage machine' },
     ]);
     const result = await selectExerciseForRequirement(requirement({ bodyPart: 'legs-t1', muscleHint: 'quad' }), 'home', 'beginner', new Set());
     assert.equal(result.exercise.id, '1');
@@ -35,8 +38,8 @@ describe('selectExerciseForRequirement', () => {
 
   test('avoids an already-selected exercise when another candidate exists', async () => {
     globalThis.fetch = mockSearchResponse([
-      { id: 1, name: 'Bodyweight Squat', primary_muscles: ['Quads'], category: 'Bodyweight', difficulty: 'Beginner' },
-      { id: 2, name: 'Goblet Squat', primary_muscles: ['Quads'], category: 'Dumbbell', difficulty: 'Beginner' },
+      { id: 1, name: 'Bodyweight Squat', bodyPart: 'upper legs', target: 'quads', equipment: 'body weight' },
+      { id: 2, name: 'Goblet Squat', bodyPart: 'upper legs', target: 'quads', equipment: 'dumbbell' },
     ]);
     // "quads" (not "quad") — a different, still-valid substring of the mock's
     // muscle name, purely so this test gets its own exerciseService cache
@@ -47,7 +50,7 @@ describe('selectExerciseForRequirement', () => {
 
   test('relaxes the equipment/location filter when nothing home-friendly is available', async () => {
     globalThis.fetch = mockSearchResponse([
-      { id: 1, name: 'Barbell Back Squat', primary_muscles: ['Quads'], category: 'Barbell', difficulty: 'Beginner' },
+      { id: 1, name: 'Barbell Back Squat', bodyPart: 'upper legs', target: 'quads', equipment: 'barbell' },
     ]);
     const result = await selectExerciseForRequirement(requirement({ bodyPart: 'legs-t3', muscleHint: 'qua' }), 'home', 'beginner', new Set());
     assert.equal(result.exercise.id, '1'); // no home-equipment match exists, so the only real candidate wins over the hardcoded fallback
@@ -66,7 +69,7 @@ describe('selectExerciseForRequirement', () => {
 
   test('TestFlight incident fix — skipNetwork bypasses the provider entirely and goes straight to the Tier 5 fallback', async () => {
     let fetchCalled = false;
-    globalThis.fetch = (async () => { fetchCalled = true; return { ok: true, json: async () => [{ id: 99, name: 'Should never be seen', primary_muscles: ['Quads'], category: 'Barbell' }] } as any; }) as any;
+    globalThis.fetch = (async () => { fetchCalled = true; return { ok: true, json: async () => [{ id: 99, name: 'Should never be seen', bodyPart: 'upper legs', target: 'quads', equipment: 'barbell' }] } as any; }) as any;
     const result = await selectExerciseForRequirement(
       requirement({ bodyPart: 'legs-skipnet', muscleHint: 'no-match-skipnet' }), 'home', 'beginner', new Set(), { skipNetwork: true },
     );
@@ -105,9 +108,9 @@ describe('selectExerciseForRequirement', () => {
     assert.equal(core.restSeconds, 45);
   });
 
-  test('an equipment value with different spacing/casing than ACP’s own convention still matches home equipment (e.g. real "Bodyweight" vs historical "body weight")', async () => {
+  test('an equipment value with different spacing/casing than ACP’s own convention still matches home equipment (e.g. real ExerciseDB "body weight")', async () => {
     globalThis.fetch = mockSearchResponse([
-      { id: 3, name: 'Push Up', primary_muscles: ['Chest'], category: 'Bodyweight', difficulty: 'Beginner' },
+      { id: 3, name: 'Push Up', bodyPart: 'chest', target: 'pectorals', equipment: 'body weight' },
     ]);
     const result = await selectExerciseForRequirement(requirement({ bodyPart: 'chest-t7', pattern: 'horizontal_push', muscleHint: 'chest' }), 'home', 'beginner', new Set());
     assert.equal(result.exercise.id, '3');
@@ -144,17 +147,22 @@ describe('buildFallbackExercise', () => {
   });
 });
 
-// Chunk 4.5C live-audit bug fix: MuscleWiki uses "Dumbbells"/"Kettlebells"
-// (plural) but ACP's HOME_EQUIPMENT only listed the singular forms, so
-// every dumbbell/kettlebell candidate was silently excluded from every
-// 'home' generation — pushing selection toward worse candidates further
-// down the relaxation ladder. Also covers the new home-friendly equipment
-// categories ('stretches'/'recovery'/'pilates'/'yoga') found live to be
-// real MuscleWiki mobility-content equipment tags.
+// Chunk 4.5C live-audit bug fix (originally against MuscleWiki, which used
+// "Dumbbells"/"Kettlebells" plural): ACP's HOME_EQUIPMENT set carries both
+// singular and plural forms plus the mobility-content categories
+// ('stretches'/'recovery'/'pilates'/'yoga') so ANY provider using either
+// vocabulary is recognised correctly — this set is shared, provider-
+// agnostic code (exercise-selection-service.ts), unchanged by the
+// ExerciseDB Primary / MuscleWiki Optional switch, so it still needs
+// coverage regardless of which provider is active today. Fixtures below use
+// ExerciseDB's real raw shape (the provider actually in the critical path
+// now), not a claim that ExerciseDB itself returns "Stretches"/"Recovery"
+// tags (it doesn't — real ExerciseDB has very little mobility content at
+// all, a documented coverage gap the Lana curated fallback covers).
 describe('home-equipment vocabulary (Chunk 4.5C regression)', () => {
   test('plural "Dumbbells"/"Kettlebells" now match home, same as the singular forms', async () => {
     globalThis.fetch = mockSearchResponse([
-      { id: 10, name: 'Dumbbell Shoulder External Rotation', primary_muscles: ['Shoulders'], category: 'Dumbbells', difficulty: 'Beginner' },
+      { id: 10, name: 'Dumbbell Shoulder External Rotation', bodyPart: 'shoulders', target: 'delts', equipment: 'dumbbells' },
     ]);
     const result = await selectExerciseForRequirement(
       { pattern: 'vertical_push', bodyPart: 'shoulders-t8', muscleHint: 'shoulder', role: 'compound' },
@@ -164,9 +172,9 @@ describe('home-equipment vocabulary (Chunk 4.5C regression)', () => {
     assert.equal(result.fallbackUsed, false);
   });
 
-  test('"Stretches" and "Recovery" equipment categories are treated as home-friendly (real no-equipment mobility content)', async () => {
+  test('"stretches" and "recovery" equipment values are still treated as home-friendly (shared matching code, provider-agnostic)', async () => {
     globalThis.fetch = mockSearchResponse([
-      { id: 11, name: 'Shoulders Stretch Variation Four', primary_muscles: ['Shoulders'], category: 'Stretches', difficulty: 'Beginner' },
+      { id: 11, name: 'Shoulders Stretch Variation Four', bodyPart: 'shoulders', target: 'delts', equipment: 'stretches' },
     ]);
     const result = await selectExerciseForRequirement(
       { pattern: 'shoulder_mobility', bodyPart: 'shoulders-t9', muscleHint: 'shoulder-t9', role: 'mobility' },

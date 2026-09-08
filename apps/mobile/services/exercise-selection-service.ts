@@ -265,10 +265,33 @@ export function buildFallbackExercise(
 // core/back exercises). Prefer the requirement's own muscleHint as the
 // query whenever present; the caller's client-side muscle filter below is
 // still what does the real narrowing, this just improves the starting pool.
-async function fetchCandidates(query: string, difficulty?: ExerciseDifficulty, equipment?: string): Promise<ACPExercise[]> {
+//
+// ExerciseDB fast-fail hardening (2026-09) — `providerHealth` is one small
+// mutable flag SHARED across every fetchCandidates call within a single
+// generation attempt (populateExerciseWorkout threads the same object into
+// every selectExerciseForRequirement call in its loop). The first genuine
+// provider-level failure (timeout/network/rate-limit/server error — set by
+// the provider's own error type, never a merely-empty "no candidates"
+// result, which is a legitimate answer) marks it down; every subsequent
+// tier of the SAME requirement and every later requirement in this attempt
+// then skips the network immediately instead of each independently
+// retrying and timing out against a provider already known to be
+// unreachable. This is the "one short provider-availability budget across
+// the selection attempt" the fast-fail spec calls for — previously each of
+// up to 3 tiers × N requirements paid its own full timeout independently,
+// which is what let one unreachable provider consume up to 46.9s even
+// though each individual request was already bounded.
+export interface ProviderHealth { down: boolean }
+export function createProviderHealth(): ProviderHealth { return { down: false }; }
+
+async function fetchCandidates(
+  query: string, difficulty?: ExerciseDifficulty, equipment?: string, providerHealth?: ProviderHealth,
+): Promise<ACPExercise[]> {
+  if (providerHealth?.down) return []; // already known unreachable this attempt — don't pay for another timeout
   try {
     return await exerciseService.search({ query, difficulty, equipment });
   } catch {
+    if (providerHealth) providerHealth.down = true;
     return [];
   }
 }
@@ -276,12 +299,16 @@ async function fetchCandidates(query: string, difficulty?: ExerciseDifficulty, e
 /** Generation-time-budget fix — the exact same Tier 5 curated fallback +
  *  duplicate-folding logic `selectExerciseForRequirement` falls through to
  *  when the provider has no fit-passing candidate, reached directly (no
- *  network call) once the caller's overall time budget has already passed. */
-function budgetExceededFallback(
+ *  network call) once the caller's overall time budget has already passed,
+ *  OR (fast-fail hardening) once this attempt's shared providerHealth is
+ *  already known down. `reason` distinguishes the two in fallbackReason;
+ *  the mechanism (skip network, use the curated pool) is identical either way. */
+function skipNetworkFallback(
   requirement: ExerciseRequirement,
   rx: { sets: number; reps: number; restSeconds: number; notes: string },
   equipmentLocation: 'home' | 'gym',
   alreadySelected: Set<string>,
+  reason: 'time_budget' | 'provider_down',
 ): SelectedExercise {
   const fallbackExercise = buildFallbackExercise(requirement, { equipmentLocation, alreadySelected });
   if (isAlreadySelected(fallbackExercise, alreadySelected)) {
@@ -293,12 +320,10 @@ function budgetExceededFallback(
       fallbackReason: `Only candidate for ${requirement.bodyPart} (${requirement.pattern}) is already in this session — folded its volume into the existing exercise instead of adding a duplicate row.`,
     };
   }
-  return {
-    exercise: fallbackExercise,
-    ...rx,
-    fallbackUsed: true,
-    fallbackReason: `Session generation time budget reached before ${requirement.bodyPart} (${requirement.pattern}) could be looked up — used built-in fallback rather than keep waiting.`,
-  };
+  const fallbackReason = reason === 'time_budget'
+    ? `Session generation time budget reached before ${requirement.bodyPart} (${requirement.pattern}) could be looked up — used built-in fallback rather than keep waiting.`
+    : `ExerciseDB was unreachable earlier in this session — used built-in fallback for ${requirement.bodyPart} (${requirement.pattern}) rather than retry a provider already known to be down.`;
+  return { exercise: fallbackExercise, ...rx, fallbackUsed: true, fallbackReason };
 }
 
 /**
@@ -330,6 +355,11 @@ export async function selectExerciseForRequirement(
      * every exercise in the session with no ceiling.
      */
     skipNetwork?: boolean;
+    /** Fast-fail hardening — shared across every call in one generation
+     *  attempt (see fetchCandidates' header comment). Not passing one is
+     *  fully backwards compatible: each call simply has no memory of any
+     *  other, exactly like before this hardening existed. */
+    providerHealth?: ProviderHealth;
   },
 ): Promise<SelectedExercise> {
   // Beta #015B — a compound row's sets/reps/rest scale with experience so an
@@ -341,23 +371,36 @@ export async function selectExerciseForRequirement(
   const primaryQuery = requirement.muscleHint ?? requirement.bodyPart;
 
   if (opts?.skipNetwork) {
-    return budgetExceededFallback(requirement, rx, equipmentLocation, alreadySelected);
+    return skipNetworkFallback(requirement, rx, equipmentLocation, alreadySelected, 'time_budget');
+  }
+  // Resolved to a real object either way: the caller's shared one (so a
+  // failure here is remembered by every later requirement in the same
+  // populateExerciseWorkout attempt), or — when none was passed — a fresh
+  // one scoped to just this one call, so THIS call's own 3-tier ladder
+  // still short-circuits after its first failure instead of paying up to
+  // 3× FAST_FAIL_TIMEOUT_MS on a single requirement. Either way the
+  // guarantee is the same: at most one real timeout per requirement.
+  const providerHealth = opts?.providerHealth ?? createProviderHealth();
+  if (providerHealth.down) {
+    return skipNetworkFallback(requirement, rx, equipmentLocation, alreadySelected, 'provider_down');
   }
 
-  const pool = await fetchCandidates(primaryQuery, difficulty);
+  const pool = await fetchCandidates(primaryQuery, difficulty, undefined, providerHealth);
   const byLocation = pool.filter(ex => matchesLocation(equipmentLocation, ex.equipment));
 
   // Tier 1: location + difficulty, ranked by fit
   let candidate = bestFit(requirement, byLocation, alreadySelected, difficulty);
 
-  // Tier 2: drop the difficulty filter (re-fetch without it), still ranked by fit
+  // Tier 2: drop the difficulty filter (re-fetch without it), still ranked by
+  // fit. Once providerHealth is down (set by tier 1's own failure, above),
+  // fetchCandidates itself short-circuits to [] with no new network call.
   if (!candidate) {
-    const anyDifficulty = (await fetchCandidates(primaryQuery)).filter(ex => matchesLocation(equipmentLocation, ex.equipment));
+    const anyDifficulty = (await fetchCandidates(primaryQuery, undefined, undefined, providerHealth)).filter(ex => matchesLocation(equipmentLocation, ex.equipment));
     candidate = bestFit(requirement, anyDifficulty, alreadySelected);
   }
   // Tier 3: drop equipment/location filter too, still ranked by fit
   if (!candidate) {
-    const anyEquipment = await fetchCandidates(primaryQuery);
+    const anyEquipment = await fetchCandidates(primaryQuery, undefined, undefined, providerHealth);
     candidate = bestFit(requirement, anyEquipment, alreadySelected);
   }
   // Tier 4: widen to any fit-ranked provider candidate we haven't used yet —

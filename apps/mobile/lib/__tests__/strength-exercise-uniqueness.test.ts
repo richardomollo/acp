@@ -174,10 +174,10 @@ describe('#016 — selection layer holds the intra-session uniqueness invariant'
     globalThis.fetch = (async () => ({
       ok: true,
       json: async () => [
-        { id: 10, name: 'Back Squat', primary_muscles: ['Quads'], category: 'Bodyweight', difficulty: 'Beginner' },
-        { id: 11, name: 'Front Squat', primary_muscles: ['Quads'], category: 'Bodyweight', difficulty: 'Beginner' },
-        { id: 12, name: 'Bulgarian Split Squat', primary_muscles: ['Quads'], category: 'Bodyweight', difficulty: 'Beginner' },
-        { id: 13, name: 'Hack Squat', primary_muscles: ['Quads'], category: 'Bodyweight', difficulty: 'Beginner' },
+        { id: 10, name: 'Back Squat', bodyPart: 'upper legs', target: 'quads', equipment: 'body weight' },
+        { id: 11, name: 'Front Squat', bodyPart: 'upper legs', target: 'quads', equipment: 'body weight' },
+        { id: 12, name: 'Bulgarian Split Squat', bodyPart: 'upper legs', target: 'quads', equipment: 'body weight' },
+        { id: 13, name: 'Hack Squat', bodyPart: 'upper legs', target: 'quads', equipment: 'body weight' },
       ],
     } as any)) as any;
     try {
@@ -204,7 +204,7 @@ describe('#016 — selection layer holds the intra-session uniqueness invariant'
     // One valid candidate only — a 2nd requirement can find nothing NEW.
     globalThis.fetch = (async () => ({
       ok: true,
-      json: async () => [{ id: 99, name: 'Romanian Deadlift', primary_muscles: ['Hamstrings'], category: 'Bodyweight', difficulty: 'Beginner' }],
+      json: async () => [{ id: 99, name: 'Romanian Deadlift', bodyPart: 'upper legs', target: 'hamstrings', equipment: 'body weight' }],
     } as any)) as any;
     try {
       const seen = new Set<string>();

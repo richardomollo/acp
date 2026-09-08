@@ -14,7 +14,7 @@ import { supabase } from '@/lib/supabase';
 import { authService } from './auth';
 import { programmeService } from './programme-service';
 import { getHumanSupportInsight } from './human-support-service';
-import { selectExerciseForRequirement, selectionKeys, type SelectedExercise } from './exercise-selection-service';
+import { selectExerciseForRequirement, selectionKeys, createProviderHealth, type SelectedExercise } from './exercise-selection-service';
 import { exerciseService } from './exercise-service';
 import {
   buildGenerationContext, isGoalSupported, MOBILITY_REQUIREMENTS,
@@ -121,7 +121,7 @@ export async function hydrateWorkoutExerciseMedia(workoutId: string): Promise<st
   let firstUrl: string | null = null;
   for (const e of stale.slice(0, 8)) {
     try {
-      const fresh = await exerciseService.getById(e.external_id!);
+      const fresh = await exerciseService.getMediaExercise(e.external_id!);
       const url = fresh?.media[0]?.url ?? null;
       if (!url) continue;
       await supabase.from('exercises').update({ gif_url: url }).eq('id', e.id);
@@ -301,6 +301,15 @@ async function populateExerciseWorkout(
   let sortOrder = await countWorkoutExercises(workoutId);
   let exerciseCount = 0;
   const startedAt = Date.now();
+  // ExerciseDB fast-fail hardening (2026-09) — ONE provider-availability
+  // flag shared across every requirement in this generation attempt. The
+  // first genuine ExerciseDB failure (timeout/network/rate-limit/server
+  // error) sets it, and every remaining requirement then skips the network
+  // immediately instead of independently retrying and timing out against a
+  // provider already known unreachable — this, not just a shorter per-
+  // request timeout, is what keeps an unavailable provider from consuming
+  // anywhere near GENERATION_TIME_BUDGET_MS.
+  const providerHealth = createProviderHealth();
 
   for (const requirement of requirements) {
     const isCompound = requirement.role === 'compound';
@@ -312,7 +321,7 @@ async function populateExerciseWorkout(
       : new Set<string>([...alreadySelected, ...weeklyAccessoryExclusions]);
 
     const skipNetwork = Date.now() - startedAt > GENERATION_TIME_BUDGET_MS;
-    const picked = await selectExerciseForRequirement(requirement, context.equipmentLocation, context.experience, exclude, { skipNetwork });
+    const picked = await selectExerciseForRequirement(requirement, context.equipmentLocation, context.experience, exclude, { skipNetwork, providerHealth });
 
     // Beta #016 invariant + Beta #017 §16/§17 — a requirement that can only
     // be satisfied by an exercise already in this session is DROPPED, not
