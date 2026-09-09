@@ -1,7 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  isValidAssessment, fetchOnboardingAssessment, deriveCategoryCounts, sumDurationMinutes, sortSupportOpportunities,
+  isValidAssessment, isCanonicalPlanReady, fetchOnboardingAssessment, deriveCategoryCounts, sumDurationMinutes, sortSupportOpportunities,
   projectPlanSchedule,
   type SupportOpportunity, type StartingPlanActivity,
 } from '../ai-assessment.ts';
@@ -94,6 +94,58 @@ describe('isValidAssessment', () => {
   test('rejects a missing weekly_focus', () => {
     const { weekly_focus, ...rest } = VALID_ASSESSMENT;
     assert.equal(isValidAssessment(rest), false);
+  });
+});
+
+describe('isCanonicalPlanReady (LH-19 — gate the completion actions on the real plan)', () => {
+  // §10 A — generation begins / still running
+  test('loading phase → NOT ready (spinner shown, both actions disabled)', () => {
+    assert.equal(isCanonicalPlanReady('loading', null), false);
+    assert.equal(isCanonicalPlanReady('loading', VALID_ASSESSMENT), false);
+  });
+  test('idle phase → NOT ready', () => {
+    assert.equal(isCanonicalPlanReady('idle', null), false);
+  });
+
+  // §10 B / §6 — initial UX window expired, canonical plan not yet arrived
+  test('fallback phase with no canonical assessment → NOT ready ("finishing" state, disabled)', () => {
+    assert.equal(isCanonicalPlanReady('fallback', null), false);
+  });
+  test('fallback phase even if a stale/partial object is present → NOT ready', () => {
+    const partial = { headline: 'x', summary: 'y' };
+    assert.equal(isCanonicalPlanReady('fallback', partial), false);
+  });
+
+  // §7 / §10 D — generation failure
+  test('failure (phase never reaches ready) → NOT ready, actions stay disabled', () => {
+    assert.equal(isCanonicalPlanReady('idle', null), false);
+    assert.equal(isCanonicalPlanReady('fallback', null), false);
+  });
+
+  // §2 — must not be "ready" on partial/invalid data even if the phase says ready
+  test('ready phase but assessment is null / partial / has no activities → NOT ready', () => {
+    assert.equal(isCanonicalPlanReady('ready', null), false);
+    assert.equal(isCanonicalPlanReady('ready', { headline: 'x', summary: 'y' }), false);
+    const noActivities = { ...VALID_ASSESSMENT, starting_plan: { ...VALID_ASSESSMENT.starting_plan, activities: [] } };
+    assert.equal(isCanonicalPlanReady('ready', noActivities), false);
+  });
+
+  // §10 C / §6 — the canonical assessment arrives (initial or via poll)
+  test('ready phase + a fully valid canonical plan → READY (both actions enable)', () => {
+    assert.equal(isCanonicalPlanReady('ready', VALID_ASSESSMENT), true);
+  });
+
+  // §8 — the handler-guard contract: `if (!planReady) return` blocks navigation
+  test('the value drives the handler guard — falsy in every not-ready state, truthy only when canonical', () => {
+    const notReady = [
+      isCanonicalPlanReady('idle', null),
+      isCanonicalPlanReady('loading', null),
+      isCanonicalPlanReady('fallback', null),
+      isCanonicalPlanReady('ready', null),
+      isCanonicalPlanReady('ready', { starting_plan: { activities: [] } }),
+    ];
+    assert.ok(notReady.every(v => v === false), 'no not-ready state may return true');
+    assert.equal(isCanonicalPlanReady('ready', VALID_ASSESSMENT), true);
   });
 });
 

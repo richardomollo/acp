@@ -9,7 +9,7 @@ import { buildPlanSummary } from '@/lib/onboarding';
 import { validateOnboardingHealthInputs } from '@/lib/onboarding-validation';
 import { supabase } from '@/lib/supabase';
 import {
-  fetchOnboardingAssessment, isValidAssessment, deriveCategoryCounts,
+  fetchOnboardingAssessment, isValidAssessment, isCanonicalPlanReady, deriveCategoryCounts,
   projectPlanSchedule, sortSupportOpportunities, type AIAssessment,
 } from '@/lib/ai-assessment';
 import { palette, radii, fontSize } from '@/constants/theme';
@@ -56,12 +56,17 @@ export default function OnboardingPlanScreen() {
   // self_directed user may still have a genuine medium-relevance
   // opportunity, and a guided user may have none the model actually found.
   const supportOpportunities = sortSupportOpportunities(assessment?.support_opportunities ?? []);
-  // LH-24 — only 'ready' has the ACTUAL generated plan (canonical
-  // starting_plan.activities). 'fallback' means the AI schedule isn't
-  // available yet, so the "your plan is ready" tick/headline is NOT shown
-  // and no fabricated schedule is rendered — the real one appears once it
-  // arrives (via the poll below) or in My Plan shortly.
-  const planReady = assessmentPhase === 'ready';
+  // LH-19 / LH-24 — the ONE readiness invariant, shared by the render, both
+  // completion actions, and both handler guards. True only once generation
+  // has genuinely reached 'ready' AND we hold a fully valid canonical plan
+  // (isCanonicalPlanReady also narrows `assessment` to AIAssessment). Never
+  // true on a timeout, fallback copy, a started-but-unfinished request, or
+  // partial data — the real plan appears via the poll below or in My Plan.
+  const planReady = isCanonicalPlanReady(assessmentPhase, assessment);
+  // "Start my journey" doubles as the retry control when the profile save
+  // itself failed (status === 'failed'); that path re-runs save() and never
+  // navigates, so it stays tappable. Every other not-ready state disables it.
+  const startDisabled = starting || (!planReady && status !== 'failed');
 
   useEffect(() => {
     Animated.timing(fade, { toValue: 1, duration: 500, useNativeDriver: true }).start();
@@ -277,11 +282,17 @@ export default function OnboardingPlanScreen() {
 
   const handleStart = async () => {
     if (status === 'failed') {
+      // Retry only — save() re-kicks generation asynchronously. Never
+      // navigate from here: the button re-gates on planReady once the
+      // canonical plan actually arrives.
       setStarting(true);
-      const ok = await save();
+      await save();
       setStarting(false);
-      if (!ok) return;
+      return;
     }
+    // LH-19 — never enter the app before the canonical plan exists, no
+    // matter what the disabled prop is doing (rapid taps, future regressions).
+    if (!planReady) return;
     router.replace(redirectTo as any);
   };
 
@@ -470,8 +481,9 @@ export default function OnboardingPlanScreen() {
         <ThemedText style={styles.adaptNote}>Your plan will adapt as you progress.</ThemedText>
 
         <TouchableOpacity
-          style={styles.viewPlanLink}
-          onPress={() => router.push('/my-plan' as any)}
+          style={[styles.viewPlanLink, !planReady && styles.viewPlanLinkDisabled]}
+          onPress={() => { if (!planReady) return; router.push('/my-plan' as any); }}
+          disabled={!planReady}
           activeOpacity={0.7}
         >
           <ThemedText style={styles.viewPlanLinkText}>See my detailed plan</ThemedText>
@@ -484,7 +496,12 @@ export default function OnboardingPlanScreen() {
       </ScrollView>
 
       <SafeAreaView edges={['bottom']} style={styles.footer}>
-        <TouchableOpacity style={styles.startBtn} onPress={handleStart} activeOpacity={0.85} disabled={starting}>
+        <TouchableOpacity
+          style={[styles.startBtn, startDisabled && styles.startBtnDisabled]}
+          onPress={handleStart}
+          activeOpacity={0.85}
+          disabled={startDisabled}
+        >
           <ThemedText style={styles.startBtnText}>Start my journey</ThemedText>
         </TouchableOpacity>
       </SafeAreaView>
@@ -770,6 +787,7 @@ const styles = StyleSheet.create({
     gap: 4,
     marginTop: 16,
   },
+  viewPlanLinkDisabled: { opacity: 0.4 },
   viewPlanLinkText: {
     fontSize: fontSize.sm,
     fontWeight: '700',
@@ -794,6 +812,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     alignItems: 'center',
   },
+  // LH-19 — same disabled treatment as the shared OnboardingFooter button.
+  startBtnDisabled: { backgroundColor: palette.border },
   startBtnText: {
     color: palette.white,
     fontSize: fontSize.lg,

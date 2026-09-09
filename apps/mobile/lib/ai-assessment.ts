@@ -239,6 +239,27 @@ export function isValidAssessment(x: unknown): x is AIAssessment {
   return true;
 }
 
+/**
+ * LH-19 — the ONE "the onboarding plan screen may let the user act" invariant.
+ *
+ * True only when generation has reached the genuine ready phase AND the
+ * assessment in hand is a fully valid canonical plan (`isValidAssessment`
+ * enforces a non-empty, well-formed `starting_plan.activities`). It is
+ * NEVER true for: a `loading`/`idle`/`fallback` phase, an expired UX timeout,
+ * visible "finishing your schedule" fallback copy, onboarding answers alone,
+ * a merely-started AI request, partial assessment data, or a fabricated
+ * schedule. The two completion actions ("Start my journey" /
+ * "See my detailed plan") and their handler guards all read this.
+ */
+export function isCanonicalPlanReady(
+  assessmentPhase: string,
+  assessment: unknown,
+): assessment is AIAssessment {
+  return assessmentPhase === 'ready'
+    && isValidAssessment(assessment)
+    && assessment.starting_plan.activities.length > 0;
+}
+
 export interface FetchAssessmentParams {
   userId: string;
   onboardingAnswers: OnboardingAnswers;
