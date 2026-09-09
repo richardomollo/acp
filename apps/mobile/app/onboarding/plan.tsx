@@ -5,10 +5,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/themed-text';
 import { useOnboarding } from '@/contexts/onboarding-context';
-import { buildPlanSummary, buildFallbackWeekPlan } from '@/lib/onboarding';
+import { buildPlanSummary } from '@/lib/onboarding';
 import { validateOnboardingHealthInputs } from '@/lib/onboarding-validation';
 import { supabase } from '@/lib/supabase';
-import { fetchOnboardingAssessment, isValidAssessment, deriveCategoryCounts, sortSupportOpportunities, type AIAssessment } from '@/lib/ai-assessment';
+import {
+  fetchOnboardingAssessment, isValidAssessment, deriveCategoryCounts,
+  projectPlanSchedule, sortSupportOpportunities, type AIAssessment,
+} from '@/lib/ai-assessment';
 import { palette, radii, fontSize } from '@/constants/theme';
 
 const APPROACH_ICON: Record<string, string> = {
@@ -48,17 +51,17 @@ export default function OnboardingPlanScreen() {
 
   const fade = useRef(new Animated.Value(0)).current;
   const summary = buildPlanSummary(answers);
-  const fallbackWeekPlan = buildFallbackWeekPlan(summary.approach);
   // Source of truth for whether the support section shows at all is
   // support_opportunities.length, never recommendation.approach — a
   // self_directed user may still have a genuine medium-relevance
   // opportunity, and a guided user may have none the model actually found.
   const supportOpportunities = sortSupportOpportunities(assessment?.support_opportunities ?? []);
-  // 'ready' (AI-built plan) and 'fallback' (deterministic plan, AI call
-  // failed/timed out) are both a genuinely complete, displayable plan —
-  // 'idle'/'loading' are still in progress, so the tick/"ready" copy is
-  // reserved for the two states that actually have something to show.
-  const planReady = assessmentPhase === 'ready' || assessmentPhase === 'fallback';
+  // LH-24 — only 'ready' has the ACTUAL generated plan (canonical
+  // starting_plan.activities). 'fallback' means the AI schedule isn't
+  // available yet, so the "your plan is ready" tick/headline is NOT shown
+  // and no fabricated schedule is rendered — the real one appears once it
+  // arrives (via the poll below) or in My Plan shortly.
+  const planReady = assessmentPhase === 'ready';
 
   useEffect(() => {
     Animated.timing(fade, { toValue: 1, duration: 500, useNativeDriver: true }).start();
@@ -101,6 +104,44 @@ export default function OnboardingPlanScreen() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // LH-24 — when the AI call lost the UX race, fetchOnboardingAssessment
+  // returned null but the server keeps running and saves the assessment to
+  // fitness_profile.ai_assessment on success. Poll for that real, canonical
+  // result for a bounded window so the completion card can show the ACTUAL
+  // generated plan rather than a "not ready" state — never a fabricated one.
+  useEffect(() => {
+    if (assessmentPhase !== 'fallback' || assessment) return;
+    let cancelled = false;
+    let attempts = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      if (cancelled) return;
+      attempts += 1;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const userId = session?.user?.id;
+        if (userId) {
+          const { data } = await supabase
+            .from('fitness_profile')
+            .select('ai_assessment')
+            .eq('user_id', userId)
+            .maybeSingle();
+          if (!cancelled && data?.ai_assessment && isValidAssessment(data.ai_assessment)) {
+            setAssessment(data.ai_assessment as AIAssessment);
+            assessmentPhaseRef.current = 'ready';
+            setAssessmentPhase('ready');
+            return;
+          }
+        }
+      } catch {
+        // keep polling — a transient read failure isn't the end of the window
+      }
+      if (!cancelled && attempts < 10) timer = setTimeout(poll, 3000);
+    };
+    timer = setTimeout(poll, 3000);
+    return () => { cancelled = true; if (timer) clearTimeout(timer); };
+  }, [assessmentPhase, assessment]);
 
   // Called from save() BEFORE completeOnboarding() overwrites the row —
   // reads the profile as it stood coming in. If it already carries a valid,
@@ -257,7 +298,9 @@ export default function OnboardingPlanScreen() {
             <ThemedText style={styles.headline}>
               {planReady
                 ? (firstName ? `Your plan is ready, ${firstName}.` : 'Your plan is ready.')
-                : (firstName ? `Creating your plan, ${firstName}…` : 'Creating your plan…')}
+                : assessmentPhase === 'fallback'
+                  ? (firstName ? `Almost there, ${firstName}.` : 'Almost there.')
+                  : (firstName ? `Creating your plan, ${firstName}…` : 'Creating your plan…')}
             </ThemedText>
             {assessmentPhase === 'ready' && (
               <TouchableOpacity
@@ -301,15 +344,33 @@ export default function OnboardingPlanScreen() {
             <ThemedText style={styles.rowValue}>{assessment.recommendation.title}</ThemedText>
             <ThemedText style={styles.aiBody}>{assessment.recommendation.reason}</ThemedText>
 
-            {deriveCategoryCounts(assessment.starting_plan.activities).length > 0 && (
+            {assessment.starting_plan.activities.length > 0 && (
               <>
                 <View style={styles.divider} />
                 <ThemedText style={[styles.rowLabel, { marginBottom: 10 }]}>Your starting week</ThemedText>
+                {/* LH-24 — every number and row below is a direct read of the
+                    ONE canonical starting_plan.activities. No independent
+                    count, no invented days, no category rebalancing. */}
+                <ThemedText style={styles.scheduleTotal}>
+                  {assessment.starting_plan.activities.length}{' '}
+                  {assessment.starting_plan.activities.length === 1 ? 'session' : 'sessions'} this week
+                </ThemedText>
                 <View style={styles.weeklyPlanRow}>
                   {deriveCategoryCounts(assessment.starting_plan.activities).map(c => (
                     <View key={c.category} style={styles.weeklyPlanItem}>
                       <ThemedText style={styles.weeklyPlanNumber}>{c.count}</ThemedText>
                       <ThemedText style={styles.weeklyPlanLabel}>{c.label}</ThemedText>
+                    </View>
+                  ))}
+                </View>
+                <View style={{ marginTop: 12 }}>
+                  {projectPlanSchedule(assessment.starting_plan.activities).map((row, i) => (
+                    <View key={i} style={styles.scheduleRow}>
+                      <ThemedText style={styles.scheduleDay}>{row.day}</ThemedText>
+                      <View style={styles.scheduleCategoryPill}>
+                        <ThemedText style={styles.scheduleCategoryText}>{row.categoryLabel}</ThemedText>
+                      </View>
+                      <ThemedText style={styles.scheduleTitle} numberOfLines={1}>{row.title}</ThemedText>
                     </View>
                   ))}
                 </View>
@@ -393,15 +454,16 @@ export default function OnboardingPlanScreen() {
               ))}
             </View>
 
-            {fallbackWeekPlan.length > 0 && (
-              <>
-                <View style={styles.divider} />
-                <ThemedText style={[styles.rowLabel, { marginBottom: 10 }]}>This week</ThemedText>
-                {fallbackWeekPlan.map((item, i) => (
-                  <ThemedText key={i} style={styles.fallbackWeekLine}>{item.day} · {item.label}</ThemedText>
-                ))}
-              </>
-            )}
+            <View style={styles.divider} />
+            {/* LH-24 / LH-19 — the AI schedule isn't ready yet. Show an honest
+                "being finalised" state, NEVER a fabricated weekday schedule.
+                The real plan appears here once it arrives (poll above) or in
+                My Plan shortly. */}
+            <ThemedText style={styles.rowLabel}>Your weekly schedule</ThemedText>
+            <ThemedText style={styles.aiBody}>
+              Lana is finishing your session schedule. It’ll be ready in My Plan in a moment —
+              your goal, starting point and focus above are already saved.
+            </ThemedText>
           </Animated.View>
         )}
 
@@ -578,10 +640,43 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: palette.ink700,
   },
-  fallbackWeekLine: {
+  scheduleTotal: {
     fontSize: fontSize.sm,
+    fontWeight: '700',
     color: palette.ink700,
-    marginBottom: 6,
+    marginBottom: 10,
+  },
+  scheduleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: palette.hairline,
+  },
+  scheduleDay: {
+    fontSize: fontSize.sm,
+    fontWeight: '700',
+    color: palette.ink700,
+    width: 78,
+  },
+  scheduleCategoryPill: {
+    backgroundColor: palette.white,
+    borderRadius: radii.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  scheduleCategoryText: {
+    fontSize: fontSize.xs,
+    fontWeight: '700',
+    color: palette.gray450,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  scheduleTitle: {
+    flex: 1,
+    fontSize: fontSize.sm,
+    color: palette.ink600,
   },
 
   loadingCard: {

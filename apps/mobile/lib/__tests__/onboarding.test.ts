@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   deriveSupportStyle, buildPlanSummary, deriveActivityLevel,
   describeWorkHours, describeSportHours, describeLeisureHours,
-  isStep2Complete, resolveOnboardingResumeStep, buildFallbackWeekPlan,
+  isStep2Complete, resolveOnboardingResumeStep,
   EMPTY_ANSWERS, type OnboardingAnswers,
   normalizeWeekdayName, sanitizeTrainingDays, formatTrainingDaysLabel,
   describeTrainingFrequency, CANONICAL_WEEKDAYS, MIN_TRAINING_DAYS, MAX_TRAINING_DAYS,
@@ -326,24 +326,11 @@ describe('resolveOnboardingResumeStep', () => {
 
 });
 
-describe('buildFallbackWeekPlan (no-AI fallback: basic first-week structure)', () => {
-  test('derives day slots deterministically from the approach array', () => {
-    const plan = buildFallbackWeekPlan(['Strength', 'Cardio']);
-    assert.ok(plan.length > 0);
-    assert.ok(plan.every(item => typeof item.day === 'string' && typeof item.label === 'string'));
-  });
-
-  test('ignores approach areas with no day mapping (e.g. Nutrition, Accountability)', () => {
-    const plan = buildFallbackWeekPlan(['Nutrition', 'Accountability']);
-    assert.deepEqual(plan, []);
-  });
-
-  test('is fully deterministic — same input always produces the same output', () => {
-    const a = buildFallbackWeekPlan(['Strength', 'Movement']);
-    const b = buildFallbackWeekPlan(['Strength', 'Movement']);
-    assert.deepEqual(a, b);
-  });
-});
+// LH-24 — buildFallbackWeekPlan (a fabricated weekday schedule derived from
+// `approach`, ignoring the user's chosen days and the real generated plan)
+// has been DELETED. The completion card now projects the canonical
+// starting_plan.activities (see ai-assessment.test.ts `projectPlanSchedule`)
+// or shows a "not ready" state — never a second, independent schedule.
 
 // ─── Beta Feedback #002 — training schedule preference ─────────────────────
 describe('training schedule preference (Beta Feedback #002)', () => {

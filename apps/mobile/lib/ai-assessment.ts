@@ -145,6 +145,41 @@ export function sumDurationMinutes(activities: StartingPlanActivity[]): number {
   return activities.reduce((sum, a) => sum + (Number.isFinite(a.duration_minutes) ? a.duration_minutes : 0), 0);
 }
 
+export interface PlanScheduleRow {
+  /** the activity's own weekday, verbatim from the canonical plan */
+  day: string;
+  category: ActivityCategory;
+  categoryLabel: string;
+  title: string;
+  activity: string;
+  durationMinutes: number;
+  plannedDate: string | null;
+}
+
+/**
+ * LH-24 — a DIRECT projection of the ONE canonical `starting_plan.activities`
+ * list into rows for a read-only schedule display (the onboarding completion
+ * card; usable anywhere a plain list is needed).
+ *
+ * It reorders NOTHING: the server emits activities in weekly order and My
+ * Plan renders them in that same array order, so this keeps every surface
+ * identical. It invents no days, rebalances no categories, and derives no
+ * independent session count (use `activities.length` /
+ * `deriveCategoryCounts`). Given `[]` it returns `[]` — never a fabricated
+ * default schedule.
+ */
+export function projectPlanSchedule(activities: readonly StartingPlanActivity[]): PlanScheduleRow[] {
+  return activities.map(a => ({
+    day: a.day,
+    category: a.category,
+    categoryLabel: CATEGORY_LABEL[a.category] ?? a.category,
+    title: a.title,
+    activity: a.activity,
+    durationMinutes: Number.isFinite(a.duration_minutes) ? a.duration_minutes : 0,
+    plannedDate: a.planned_date ?? null,
+  }));
+}
+
 function isStringArray(x: unknown): x is string[] {
   return Array.isArray(x) && x.every(v => typeof v === 'string');
 }

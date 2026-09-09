@@ -388,37 +388,14 @@ export function buildPlanSummary(answers: OnboardingAnswers): PlanSummary {
   return { goalLine, startingPointLine, focusLine, approach: Array.from(new Set(approach)) };
 }
 
-export interface FallbackWeekItem {
-  day: string;
-  label: string;
-}
-
-// Fixed, deterministic day slots per approach area — no AI, no new
-// recommendation logic, just a simple static mapping over the approach
-// array buildPlanSummary already computes. This exists so the no-AI
-// fallback can still show "at least a basic first-week structure"
-// alongside goal/starting-point/recommendation/focus, without building a
-// second complex planning engine.
-const APPROACH_WEEK_DAYS: Record<string, string[]> = {
-  Strength: ['Monday', 'Thursday'],
-  Cardio: ['Tuesday', 'Saturday'],
-  Movement: ['Wednesday', 'Saturday'],
-};
-
-/**
- * A minimal, deterministic first-week structure for the no-AI fallback —
- * intentionally simple (fixed days per approach area), not a substitute for
- * the AI-generated starting_plan.activities.
- */
-export function buildFallbackWeekPlan(approach: string[]): FallbackWeekItem[] {
-  const items: FallbackWeekItem[] = [];
-  for (const area of approach) {
-    const days = APPROACH_WEEK_DAYS[area];
-    if (!days) continue;
-    for (const day of days) items.push({ day, label: `${area} session` });
-  }
-  return items;
-}
+// LH-24 — the old `buildFallbackWeekPlan` / `APPROACH_WEEK_DAYS` fabricated a
+// weekday schedule (Strength→Mon/Thu, Cardio→Tue/Sat, …) from `approach` and
+// rendered it as if it were the plan. It ignored the user's chosen training
+// days AND the real generated `starting_plan.activities`, so the completion
+// card and My Plan showed a schedule that never matched the stored plan.
+// Deleted: the completion card now projects the ONE canonical activity list
+// (lib/ai-assessment.ts `projectPlanSchedule`) or shows a "not ready" state —
+// never a second, independent schedule.
 
 // ─── Resume-in-progress-onboarding routing ─────────────────────────────────
 

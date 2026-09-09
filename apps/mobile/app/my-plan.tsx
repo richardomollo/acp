@@ -14,7 +14,7 @@ import { ThemedText } from '@/components/themed-text';
 import { supabase } from '@/lib/supabase';
 import { authService } from '@/services/auth';
 import { getStravaStatus } from '@/services/strava';
-import { buildPlanSummary, buildFallbackWeekPlan, sanitizeTrainingDays, EMPTY_ANSWERS, type OnboardingAnswers, type PlanSummary } from '@/lib/onboarding';
+import { buildPlanSummary, sanitizeTrainingDays, EMPTY_ANSWERS, type OnboardingAnswers, type PlanSummary } from '@/lib/onboarding';
 import {
   fetchOnboardingAssessment, deriveCategoryCounts, isValidAssessment, sortSupportOpportunities,
   CATEGORY_LABEL, type AIAssessment, type StartingPlanActivity,
@@ -1654,15 +1654,14 @@ export default function MyPlanScreen() {
                 ))}
               </View>
 
-              {buildFallbackWeekPlan(planSummary.approach).length > 0 && (
-                <>
-                  <View style={styles.divider} />
-                  <ThemedText style={[styles.rowLabel, { marginBottom: 10 }]}>This week</ThemedText>
-                  {buildFallbackWeekPlan(planSummary.approach).map((item, i) => (
-                    <ThemedText key={i} style={styles.fallbackWeekLine}>{item.day} · {item.label}</ThemedText>
-                  ))}
-                </>
-              )}
+              {/* LH-24 — no fabricated "This week" schedule here. The real
+                  weekly schedule is the canonical starting_plan.activities,
+                  rendered by the `assessment` branch above once it loads. */}
+              <View style={styles.divider} />
+              <ThemedText style={[styles.rowLabel, { marginBottom: 6 }]}>This week</ThemedText>
+              <ThemedText style={styles.emptyText}>
+                Your session schedule is still being prepared. It’ll appear here shortly.
+              </ThemedText>
             </View>
           ) : (
             <ThemedText style={styles.emptyText}>Complete onboarding to see your plan here.</ThemedText>
@@ -1911,11 +1910,6 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     fontWeight: '700',
     color: palette.ink700,
-  },
-  fallbackWeekLine: {
-    fontSize: fontSize.sm,
-    color: palette.ink700,
-    marginBottom: 6,
   },
 
   aiBody: {

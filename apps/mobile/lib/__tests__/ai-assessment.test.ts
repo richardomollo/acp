@@ -2,7 +2,8 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   isValidAssessment, fetchOnboardingAssessment, deriveCategoryCounts, sumDurationMinutes, sortSupportOpportunities,
-  type SupportOpportunity,
+  projectPlanSchedule,
+  type SupportOpportunity, type StartingPlanActivity,
 } from '../ai-assessment.ts';
 import { EMPTY_ANSWERS } from '../onboarding.ts';
 
@@ -114,6 +115,92 @@ describe('deriveCategoryCounts (category counts remain derived, never AI-generat
     const counts = deriveCategoryCounts(VALID_ASSESSMENT.starting_plan.activities);
     const total = counts.reduce((sum, c) => sum + c.count, 0);
     assert.equal(total, VALID_ASSESSMENT.starting_plan.activities.length);
+  });
+});
+
+describe('projectPlanSchedule (LH-24 — completion card mirrors the canonical plan)', () => {
+  const act = (o: Partial<StartingPlanActivity>): StartingPlanActivity => ({
+    day: 'Monday', category: 'strength', activity: 'Full body', duration_minutes: 45,
+    intensity: 'moderate', title: 'Strength A', description: '...', ...o,
+  });
+
+  // §9 — the exact device repro
+  const DEVICE_REPRO: StartingPlanActivity[] = [
+    act({ day: 'Monday', category: 'strength', title: 'Strength A' }),
+    act({ day: 'Wednesday', category: 'strength', title: 'Strength B' }),
+    act({ day: 'Friday', category: 'strength', title: 'Strength C' }),
+  ];
+
+  test('§9 — Mon/Wed/Fri all-strength plan projects exactly Mon/Wed/Fri, 3 rows, 3 strength, no cardio', () => {
+    const rows = projectPlanSchedule(DEVICE_REPRO);
+    assert.equal(rows.length, 3);
+    assert.deepEqual(rows.map(r => r.day), ['Monday', 'Wednesday', 'Friday']);
+    assert.ok(rows.every(r => r.category === 'strength'));
+    const counts = deriveCategoryCounts(DEVICE_REPRO);
+    assert.deepEqual(counts, [{ category: 'strength', label: 'Strength', count: 3 }]);
+    assert.equal(counts.some(c => c.category === 'cardio'), false);
+  });
+
+  test('row count always equals the canonical activity count — never an independent number', () => {
+    for (const n of [2, 3, 4, 5]) {
+      const acts = Array.from({ length: n }, (_, i) => act({ day: `D${i}`, title: `T${i}` }));
+      assert.equal(projectPlanSchedule(acts).length, n);
+    }
+  });
+
+  test('preserves the canonical array order (chronological) — no re-sorting or grouping by type', () => {
+    const mixed = [
+      act({ day: 'Tuesday', category: 'cardio', title: 'Run' }),
+      act({ day: 'Thursday', category: 'strength', title: 'Lift' }),
+      act({ day: 'Saturday', category: 'recovery', title: 'Mobility' }),
+    ];
+    assert.deepEqual(projectPlanSchedule(mixed).map(r => r.day), ['Tuesday', 'Thursday', 'Saturday']);
+  });
+
+  test('mixed plan: projected category composition equals deriveCategoryCounts', () => {
+    const mixed = [
+      act({ category: 'strength' }), act({ category: 'strength' }),
+      act({ category: 'cardio' }), act({ category: 'cardio' }),
+    ];
+    const rows = projectPlanSchedule(mixed);
+    const strength = rows.filter(r => r.category === 'strength').length;
+    const cardio = rows.filter(r => r.category === 'cardio').length;
+    assert.equal(strength, 2);
+    assert.equal(cardio, 2);
+    assert.deepEqual(deriveCategoryCounts(mixed), [
+      { category: 'strength', label: 'Strength', count: 2 },
+      { category: 'cardio', label: 'Cardio', count: 2 },
+    ]);
+  });
+
+  test('each row is a verbatim read of the activity — day / category / title / activity / duration', () => {
+    const [row] = projectPlanSchedule([act({
+      day: 'Sunday', category: 'mobility', title: 'Stretch', activity: 'Yoga flow', duration_minutes: 20,
+    })]);
+    assert.deepEqual(
+      { day: row.day, category: row.category, title: row.title, activity: row.activity, durationMinutes: row.durationMinutes },
+      { day: 'Sunday', category: 'mobility', title: 'Stretch', activity: 'Yoga flow', durationMinutes: 20 },
+    );
+    assert.equal(row.categoryLabel, 'Mobility');
+  });
+
+  test('carries planned_date through when present, null when absent', () => {
+    assert.equal(projectPlanSchedule([act({ planned_date: '2026-09-14' })])[0].plannedDate, '2026-09-14');
+    assert.equal(projectPlanSchedule([act({})])[0].plannedDate, null);
+  });
+
+  test('empty activity list projects to [] — never a fabricated default schedule', () => {
+    assert.deepEqual(projectPlanSchedule([]), []);
+  });
+
+  test('a mid-week / non-consecutive plan keeps its own order and days (§10 E/F)', () => {
+    const midWeek = [
+      act({ day: 'Wednesday', category: 'strength', title: 'A' }),
+      act({ day: 'Friday', category: 'cardio', title: 'B' }),
+      act({ day: 'Sunday', category: 'strength', title: 'C' }),
+    ];
+    assert.deepEqual(projectPlanSchedule(midWeek).map(r => `${r.day}:${r.category}`),
+      ['Wednesday:strength', 'Friday:cardio', 'Sunday:strength']);
   });
 });
 
