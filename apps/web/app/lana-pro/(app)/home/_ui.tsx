@@ -6,8 +6,7 @@ import Link from "next/link";
 import type { TodayItem } from "@/lib/lana-pro-workspace/today";
 import type { VerificationNotice, IntelligenceModel } from "@/lib/lana-pro-workspace/home-model";
 import type { ChecklistItem } from "@/lib/lana-pro-workspace/activation";
-import type { LanaClientBrief } from "@/lib/lana-pro-intelligence/client-brief";
-import { primaryAction, topObservation, topTalkingPoint } from "@/lib/lana-pro-intelligence/client-brief";
+import type { HomeAttentionItem } from "@/lib/lana-pro-home-attention/types";
 import type { LanaBusinessBrief, BusinessBriefItem } from "@/lib/lana-pro-intelligence/business-brief";
 
 export function PageWrap({ children }: { children: React.ReactNode }) {
@@ -213,89 +212,58 @@ export function IntelligenceCard({ model }: { model: IntelligenceModel }) {
 }
 
 /**
- * Phase 6 (Step 4) — Lana Intelligence on Home: a small number of grounded,
- * per-client briefs. Answers "what deserves my attention?", not "show me
- * everything". Falls back to the honest `IntelligenceCard` when empty.
+ * HOME INTELLIGENCE V1 — "Clients needing attention". A compact projection of
+ * the canonical chain (L1 FACT → L2 EVIDENCE → L3 SIGNAL → L4 INSIGHT → L5
+ * SUGGESTED ACTION) for the few clients who currently have something worth a
+ * look. One card per client. NO raw client comments — the verbatim words stay
+ * on the client detail page behind Insight → See evidence → CLIENT SAID.
+ * Every card routes to that canonical detail page.
  */
-export function IntelligenceBriefs({
-  briefs,
-  emptyModel,
-}: {
-  briefs: LanaClientBrief[];
-  emptyModel: IntelligenceModel;
-}) {
-  if (briefs.length === 0) return <IntelligenceCard model={emptyModel} />;
+export function ClientsNeedingAttention({ items }: { items: HomeAttentionItem[] }) {
+  const linkCls =
+    "text-xs font-semibold text-[#050040] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#050040] rounded";
 
-  const n = briefs.length;
+  if (items.length === 0) {
+    return (
+      <section>
+        <h2 className="text-xs font-bold text-gray-400 uppercase tracking-[0.14em] mb-2">Clients needing attention</h2>
+        <p className="text-sm text-gray-400">No new client insights right now.</p>
+      </section>
+    );
+  }
+
   return (
     <section>
-      <div className="flex items-center gap-2 mb-3">
-        <svg className="w-4 h-4 text-[#050040]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-        </svg>
-        <h2 className="text-xs font-bold text-gray-400 uppercase tracking-[0.14em]">Lana Intelligence</h2>
-      </div>
-      <p className="text-sm text-gray-500 mb-4">
-        {n} {n === 1 ? "thing" : "things"} worth your attention today.
-      </p>
-      <div className="rounded-2xl border border-gray-100 bg-white divide-y divide-gray-100">
-        {briefs.map((b) => (
-          <BriefRow key={b.clientId} brief={b} />
+      <h2 className="text-xs font-bold text-gray-400 uppercase tracking-[0.14em] mb-1">Clients needing attention</h2>
+      <p className="text-sm text-gray-500 mb-3">What you may want to review.</p>
+      <ul className="rounded-2xl border border-gray-100 bg-white divide-y divide-gray-100">
+        {items.map((it) => (
+          <li key={it.clientId} className="px-5 py-4">
+            <p className="text-sm font-semibold text-gray-900">{it.clientName}</p>
+            <p className="text-xs font-semibold text-gray-500 mt-1">{it.insightTitle}</p>
+            <p className="text-sm text-gray-700 mt-1 max-w-prose">{it.actionStatement}</p>
+            <div className="flex items-center gap-3 mt-2">
+              <Link href={it.href} className={`inline-block ${linkCls}`}>
+                View client →
+              </Link>
+              <span className="text-[11px] text-gray-400">
+                {it.insightFamily === "adherence" && it.adherenceRecent
+                  ? `Completed ${it.adherenceRecent.completed} of ${it.adherenceRecent.scheduled} scheduled last week`
+                  : it.insightFamily === "progression"
+                    ? `Based on ${it.basedOnSessions} recent ${it.basedOnSessions === 1 ? "session" : "sessions"}`
+                    : it.observedAt.slice(0, 10)}
+              </span>
+            </div>
+          </li>
         ))}
+      </ul>
+      <div className="mt-2">
+        <Link href="/lana-pro/clients" className={linkCls}>
+          View all clients →
+        </Link>
       </div>
     </section>
   );
-}
-
-function BriefRow({ brief }: { brief: LanaClientBrief }) {
-  const first = brief.clientContext.name.split(" ")[0];
-  const next = brief.clientContext.nextSession;
-  const when = next ? nextLine(next) : null;
-  const goal = brief.clientContext.goalLabel;
-  const pattern = topObservation(brief);
-  const suggest = topTalkingPoint(brief);
-  const action = primaryAction(brief.suggestedActions);
-  const withheld = brief.state === "no_shared_progress";
-
-  return (
-    <div className="px-5 py-4">
-      <p className="text-sm font-semibold text-gray-900">{brief.clientContext.name}</p>
-      {when && <p className="text-xs text-gray-500 mt-0.5">{when}</p>}
-
-      <dl className="mt-2.5 space-y-2">
-        {goal && <BriefField k="Goal" v={goal} />}
-        {pattern && <BriefField k="Recent pattern" v={pattern} />}
-        {withheld && !pattern && (
-          <BriefField k="Progress" v={`${first} hasn't shared their Lana progress with you.`} />
-        )}
-        {suggest && <BriefField k="Lana suggests" v={suggest} />}
-      </dl>
-
-      {action && (
-        <Link
-          href={action.href}
-          className="mt-3 inline-block text-xs font-semibold text-[#050040] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#050040] rounded"
-        >
-          {action.label} →
-        </Link>
-      )}
-    </div>
-  );
-}
-
-function BriefField({ k, v }: { k: string; v: string }) {
-  return (
-    <div>
-      <dt className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">{k}</dt>
-      <dd className="text-sm text-gray-700 mt-0.5">{v}</dd>
-    </div>
-  );
-}
-
-function nextLine(next: { atIso: string; serviceName: string }): string {
-  const time = next.atIso.slice(11, 16);
-  const t = time && time !== "00:00" ? time : null;
-  return [t, next.serviceName].filter(Boolean).join(" · ");
 }
 
 /**

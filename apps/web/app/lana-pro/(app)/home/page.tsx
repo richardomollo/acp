@@ -24,8 +24,9 @@ import {
   buildBusinessHome,
 } from "@/lib/lana-pro-workspace/home-model";
 import { proContextFor } from "../../_shared/pro-context";
-import { resolveHomeIntelligence } from "@/lib/lana-pro-intelligence/aggregator";
-import type { LanaClientBrief } from "@/lib/lana-pro-intelligence/client-brief";
+import { resolveHomeAttention } from "@/lib/lana-pro-home-attention/derive";
+import type { HomeAttentionItem } from "@/lib/lana-pro-home-attention/types";
+import { getSharedLanaPlanOccurrences } from "@/lib/lana-pro-progress/shared-lana-plan";
 import { resolveBusinessBrief } from "@/lib/lana-pro-intelligence/business-aggregator";
 import { ProfessionalHome } from "./ProfessionalHome";
 import { BusinessHome } from "./BusinessHome";
@@ -55,29 +56,38 @@ export default async function LanaProHomePage() {
   const supabase = await createClient();
   const { nowIso, todayStr } = nowParts();
 
-  // Phase 6 (Step 4) — Lana Intelligence for the active workspace. Business
-  // owner context keeps the honest placeholder (no individual client data).
-  let specialisations: string[] | null = null;
-  if (identity.pt) {
-    const { data: ptRow } = await supabase
-      .from("personal_trainers")
-      .select("specialisations")
-      .eq("id", identity.pt.id)
-      .maybeSingle();
-    specialisations = (ptRow?.specialisations as string[] | null) ?? null;
-  }
-  const pro = proContextFor(identity, specialisations);
-  const briefs: LanaClientBrief[] =
+  // HOME INTELLIGENCE V1 — "Clients needing attention": a bounded projection of
+  // the canonical L1→L5 chain (discomfort + progression only). Business owner
+  // context has no individual client intelligence and keeps its placeholder.
+  const pro = proContextFor(identity);
+  const attention: HomeAttentionItem[] =
     pro && pro.workspace !== "business"
-      ? await resolveHomeIntelligence(supabase as unknown as Parameters<typeof resolveHomeIntelligence>[0], {
-          workspace: pro.workspace,
-          professionalKind: pro.professionalKind,
-          professionalId: pro.professionalId,
-          professionalFlavour: pro.professionalFlavour,
-          todayLocalDate: todayStr,
-          nowIso,
-          limit: 4,
-        })
+      ? await resolveHomeAttention(
+          supabase as unknown as Parameters<typeof resolveHomeAttention>[0],
+          {
+            workspace: pro.workspace,
+            professionalId: pro.professionalId,
+            todayLocalDate: todayStr,
+            limit: 5,
+          },
+          // ONE batched RPC for the whole roster — source-complete adherence
+          (clientIds, from, to) =>
+            getSharedLanaPlanOccurrences(
+              supabase as unknown as Parameters<typeof getSharedLanaPlanOccurrences>[0],
+              clientIds,
+              from,
+              to,
+            ).then((rows) =>
+              rows.map((o) => ({
+                clientUserId: o.clientUserId,
+                date: o.date,
+                title: o.title,
+                category: o.category,
+                durationMinutes: o.durationMinutes,
+                completed: o.completed,
+              })),
+            ),
+        )
       : [];
 
   // §13 — an employed-professional context renders its own operational Home.
@@ -89,7 +99,7 @@ export default async function LanaProHomePage() {
       nowIso,
       todayStr,
     );
-    return <EmployedHome model={model} briefs={briefs} />;
+    return <EmployedHome model={model} attention={attention} />;
   }
 
   if (identity.capabilities.homeVariant === "business") {
@@ -102,7 +112,7 @@ export default async function LanaProHomePage() {
     <ProfessionalHome
       model={model}
       marketplaceGated={identity.capabilities.marketplaceGated}
-      briefs={briefs}
+      attention={attention}
     />
   );
 }

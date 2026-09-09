@@ -21,7 +21,7 @@ describe('deriveWorkspaceCapabilities — nav shape per account type', () => {
     const c = deriveWorkspaceCapabilities({
       ...base, hasProfessionalProfile: true, professionalStatus: 'approved',
     });
-    assert.deepEqual(c.nav, ['home', 'clients', 'bookings', 'services', 'schedule', 'profile']);
+    assert.deepEqual(c.nav, ['home', 'clients', 'workouts', 'bookings', 'services', 'schedule', 'profile']);
     assert.equal(c.homeVariant, 'professional');
     assert.equal(c.marketplaceGated, false);
     assert.equal(c.needsOnboarding, false);
@@ -31,7 +31,7 @@ describe('deriveWorkspaceCapabilities — nav shape per account type', () => {
     const c = deriveWorkspaceCapabilities({
       ...base, hasProfessionalProfile: true, professionalStatus: 'pending',
     });
-    assert.deepEqual(c.nav, ['home', 'clients', 'bookings', 'services', 'schedule', 'profile']);
+    assert.deepEqual(c.nav, ['home', 'clients', 'workouts', 'bookings', 'services', 'schedule', 'profile']);
     assert.equal(c.marketplaceGated, true);
   });
 
@@ -70,14 +70,14 @@ describe('deriveWorkspaceCapabilities — nav shape per account type', () => {
       ...base, hasProfessionalProfile: true, professionalStatus: 'approved',
       ownsBusiness: true, anyVenueActive: true,
     });
-    assert.deepEqual(c.nav, ['home', 'clients', 'bookings', 'services', 'schedule', 'team', 'business']);
+    assert.deepEqual(c.nav, ['home', 'clients', 'workouts', 'bookings', 'services', 'schedule', 'team', 'business']);
     assert.equal(c.homeVariant, 'professional');
     assert.equal(c.primaryRole, 'professional');
   });
 
   test('staff trainer only: Clients + Bookings + Schedule, no Services, no Team, not gated', () => {
     const c = deriveWorkspaceCapabilities({ ...base, isStaffTrainer: true });
-    assert.deepEqual(c.nav, ['home', 'clients', 'bookings', 'schedule', 'profile']);
+    assert.deepEqual(c.nav, ['home', 'clients', 'workouts', 'bookings', 'schedule', 'profile']);
     assert.equal(c.showServices, false);
     assert.equal(c.showTeam, false);
     assert.equal(c.marketplaceGated, false);

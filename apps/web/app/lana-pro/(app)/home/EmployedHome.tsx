@@ -1,6 +1,5 @@
 import type { TodayItem } from "@/lib/lana-pro-workspace/today";
-import type { LanaClientBrief } from "@/lib/lana-pro-intelligence/client-brief";
-import { buildIntelligenceModel } from "@/lib/lana-pro-workspace/home-model";
+import type { HomeAttentionItem } from "@/lib/lana-pro-home-attention/types";
 import {
   PageWrap,
   Greeting,
@@ -9,7 +8,7 @@ import {
   NextCard,
   DayList,
   EmptyBlock,
-  IntelligenceBriefs,
+  ClientsNeedingAttention,
 } from "./_ui";
 
 export interface EmployedHomeModel {
@@ -28,10 +27,10 @@ export interface EmployedHomeModel {
  */
 export function EmployedHome({
   model,
-  briefs = [],
+  attention = [],
 }: {
   model: EmployedHomeModel;
-  briefs?: LanaClientBrief[];
+  attention?: HomeAttentionItem[];
 }) {
   const hasToday = model.today.length > 0;
   return (
@@ -41,7 +40,7 @@ export function EmployedHome({
         line2={`Your work at ${model.venueName} today.`}
       />
 
-      <IntelligenceBriefs briefs={briefs} emptyModel={buildIntelligenceModel({}, {})} />
+      <ClientsNeedingAttention items={attention} />
 
       <Section title="Today">
         <MetricRow

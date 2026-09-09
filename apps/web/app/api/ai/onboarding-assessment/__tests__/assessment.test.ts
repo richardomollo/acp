@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {
   validateAssessment, checkAuthorization, buildUserPrompt,
   deriveCategoryCounts, sumDurationMinutes, enforceTimeBudget, getWeeklyMinutesBudget,
-  enforceSupportLogic, getWeekBounds, dateForWeekdayInWeek, attachPlanDates, upgradeLegacyPlanDates,
+  enforceSupportLogic, getWeekBounds, getWeekBoundsFromIso, isIsoDate, addUtcDaysToIso,
+  dateForWeekdayInWeek, attachPlanDates, upgradeLegacyPlanDates,
   AI_REQUEST_CONFIG, SYSTEM_PROMPT,
   normalizeWeekdayName, sanitizeTrainingDays, formatTrainingDaysForPrompt, CANONICAL_WEEKDAYS,
   enforceStrengthSessionDuration, isLightOrSupportStrength,
@@ -649,6 +650,128 @@ describe('attachPlanDates (Day 5 Part 3)', () => {
     const original = JSON.parse(JSON.stringify(baseAssessment));
     attachPlanDates(baseAssessment as any, '2026-08-31');
     assert.deepEqual(baseAssessment, original);
+  });
+
+  test('omitting notBeforeIso keeps the historical-stability behaviour (dates inside weekStartDate\'s own week)', () => {
+    const r = attachPlanDates(baseAssessment as any, '2026-08-31');
+    assert.equal(r.starting_plan.activities[0].planned_date, '2026-08-31'); // Monday, even though listed before a mid-week generation day
+  });
+});
+
+describe('LH-30 — a new/regenerated plan never schedules a session before its start date', () => {
+  const planWith = (days: string[]) => ({
+    ...VALID_ASSESSMENT,
+    starting_plan: {
+      title: 'x', rationale: 'x',
+      activities: days.map(day => ({
+        day, category: 'strength', activity: 'Gym', duration_minutes: 45, intensity: 'moderate', title: `${day} session`, description: 'x',
+      })),
+    },
+  });
+  const datesFor = (days: string[], startIso: string) => {
+    const { weekStartDate } = getWeekBoundsFromIso(startIso);
+    return attachPlanDates(planWith(days) as any, weekStartDate, startIso)
+      .starting_plan.activities.map(a => a.planned_date);
+  };
+
+  test('getWeekBoundsFromIso: Mon–Sun week containing the given calendar date', () => {
+    assert.deepEqual(getWeekBoundsFromIso('2026-09-08'), { weekStartDate: '2026-09-07', weekEndDate: '2026-09-13' }); // Tue
+    assert.deepEqual(getWeekBoundsFromIso('2026-09-07'), { weekStartDate: '2026-09-07', weekEndDate: '2026-09-13' }); // Mon
+    assert.deepEqual(getWeekBoundsFromIso('2026-09-13'), { weekStartDate: '2026-09-07', weekEndDate: '2026-09-13' }); // Sun
+  });
+
+  test('A. start Tuesday 8 Sep, days Mon/Wed/Fri → Wed 9, Fri 11, then Mon 14 (the device repro)', () => {
+    assert.deepEqual(datesFor(['Monday', 'Wednesday', 'Friday'], '2026-09-08'),
+      ['2026-09-14', '2026-09-09', '2026-09-11']);
+  });
+
+  test('B. start Monday → Monday is allowed', () => {
+    assert.deepEqual(datesFor(['Monday', 'Wednesday', 'Friday'], '2026-09-07'),
+      ['2026-09-07', '2026-09-09', '2026-09-11']);
+  });
+
+  test('C. start Friday → Friday allowed, Mon/Wed roll to next week', () => {
+    assert.deepEqual(datesFor(['Monday', 'Wednesday', 'Friday'], '2026-09-11'),
+      ['2026-09-14', '2026-09-16', '2026-09-11']);
+  });
+
+  test('D. start Saturday → first session is the next Monday', () => {
+    assert.deepEqual(datesFor(['Monday', 'Wednesday', 'Friday'], '2026-09-12'),
+      ['2026-09-14', '2026-09-16', '2026-09-18']);
+  });
+
+  test('E. start Sunday → first session is the next Monday', () => {
+    assert.deepEqual(datesFor(['Monday', 'Wednesday', 'Friday'], '2026-09-13'),
+      ['2026-09-14', '2026-09-16', '2026-09-18']);
+  });
+
+  test('F. non-consecutive selected days', () => {
+    assert.deepEqual(datesFor(['Tuesday', 'Thursday', 'Sunday'], '2026-09-10'), // start Thursday
+      ['2026-09-15', '2026-09-10', '2026-09-13']); // Tue rolls, Thu today, Sun this week
+  });
+
+  test('G. month boundary', () => {
+    assert.deepEqual(datesFor(['Monday', 'Wednesday', 'Friday'], '2026-09-29'), // Tue, week starts Mon 28 Sep
+      ['2026-10-05', '2026-09-30', '2026-10-02']);
+  });
+
+  test('H. year boundary', () => {
+    assert.deepEqual(datesFor(['Monday', 'Wednesday', 'Friday'], '2026-12-29'), // Tue, week starts Mon 28 Dec
+      ['2027-01-04', '2026-12-30', '2027-01-01']);
+  });
+
+  test('I. DST-transition weeks — pure UTC-string arithmetic, no wall-clock artefact', () => {
+    assert.deepEqual(datesFor(['Monday', 'Wednesday', 'Friday'], '2026-03-31'), // EU DST began 29 Mar
+      ['2026-04-06', '2026-04-01', '2026-04-03']);
+    assert.deepEqual(datesFor(['Monday', 'Wednesday', 'Friday'], '2026-11-03'), // US DST ended 1 Nov
+      ['2026-11-09', '2026-11-04', '2026-11-06']);
+  });
+
+  test('J. regeneration mid-week — same rule (begin from the next selected day on/after the effective date)', () => {
+    // regenerate on Thursday 10 Sep with Tue/Wed selected → both roll forward
+    assert.deepEqual(datesFor(['Tuesday', 'Wednesday'], '2026-09-10'), ['2026-09-15', '2026-09-16']);
+  });
+
+  test('INVARIANT — across every start day × selected-day set, no planned_date is before the start', () => {
+    const allDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    for (let offset = 0; offset < 21; offset++) {
+      const start = addUtcDaysToIso('2026-09-01', offset);
+      for (let mask = 1; mask < 128; mask++) {
+        const days = allDays.filter((_, i) => mask & (1 << i));
+        for (const d of datesFor(days, start)) {
+          assert.ok(d! >= start, `planned_date ${d} is before start ${start} (days ${days.join(',')})`);
+        }
+      }
+    }
+  });
+
+  test('the full weekly cadence is preserved — a partial first week, then the same days every week after', () => {
+    // start Thursday, days Mon/Wed/Fri: week 1 has only Fri; the Mon/Wed land in week 2.
+    const dates = datesFor(['Monday', 'Wednesday', 'Friday'], '2026-09-10');
+    assert.deepEqual(dates, ['2026-09-14', '2026-09-16', '2026-09-11']);
+    // sorted chronologically: Fri 11 (partial wk1), then Mon 14 / Wed 16 (wk2 cadence resumes)
+    assert.deepEqual([...dates].sort(), ['2026-09-11', '2026-09-14', '2026-09-16']);
+  });
+
+  test('timezone stability — same input strings, same output in every zone (§7)', () => {
+    const tz = process.env.TZ;
+    try {
+      const expected = datesFor(['Monday', 'Wednesday', 'Friday'], '2026-09-08');
+      for (const zone of ['Africa/Nairobi', 'Europe/Amsterdam', 'UTC', 'America/New_York']) {
+        process.env.TZ = zone;
+        assert.deepEqual(datesFor(['Monday', 'Wednesday', 'Friday'], '2026-09-08'), expected, zone);
+        assert.deepEqual(getWeekBoundsFromIso('2026-09-08'), { weekStartDate: '2026-09-07', weekEndDate: '2026-09-13' }, zone);
+      }
+    } finally {
+      if (tz === undefined) delete process.env.TZ; else process.env.TZ = tz;
+    }
+  });
+
+  test('isIsoDate guards a malformed clientLocalDate', () => {
+    assert.equal(isIsoDate('2026-09-08'), true);
+    for (const bad of ['', '2026-9-8', 'today', '2026-13-01', null, undefined, 20260908]) {
+      assert.equal(isIsoDate(bad as any), false);
+    }
   });
 });
 

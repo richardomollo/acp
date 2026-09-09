@@ -4,7 +4,7 @@ import {
   AI_ASSESSMENT_MODEL, AI_REQUEST_CONFIG, ASSESSMENT_JSON_SCHEMA, SYSTEM_PROMPT,
   buildUserPrompt, validateAssessment, checkAuthorization,
   getWeeklyMinutesBudget, enforceTimeBudget, enforceSupportLogic, enforceStrengthSessionDuration,
-  getWeekBounds, attachPlanDates, sanitizeTrainingDays,
+  getWeekBoundsFromIso, isIsoDate, attachPlanDates, sanitizeTrainingDays,
 } from './assessment';
 import { logAcpEvent, classifyOpenAiFailure, fetchWithTimeout } from '../../../../lib/observability';
 
@@ -25,7 +25,7 @@ export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId, onboardingAnswers, accessToken, sportHoursPerWeek } = await req.json();
+    const { userId, onboardingAnswers, accessToken, sportHoursPerWeek, clientLocalDate } = await req.json();
 
     if (!accessToken || typeof accessToken !== 'string') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -141,15 +141,25 @@ export async function POST(req: NextRequest) {
     assessment.support_opportunities = enforceSupportLogic(assessment, onboardingAnswers).support_opportunities;
 
     // Day 5 — plan dating (Part 3): the model only ever reasoned about
-    // weekday names; every actual date is computed here, anchored to the
-    // Monday of the week this plan starts (the current week, for the very
-    // first plan). Nutrition/review are Day 5 concepts introduced starting
-    // with the first weekly adaptation, not onboarding (Part 45) — always
-    // null here.
-    const { weekStartDate } = getWeekBounds(new Date());
+    // weekday names; every actual date is computed here. Nutrition/review are
+    // Day 5 concepts introduced starting with the first weekly adaptation,
+    // not onboarding (Part 45) — always null here.
+    //
+    // LH-30 — the plan's effective start date is the user's LOCAL calendar
+    // date (`clientLocalDate`, sent by the client via the LH-26 canonical
+    // helper). The server has no reliable notion of the user's "today", so it
+    // falls back to its own date only for a legacy client that omits it. The
+    // plan week is the Mon–Sun week containing that date; any session whose
+    // weekday falls before the start date is NOT backfilled into the past —
+    // it rolls to the next occurrence on/after the start (attachPlanDates).
+    const planStartDate = isIsoDate(clientLocalDate)
+      ? clientLocalDate
+      : new Date().toISOString().split('T')[0]; // legacy client — best effort
+    const { weekStartDate } = getWeekBoundsFromIso(planStartDate);
     const finalAssessment = attachPlanDates(
       { ...assessment, nutrition_focus: null, review: null },
       weekStartDate,
+      planStartDate,
     );
 
     const generatedAt = new Date().toISOString();

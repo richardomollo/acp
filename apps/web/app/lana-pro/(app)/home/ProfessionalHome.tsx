@@ -1,5 +1,5 @@
 import type { ProfessionalHomeModel } from "@/lib/lana-pro-workspace/home-model";
-import type { LanaClientBrief } from "@/lib/lana-pro-intelligence/client-brief";
+import type { HomeAttentionItem } from "@/lib/lana-pro-home-attention/types";
 import {
   PageWrap,
   Greeting,
@@ -9,7 +9,7 @@ import {
   NextCard,
   DayList,
   EmptyBlock,
-  IntelligenceBriefs,
+  ClientsNeedingAttention,
   SetupChecklist,
   GrowPractice,
 } from "./_ui";
@@ -17,11 +17,11 @@ import {
 export function ProfessionalHome({
   model,
   marketplaceGated,
-  briefs = [],
+  attention = [],
 }: {
   model: ProfessionalHomeModel;
   marketplaceGated: boolean;
-  briefs?: LanaClientBrief[];
+  attention?: HomeAttentionItem[];
 }) {
   const { schedule, counts, emptyState } = model;
   const hasToday = schedule.today.length > 0;
@@ -62,7 +62,7 @@ export function ProfessionalHome({
         )}
       </Section>
 
-      <IntelligenceBriefs briefs={briefs} emptyModel={model.intelligence} />
+      <ClientsNeedingAttention items={attention} />
 
 
       {hasToday && (

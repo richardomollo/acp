@@ -449,6 +449,20 @@ function toIsoDate(d: Date): string {
   return d.toISOString().split('T')[0];
 }
 
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+export function isIsoDate(x: unknown): x is string {
+  return typeof x === 'string' && ISO_DATE_RE.test(x) && !Number.isNaN(new Date(x + 'T00:00:00Z').getTime());
+}
+
+/** Adds `days` calendar days to a `YYYY-MM-DD` string, staying entirely in
+ *  UTC-string arithmetic (no local `.getDate()` — matches dateForWeekdayInWeek
+ *  and keeps every plan date timezone-independent, per LH-26). */
+export function addUtcDaysToIso(iso: string, days: number): string {
+  const d = new Date(iso + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + days);
+  return toIsoDate(d);
+}
+
 /** The Monday-Sunday week containing `anchor`, as ISO date strings. */
 export function getWeekBounds(anchor: Date): { weekStartDate: string; weekEndDate: string } {
   const day = anchor.getDay(); // 0=Sunday..6=Saturday
@@ -458,6 +472,21 @@ export function getWeekBounds(anchor: Date): { weekStartDate: string; weekEndDat
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
   return { weekStartDate: toIsoDate(monday), weekEndDate: toIsoDate(sunday) };
+}
+
+/**
+ * LH-30 — the Monday-Sunday week containing a `YYYY-MM-DD` calendar date,
+ * computed purely in UTC-string space so it can't shift a day for a server
+ * running in any timezone. This is the initial-onboarding anchor: the plan's
+ * week is the Monday-Sunday week containing the user's LOCAL start date
+ * (sent by the client as `clientLocalDate`).
+ */
+export function getWeekBoundsFromIso(iso: string): { weekStartDate: string; weekEndDate: string } {
+  const d = new Date(iso + 'T00:00:00Z');
+  const day = d.getUTCDay(); // 0=Sunday..6=Saturday
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  const weekStartDate = addUtcDaysToIso(iso, mondayOffset);
+  return { weekStartDate, weekEndDate: addUtcDaysToIso(weekStartDate, 6) };
 }
 
 /** The absolute date of `dayName` within the specific week starting `weekStartDate` — never dependent on "now". */
@@ -476,14 +505,23 @@ export function dateForWeekdayInWeek(weekStartDateIso: string, dayName: string):
  * Injects week_start_date/week_end_date/planned_date/assessment_version —
  * the one place any plan (initial onboarding or a later weekly adaptation)
  * gets its dates. Never touches anything the model actually reasoned about.
+ *
+ * LH-30 — `notBeforeIso` (the plan's effective start date, `YYYY-MM-DD`):
+ * when given, an activity whose weekday falls EARLIER in the plan week than
+ * the start date is not backfilled into the past — its `planned_date` rolls
+ * forward one week to the next occurrence of that weekday on/after the start.
+ * The weekly cadence is preserved (§4): only the first partial week is
+ * affected, the full cadence resumes the following week. Omit `notBeforeIso`
+ * (weekly adaptation, legacy-date upgrade) to keep the historical-stability
+ * behaviour: every weekday date sits inside `weekStartDateIso`'s own week.
  */
-export function attachPlanDates(assessment: AIAssessment, weekStartDateIso: string): AIAssessment {
-  const { weekStartDate, weekEndDate } = (() => {
-    const monday = new Date(weekStartDateIso + 'T00:00:00Z');
-    const sunday = new Date(monday);
-    sunday.setUTCDate(monday.getUTCDate() + 6);
-    return { weekStartDate: weekStartDateIso, weekEndDate: toIsoDate(sunday) };
-  })();
+export function attachPlanDates(
+  assessment: AIAssessment,
+  weekStartDateIso: string,
+  notBeforeIso?: string,
+): AIAssessment {
+  const weekStartDate = weekStartDateIso;
+  const weekEndDate = addUtcDaysToIso(weekStartDateIso, 6);
   return {
     ...assessment,
     assessment_version: CURRENT_ASSESSMENT_VERSION,
@@ -491,10 +529,16 @@ export function attachPlanDates(assessment: AIAssessment, weekStartDateIso: stri
       ...assessment.starting_plan,
       week_start_date: weekStartDate,
       week_end_date: weekEndDate,
-      activities: assessment.starting_plan.activities.map(a => ({
-        ...a,
-        planned_date: dateForWeekdayInWeek(weekStartDate, a.day) ?? undefined,
-      })),
+      activities: assessment.starting_plan.activities.map(a => {
+        let planned = dateForWeekdayInWeek(weekStartDate, a.day) ?? undefined;
+        if (planned && notBeforeIso && isIsoDate(notBeforeIso) && planned < notBeforeIso) {
+          // The gap is always < 7 days (notBeforeIso is inside this week),
+          // so one +7 lands on the next occurrence of that weekday, on/after
+          // the start date.
+          planned = addUtcDaysToIso(planned, 7);
+        }
+        return { ...a, planned_date: planned };
+      }),
     },
   };
 }
@@ -630,6 +674,8 @@ export function enforceSupportLogic(assessment: AIAssessment, onboardingAnswers:
 export const SYSTEM_PROMPT = `You are ACP Intelligence™, the ACP fitness planning assistant. Read one user's onboarding answers and produce a personalised assessment plus one concrete first-week plan.
 
 "starting_plan.activities" is the single source of truth for the week — the app derives all session counts and totals from it directly. Never state a session count anywhere else, and never let another field imply a different number of sessions than "activities" actually contains.
+
+The app also owns the structured exercise prescription (sets, reps, rest) — it is computed deterministically from the user's goal and each movement's role. Every "activity" and "title" and "description" must describe only the session's FOCUS and INTENT (e.g. "full-body strength, compound lifts then accessories"). NEVER state specific sets, reps, or rest in any text field — a hardcoded "3 sets of 6–10 reps" will contradict the real prescription.
 
 USER FIT
 - Use only the given onboarding data; never invent facts.

@@ -36,6 +36,7 @@ export type NavItemId =
   | 'bookings'
   | 'services'
   | 'schedule'
+  | 'workouts'
   | 'team'
   | 'business'
   | 'profile';
@@ -58,10 +59,10 @@ export interface WorkspaceCapabilities {
   needsOnboarding: boolean;
 }
 
-const PROFESSIONAL_NAV: NavItemId[] = ['home', 'clients', 'bookings', 'services', 'schedule', 'profile'];
-const STAFF_NAV: NavItemId[] = ['home', 'clients', 'bookings', 'schedule', 'profile'];
+const PROFESSIONAL_NAV: NavItemId[] = ['home', 'clients', 'workouts', 'bookings', 'services', 'schedule', 'profile'];
+const STAFF_NAV: NavItemId[] = ['home', 'clients', 'workouts', 'bookings', 'schedule', 'profile'];
 const BUSINESS_NAV_BASE: NavItemId[] = ['home', 'bookings', 'services', 'schedule', 'team', 'business'];
-const HYBRID_NAV: NavItemId[] = ['home', 'clients', 'bookings', 'services', 'schedule', 'team', 'business'];
+const HYBRID_NAV: NavItemId[] = ['home', 'clients', 'workouts', 'bookings', 'services', 'schedule', 'team', 'business'];
 
 /**
  * Derive everything the shell needs from the account's real shape.
@@ -164,6 +165,7 @@ const NAV_META: Record<NavItemId, Omit<NavItemMeta, 'id'>> = {
   bookings: { label: 'Bookings', href: '/lana-pro/bookings' },
   services: { label: 'Services', href: '/lana-pro/services' },
   schedule: { label: 'Schedule', href: '/lana-pro/schedule' },
+  workouts: { label: 'Workouts', href: '/lana-pro/workouts' },
   team: { label: 'Team', href: '/lana-pro/team' },
   business: { label: 'Business', href: '/lana-pro/business' },
   profile: { label: 'Profile', href: '/lana-pro/profile' },

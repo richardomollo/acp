@@ -209,6 +209,10 @@ export default function MyTrainersScreen() {
                     {row.source === 'gym' && row.venueName ? (
                       <ThemedText style={s.shareLabel}>Share progress with {trainerName(row)}</ThemedText>
                     ) : null}
+                    <ThemedText style={s.shareDesc}>
+                      Lets {trainerName(row)} see your workout completion, progress, difficulty and any
+                      notes you add during or after workouts.
+                    </ThemedText>
                   </View>
                   {savingId === row.id ? (
                     <ActivityIndicator size="small" color={palette.blue500} />
@@ -306,6 +310,7 @@ const s = StyleSheet.create({
   avatarText: { fontSize: 16, fontWeight: '700', color: palette.blue500 },
   trainerName: { fontSize: 15, fontWeight: '700', color: palette.ink900 },
   shareLabel: { fontSize: 12, color: palette.gray300, marginTop: 2 },
+  shareDesc: { fontSize: 11, color: palette.gray300, marginTop: 4, lineHeight: 15 },
 
   acceptBtn: {
     width: 32, height: 32, borderRadius: 16, backgroundColor: palette.blue500,
