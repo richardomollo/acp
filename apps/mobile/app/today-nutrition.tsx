@@ -20,6 +20,7 @@ import { AdaptiveTodayMeals } from '@/components/nutrition/adaptive-today-meals'
 import { isAdaptiveNutritionEnabled } from '@/lib/flags';
 import { selectDailyMeals } from '@/lib/nutrition-matching';
 import { getMealCandidates } from '@/lib/meal-ranking';
+import { validateGoalDirection } from '@/lib/onboarding-validation';
 import { localISODate } from '@/lib/fulfilment';
 import { foodLogService } from '@/services/food-log-service';
 import type { FoodLogEntry, DailyNutritionSummary } from '@/lib/nutrition/food-types';
@@ -153,7 +154,7 @@ export default function TodayNutritionScreen() {
       // whether today's meals loaded successfully.
       const { data: profileData } = await supabase
         .from('fitness_profile')
-        .select('ai_assessment, goal, cuisine_preferences')
+        .select('ai_assessment, goal, cuisine_preferences, starting_weight_kg, goal_weight_kg')
         .eq('user_id', session.user.id)
         .maybeSingle();
       const validAssessment = profileData?.ai_assessment && isValidAssessment(profileData.ai_assessment)
@@ -162,6 +163,18 @@ export default function TodayNutritionScreen() {
       if (active) setAssessment(validAssessment);
       const goal = profileData?.goal ?? null;
       const cuisinePreferences = profileData?.cuisine_preferences ?? [];
+      // LH-39 — the scale direction the user's own current-vs-goal weight
+      // implies, using the exact LH-04 semantics (validateGoalDirection):
+      // a performance/neutral goal still yields a usable direction, and a
+      // contradictory directional goal was already blocked at onboarding.
+      // Used ONLY to gently tilt which suggested meals are shown — never a
+      // calorie target, never a hard filter. Missing/implausible weights →
+      // 'unknown' → no tilt at all (graceful degradation).
+      const { weightDirection } = validateGoalDirection({
+        goal,
+        currentWeightKg: profileData?.starting_weight_kg ?? null,
+        goalWeightKg: profileData?.goal_weight_kg ?? null,
+      });
 
       const { data: planData } = await supabase
         .from('meal_plans')
@@ -312,11 +325,14 @@ export default function TodayNutritionScreen() {
         // No active plan — suggest one meal per category. Ranking (which
         // candidates are actually good picks) is deterministic goal/cuisine
         // fit via getMealCandidates (Day 7.2 — never a hard filter, so
-        // international meals are always eligible, just ranked); which
-        // equally-good candidate is shown today is a stable per-day pick via
-        // selectDailyMeals (same user + date + pool always resolves the same
-        // way — never Math.random()), applied only among the top-ranked ties
-        // so a stronger candidate can never lose to a weaker one.
+        // international meals are always eligible, just ranked), plus a small
+        // LH-39 pool-relative lean toward the user's weight direction (a
+        // gain goal leans to more substantial, protein-forward meals; a loss
+        // goal to protein/fibre-forward ones) — never a calorie target;
+        // which equally-good candidate is shown today is a stable per-day pick
+        // via selectDailyMeals (same user + date + pool always resolves the
+        // same way — never Math.random()), applied only among the top-ranked
+        // ties so a stronger candidate can never lose to a weaker one.
         const categories = ['breakfast', 'lunch', 'dinner'] as const;
         const categoryResults = await Promise.all(
           categories.map(category =>
@@ -340,7 +356,7 @@ export default function TodayNutritionScreen() {
               calories: r.calories ?? 0, protein_g: r.protein_g ?? 0, carbs_g: r.carbs_g ?? 0,
               fat_g: r.fat_g ?? 0, fibre_g: r.fibre_g, is_active: true,
             })),
-            goal, cuisinePreferences,
+            goal, cuisinePreferences, weightDirection,
           });
           const topScore = candidates[0]?.scoring.overall;
           const tiedTopIds = new Set(candidates.filter(c => c.scoring.overall === topScore).map(c => c.mealId));
@@ -771,7 +787,7 @@ export default function TodayNutritionScreen() {
               <>
                 <ThemedText style={s.sourceNote}>
                   {isSuggested
-                    ? `Suggested meals${planned.calories > 0 ? ` total ≈ ${Math.round(planned.calories)} kcal` : ''} · reference, not a target`
+                    ? `Suggested meals shown${planned.calories > 0 ? `: ~${Math.round(planned.calories)} kcal` : ''} · reference, not a target`
                     : 'From your meal plan'}
                 </ThemedText>
                 {isSuggested && (

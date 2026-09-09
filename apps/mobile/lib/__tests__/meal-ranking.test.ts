@@ -111,3 +111,70 @@ describe('applyDailyVariety — never overrides a genuinely better-ranked meal',
     assert.equal(results[0].candidate, null);
   });
 });
+
+describe('LH-39 — weight-direction tilt (directionally compatible, never a hard filter or calorie target)', () => {
+  // Three same-cuisine candidates for one slot. `leanProtein` and
+  // `heartyProtein` have an IDENTICAL coarse goal fit for build_muscle (both
+  // high-protein, high-fibre, balanced) — they differ mainly in how
+  // substantial they are — so only the weight direction can reorder them.
+  // `midBalanced` sits between.
+  const leanProtein = mealRow({ id: 'leanProtein', calories: 350, protein_g: 28, carbs_g: 30, fat_g: 9, fibre_g: 6 });
+  const midBalanced = mealRow({ id: 'midBalanced', calories: 520, protein_g: 22, carbs_g: 55, fat_g: 16, fibre_g: 4 });
+  const heartyProtein = mealRow({ id: 'heartyProtein', calories: 720, protein_g: 34, carbs_g: 75, fat_g: 22, fibre_g: 7 });
+  const pool = [leanProtein, midBalanced, heartyProtein];
+
+  test("omitting weightDirection leaves ordering AND scores byte-identical to before", () => {
+    const withNothing = getMealCandidates({ meals: pool, goal: 'build_muscle', cuisinePreferences: ['kenyan'] });
+    const withUnknown = getMealCandidates({ meals: pool, goal: 'build_muscle', cuisinePreferences: ['kenyan'], weightDirection: 'unknown' });
+    const withNone = getMealCandidates({ meals: pool, goal: 'build_muscle', cuisinePreferences: ['kenyan'], weightDirection: 'none' });
+    assert.deepEqual(withUnknown.map(c => [c.mealId, c.scoring.overall]), withNothing.map(c => [c.mealId, c.scoring.overall]));
+    assert.deepEqual(withNone.map(c => [c.mealId, c.scoring.overall]), withNothing.map(c => [c.mealId, c.scoring.overall]));
+  });
+
+  test("a gain direction ranks the more substantial protein meal above the lighter one (identical goal fit)", () => {
+    const gain = getMealCandidates({ meals: pool, goal: 'build_muscle', weightDirection: 'gain' });
+    const heartyRank = gain.findIndex(c => c.mealId === 'heartyProtein');
+    const leanRank = gain.findIndex(c => c.mealId === 'leanProtein');
+    assert.ok(heartyRank < leanRank, `heartyProtein (${heartyRank}) should rank above leanProtein (${leanRank}) for a gain direction`);
+  });
+
+  test("a loss direction ranks the lighter protein/fibre-forward meal above the more substantial one (identical goal fit)", () => {
+    const loss = getMealCandidates({ meals: pool, goal: 'build_muscle', weightDirection: 'loss' });
+    const leanRank = loss.findIndex(c => c.mealId === 'leanProtein');
+    const heartyRank = loss.findIndex(c => c.mealId === 'heartyProtein');
+    assert.ok(leanRank < heartyRank, `leanProtein (${leanRank}) should rank above heartyProtein (${heartyRank}) for a loss direction`);
+  });
+
+  test("the tilt never excludes a meal — every candidate still appears under either direction", () => {
+    for (const dir of ['gain', 'loss'] as const) {
+      const out = getMealCandidates({ meals: pool, goal: 'build_muscle', weightDirection: dir });
+      assert.deepEqual(new Set(out.map(c => c.mealId)), new Set(['leanProtein', 'midBalanced', 'heartyProtein']));
+    }
+  });
+
+  test("the tilt is bounded — it never overturns a genuinely stronger goal+cuisine match", () => {
+    // 'strong' has a much better cuisine + protein fit; 'weakDense' is only energy-dense.
+    const strong = mealRow({ id: 'strong', cuisine: 'kenyan', calories: 450, protein_g: 32, carbs_g: 40, fat_g: 12, fibre_g: 6, tags: [] });
+    const weakDense = mealRow({ id: 'weakDense', cuisine: 'east_asian', calories: 1100, protein_g: 8, carbs_g: 120, fat_g: 40, fibre_g: 1 });
+    const out = getMealCandidates({ meals: [strong, weakDense], goal: 'build_muscle', cuisinePreferences: ['kenyan'], weightDirection: 'gain' });
+    assert.equal(out[0].mealId, 'strong');
+  });
+
+  test("canonical nutrition values are passed through unchanged regardless of direction", () => {
+    const out = getMealCandidates({ meals: [heartyProtein], goal: 'build_muscle', weightDirection: 'gain' });
+    assert.deepEqual(out[0].nutrition, { calories: 720, proteinGrams: 34, carbohydrateGrams: 75, fatGrams: 22 });
+  });
+
+  test("dietary hard filter still wins over the directional tilt", () => {
+    const vegLight = mealRow({ id: 'vegLight', tags: ['vegetarian'], calories: 250, protein_g: 12 });
+    const meatHearty = mealRow({ id: 'meatHearty', tags: [], calories: 900, protein_g: 45 });
+    const out = getMealCandidates({ meals: [vegLight, meatHearty], goal: 'build_muscle', weightDirection: 'gain', requireVegetarian: true });
+    assert.deepEqual(out.map(c => c.mealId), ['vegLight']);
+  });
+
+  test("deterministic: identical inputs (direction included) produce identical output", () => {
+    const a = getMealCandidates({ meals: pool, goal: 'build_muscle', cuisinePreferences: ['kenyan'], weightDirection: 'gain' });
+    const b = getMealCandidates({ meals: pool, goal: 'build_muscle', cuisinePreferences: ['kenyan'], weightDirection: 'gain' });
+    assert.deepEqual(a, b);
+  });
+});

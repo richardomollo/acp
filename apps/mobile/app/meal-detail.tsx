@@ -1,10 +1,11 @@
 import {
-  StyleSheet, View, ScrollView, TouchableOpacity, Image,
+  StyleSheet, View, ScrollView, TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { ThemedText } from '@/components/themed-text';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { palette, radii, fontSize } from '@/constants/theme';
+import { palette, radii } from '@/constants/theme';
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,7 +16,6 @@ interface Meal {
   name: string;
   category: string;
   description: string | null;
-  image_url: string | null;
   ingredients: string[];
   calories: number | null;
   protein_g: number | null;
@@ -27,10 +27,6 @@ interface Meal {
   tags: string[];
   cuisine: string;
 }
-
-const CATEGORY_ICON: Record<string, string> = {
-  breakfast: '🍳', lunch: '🍲', dinner: '🍽️', snack: '🥜', smoothie: '🥤',
-};
 
 const DIFFICULTY_COLORS: Record<string, { bg: string; text: string }> = {
   beginner: { bg: palette.success50, text: palette.success700 },
@@ -51,7 +47,7 @@ export default function MealDetailScreen() {
       setLoading(true);
       const { data } = await supabase
         .from('meals')
-        .select('id, name, category, description, image_url, ingredients, calories, protein_g, carbs_g, fat_g, fibre_g, prep_time_minutes, difficulty, tags, cuisine')
+        .select('id, name, category, description, ingredients, calories, protein_g, carbs_g, fat_g, fibre_g, prep_time_minutes, difficulty, tags, cuisine')
         .eq('id', mealId)
         .single();
       if (active) { setMeal((data as Meal) ?? null); setLoading(false); }
@@ -71,21 +67,20 @@ export default function MealDetailScreen() {
 
   return (
     <View style={s.root}>
-      <SafeAreaView edges={['top']} style={s.headerSafe}>
+      {/* Same soft blue top wash as the Home screen */}
+      <LinearGradient
+        colors={[palette.blue100, 'rgba(208,224,255,0)']}
+        style={s.topFadeBg}
+        pointerEvents="none"
+      />
+
+      <SafeAreaView edges={['top']} style={s.header}>
         <TouchableOpacity style={s.backBtn} onPress={() => router.back()} hitSlop={12}>
           <Ionicons name="arrow-back" size={22} color={palette.ink900} />
         </TouchableOpacity>
       </SafeAreaView>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {meal.image_url ? (
-          <Image source={{ uri: meal.image_url }} style={s.heroImage} resizeMode="cover" />
-        ) : (
-          <View style={[s.heroImage, s.heroFallback]}>
-            <ThemedText style={{ fontSize: 56 }}>{CATEGORY_ICON[meal.category] ?? '🍽️'}</ThemedText>
-          </View>
-        )}
-
         <View style={s.content}>
           <ThemedText style={s.title}>{meal.name}</ThemedText>
           <View style={s.badgeRow}>
@@ -179,16 +174,19 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: palette.white },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
-  headerSafe: { position: 'absolute', top: 0, left: 0, zIndex: 10, paddingHorizontal: 16, paddingTop: 8 },
+  topFadeBg: { position: 'absolute', top: 0, left: 0, right: 0, height: 460 },
+
+  header: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 20, paddingTop: 8, paddingBottom: 8,
+    backgroundColor: 'transparent',
+  },
   backBtn: {
     width: 38, height: 38, borderRadius: 19,
-    backgroundColor: 'rgba(255,255,255,0.9)', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: palette.surfaceMuted, alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
 
-  heroImage: { width: '100%', height: 260 },
-  heroFallback: { backgroundColor: palette.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
-
-  content: { paddingHorizontal: 20, paddingTop: 20 },
+  content: { paddingHorizontal: 20, paddingTop: 12 },
   title: { fontSize: 24, fontWeight: '800', letterSpacing: -0.4, color: palette.ink900, marginBottom: 10 },
 
   badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },

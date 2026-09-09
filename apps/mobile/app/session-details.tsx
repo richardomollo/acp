@@ -618,9 +618,11 @@ const styles = StyleSheet.create({
   },
   categoryBadgeText: { color: palette.white, fontSize: fontSize.xs, fontWeight: '700', textTransform: 'uppercase' },
 
-  // Content card
+  // Content section — transparent: the fixed cover photo (top) and the
+  // screen's own white background (below the fade) show through instead of an
+  // opaque card.
   card: {
-    backgroundColor: palette.white,
+    backgroundColor: 'transparent',
     borderTopLeftRadius: radii['2xl'],
     borderTopRightRadius: radii['2xl'],
     marginTop: -24,

@@ -50,6 +50,12 @@ import {
   isPlanReadyForReview, isSundayPlanningWindow, fetchPlanDateUpgrade,
   getScheduledNextPlan, localDateIso, type ScheduledNextPlan,
 } from '@/lib/weekly-review';
+import {
+  HOME_HEADER_ACTIONS, HOME_SEARCH_PLACEHOLDER, HOME_SEARCH_LIMIT, homeSearchMode,
+  filterClassesLocally, filterVenuesLocally, filterTrainersLocally,
+  homeSearchResultRoute,
+} from '@/lib/marketplace/home-search';
+import { MarketplaceUnavailableNotice } from '@/components/marketplace/marketplace-gate';
 
 const { width } = Dimensions.get('window');
 const RAIL_CARD_W = Math.round(width * 0.5);
@@ -93,6 +99,15 @@ interface Session {
 interface UserProfile {
   name: string;
   avatarUrl: string | null;
+}
+
+interface SearchTrainerRow {
+  id: string;
+  full_name: string;
+  professional_name: string | null;
+  photo_url: string | null;
+  specialisations: string[];
+  service_areas: string[];
 }
 
 const MOODS = [
@@ -640,12 +655,14 @@ export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchResults, setSearchResults] = useState<{
-    sessions: Session[];
-    gyms: Gym[];
-    experiences: Experience[];
-    trainers: { id: string; full_name: string; professional_name: string | null; photo_url: string | null; specialisations: string[] }[];
-  }>({ sessions: [], gyms: [], experiences: [], trainers: [] });
+    classes: Session[];
+    venues: Gym[];
+    trainers: SearchTrainerRow[];
+  }>({ classes: [], venues: [], trainers: [] });
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Guards against out-of-order responses when the user switches category or
+  // types fast — only the newest request is allowed to write results.
+  const searchReqId = useRef(0);
 
   const isTaskDoneOnSelectedDate = (task: TaskRow): boolean =>
     task.recurrence === 'once' ? task.status === 'done' : task.last_completed_date === calSelected;
@@ -1759,45 +1776,75 @@ export default function HomeScreen() {
     return { deposit, remainder };
   };
 
-  const runSearch = async (q: string) => {
-    if (q.trim().length < 2) {
-      setSearchResults({ sessions: [], gyms: [], experiences: [], trainers: [] });
+  // ─── Home marketplace search sheet ───────────────────────────────────────
+  // Classes, Venues and Personal Trainers together, in one list with section
+  // headers. An empty query BROWSES; >= 2 chars searches. Reuses the exact
+  // Supabase reads and the marketplace geo-scoping (venueScopeIds +
+  // getEligiblePersonalTrainerIds) the dedicated tab screens use — no parallel
+  // search backend, no second location model. Deterministic shaping/routing
+  // lives in lib/marketplace/home-search.ts.
+  const runSearch = useCallback(async (rawQuery: string) => {
+    const mode = homeSearchMode(rawQuery);
+    if (mode === 'typing') return; // 1 char — keep whatever is already shown
+
+    const scopeIds = marketLocRef.current.venueScopeIds; // string[] (geo-scoped) | null (kill switch off)
+    // In a supported city with zero local supply → nothing to fetch; the sheet
+    // renders the shared marketplace notice instead of an empty list.
+    if (scopeIds !== null && scopeIds.length === 0) {
+      setSearchResults({ classes: [], venues: [], trainers: [] });
+      setSearchLoading(false);
       return;
     }
+
+    const reqId = ++searchReqId.current;
     setSearchLoading(true);
+    const term = `%${rawQuery.trim()}%`;
+    const isSearch = mode === 'search';
     try {
-      const term = `%${q.trim()}%`;
-      // Beta #019D — trainer search must obey the same marketplace geography
-      // as trainers/discover/classes: never surface a named Nairobi in-person
-      // trainer to an Amsterdam search. Shared with those — mergeEligiblePtIds.
-      // #019E — a query failure fails closed (no trainer results) rather
-      // than showing every Kenyan trainer to an Amsterdam search.
-      const ptEligibility = await getEligiblePersonalTrainerIds(marketLocRef.current.venueScopeIds);
-      const eligiblePtIds = ptEligibility.ok ? ptEligibility.ids : [];
-      const [sessRes, gymRes, expRes, ptRes] = await Promise.all([
-        supabase.from('sessions').select('id, name, instructor, date, time, drop_in_price, image_url, gym_id, spots_left, category, gyms(name, deposit_pct)').ilike('name', term).limit(5),
-        supabase.from('gyms').select('id, name, location, image_url, description').ilike('name', term).limit(4),
-        supabase.from('experiences').select('id, name, tagline, date, start_time, price_kes, discount_kes, spots_left, max_capacity, image_url, category, gym_id, gyms(name)').ilike('name', term).limit(4),
-        eligiblePtIds !== null && eligiblePtIds.length === 0
-          ? Promise.resolve({ data: [] as any[] })
-          : (() => {
-              let q2 = supabase.from('personal_trainers').select('id, full_name, professional_name, photo_url, specialisations').ilike('full_name', term).eq('status', 'approved').limit(4);
-              if (eligiblePtIds !== null) q2 = q2.in('id', eligiblePtIds);
-              return q2;
-            })(),
+      let classesQ = supabase.from('sessions')
+        .select('id, name, instructor, description, date, time, drop_in_price, image_url, gym_id, spots_left, category, gyms(name, deposit_pct)')
+        .eq('is_active', true)
+        .gte('date', new Date().toISOString().split('T')[0]);
+      if (scopeIds !== null) classesQ = classesQ.in('gym_id', scopeIds);
+      if (isSearch) classesQ = classesQ.ilike('name', term);
+      classesQ = classesQ.order('date', { ascending: true }).order('time', { ascending: true }).limit(HOME_SEARCH_LIMIT);
+
+      let venuesQ = supabase.from('gyms')
+        .select('id, name, location, image_url, description')
+        .eq('is_active', true);
+      if (scopeIds !== null) venuesQ = venuesQ.in('id', scopeIds);
+      if (isSearch) venuesQ = venuesQ.ilike('name', term);
+      venuesQ = venuesQ.order('name', { ascending: true }).limit(HOME_SEARCH_LIMIT);
+
+      // Beta #019D/E — same trainer geo-eligibility as the Trainers tab;
+      // a scope-query failure fails CLOSED (empty), never leaks non-local PTs.
+      const elig = await getEligiblePersonalTrainerIds(scopeIds);
+      if (reqId !== searchReqId.current) return;
+      const trainersDisabled = !elig.ok || (elig.ids !== null && elig.ids.length === 0);
+      let trainersQ = supabase.from('personal_trainers')
+        .select('id, full_name, professional_name, photo_url, specialisations, service_areas')
+        .eq('status', 'approved');
+      if (elig.ok && elig.ids !== null) trainersQ = trainersQ.in('id', elig.ids);
+      if (isSearch) trainersQ = trainersQ.or(`full_name.ilike.${term},professional_name.ilike.${term}`);
+      trainersQ = trainersQ.order('created_at', { ascending: false }).limit(HOME_SEARCH_LIMIT);
+
+      const [classesRes, venuesRes, trainersRes] = await Promise.all([
+        classesQ,
+        venuesQ,
+        trainersDisabled ? Promise.resolve({ data: [] as any[] }) : trainersQ,
       ]);
+      if (reqId !== searchReqId.current) return;
       setSearchResults({
-        sessions: (sessRes.data ?? []) as any,
-        gyms: gymRes.data ?? [],
-        experiences: (expRes.data ?? []) as any,
-        trainers: (ptRes.data ?? []) as any,
+        classes: (classesRes.data ?? []) as any,
+        venues: (venuesRes.data ?? []) as any,
+        trainers: (trainersRes.data ?? []) as any,
       });
     } catch (e) {
-      console.error('Search error:', e);
+      console.error('Home search error:', e);
     } finally {
-      setSearchLoading(false);
+      if (reqId === searchReqId.current) setSearchLoading(false);
     }
-  };
+  }, []);
 
   const handleSearchChange = (q: string) => {
     setSearchQuery(q);
@@ -1805,12 +1852,34 @@ export default function HomeScreen() {
     searchTimer.current = setTimeout(() => runSearch(q), 350);
   };
 
+  const openSearch = () => {
+    setSearchQuery('');
+    setSearchResults({ classes: [], venues: [], trainers: [] });
+    setSearchVisible(true);
+    marketLocRef.current.ensureResolved({ requestPermission: true });
+    runSearch('');
+  };
+
   const closeSearch = () => {
     setSearchVisible(false);
     setSearchQuery('');
-    setSearchResults({ sessions: [], gyms: [], experiences: [], trainers: [] });
+    setSearchResults({ classes: [], venues: [], trainers: [] });
     if (searchTimer.current) clearTimeout(searchTimer.current);
   };
+
+  const filteredSearchClasses = useMemo(
+    () => filterClassesLocally(searchResults.classes, searchQuery),
+    [searchResults.classes, searchQuery],
+  );
+  const filteredSearchVenues = useMemo(
+    () => filterVenuesLocally(searchResults.venues, searchQuery),
+    [searchResults.venues, searchQuery],
+  );
+  const filteredSearchTrainers = useMemo(
+    () => filterTrainersLocally(searchResults.trainers, searchQuery),
+    [searchResults.trainers, searchQuery],
+  );
+  const totalSearchCount = filteredSearchClasses.length + filteredSearchVenues.length + filteredSearchTrainers.length;
 
   if (loading) {
     return (
@@ -1849,7 +1918,7 @@ export default function HomeScreen() {
 
         {/* ─── Header greeting / guest hero ─── */}
         {isGuest ? (
-          <GuestHero onSearch={() => setSearchVisible(true)} />
+          <GuestHero onSearch={openSearch} />
         ) : (
           <View style={styles.header}>
             <View style={styles.headerLeft}>
@@ -1875,26 +1944,33 @@ export default function HomeScreen() {
               </View>
             </View>
             <View style={styles.headerRight}>
-              {/* Check in — moved here off the bottom tab bar. */}
-              <TouchableOpacity
-                onPress={() => router.push('/(tabs)/check-in' as any)}
-                hitSlop={10}
-                activeOpacity={0.7}
-                accessibilityRole="button"
-                accessibilityLabel="Check in"
-              >
-                <Ionicons name="scan-outline" size={24} color={palette.ink900} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setShowNotifications(true)}
-                hitSlop={10}
-                activeOpacity={0.7}
-                accessibilityRole="button"
-                accessibilityLabel="Notifications"
-              >
-                <Ionicons name="notifications-outline" size={24} color={palette.ink900} />
-                {homeNotifications.length > 0 && <View style={styles.headerBellDot} />}
-              </TouchableOpacity>
+              {/* Check-in | Search | Notifications — order + labels + icons are
+                  defined once in lib/marketplace/home-search.ts so they stay
+                  in sync and are testable. Check-in was moved here off the
+                  bottom tab bar; Search is the new marketplace-discovery entry
+                  point. */}
+              {HOME_HEADER_ACTIONS.map(action => {
+                const onPress = action.key === 'check-in'
+                  ? () => router.push('/(tabs)/check-in' as any)
+                  : action.key === 'search'
+                    ? openSearch
+                    : () => setShowNotifications(true);
+                return (
+                  <TouchableOpacity
+                    key={action.key}
+                    onPress={onPress}
+                    hitSlop={10}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel={action.accessibilityLabel}
+                  >
+                    <Ionicons name={action.icon as any} size={24} color={palette.ink900} />
+                    {action.key === 'notifications' && homeNotifications.length > 0 && (
+                      <View style={styles.headerBellDot} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </View>
         )}
@@ -2515,67 +2591,86 @@ export default function HomeScreen() {
 
       <TourOverlay visible={tourVisible} steps={HOME_TOUR} onDismiss={dismissTour} />
 
-      {/* ─── Search Modal ─── */}
+      {/* ─── Marketplace Search Sheet ─── */}
       <Modal visible={searchVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeSearch}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.searchModal}>
+        <KeyboardAvoidingView
+          // Same cross-platform keyboard-occlusion fix as the auth modal —
+          // 'height' (not undefined) is Android's counterpart to iOS 'padding'
+          // for a text input inside a <Modal>.
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.searchModal}
+        >
           <View style={styles.searchHeader}>
-            <TouchableOpacity onPress={closeSearch} style={styles.searchBackBtn}>
+            <TouchableOpacity onPress={closeSearch} style={styles.searchBackBtn} accessibilityRole="button" accessibilityLabel="Close search">
               <Ionicons name="arrow-back" size={22} color={palette.ink900} />
             </TouchableOpacity>
             <TextInput
               style={styles.searchInput}
-              placeholder="Search classes, gyms, trainers..."
+              placeholder={HOME_SEARCH_PLACEHOLDER}
               placeholderTextColor={palette.gray300}
               value={searchQuery}
               onChangeText={handleSearchChange}
               autoFocus
               returnKeyType="search"
               clearButtonMode="while-editing"
+              accessibilityLabel={HOME_SEARCH_PLACEHOLDER}
             />
           </View>
 
-          <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-            {searchLoading && <ActivityIndicator style={{ marginTop: 40 }} color={palette.blue500} />}
-
-            {!searchLoading && searchQuery.trim().length >= 2
-              && searchResults.sessions.length === 0 && searchResults.gyms.length === 0
-              && searchResults.experiences.length === 0 && searchResults.trainers.length === 0 && (
-              <View style={styles.searchEmpty}>
-                <Ionicons name="search-outline" size={40} color={palette.gray300} />
-                <ThemedText style={styles.searchEmptyText}>No results for "{searchQuery}"</ThemedText>
+          <ScrollView
+            style={{ flex: 1 }}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            showsVerticalScrollIndicator={false}
+          >
+            {marketLoc.availability?.status && marketLoc.availability.status !== 'available' ? (
+              // Reuses the exact shared marketplace-location states (retry /
+              // "not in <city>" / "choose a city" + city picker). No second
+              // location model.
+              <View style={styles.searchNoticeWrap}>
+                <MarketplaceUnavailableNotice supplyNoun="bookable classes, venues or trainers" />
               </View>
-            )}
+            ) : (
+              <>
+                {searchLoading && totalSearchCount === 0 && (
+                  <ActivityIndicator style={{ marginTop: 40 }} color={palette.blue500} />
+                )}
 
-            {searchResults.sessions.length > 0 && (
-              <View>
-                <ThemedText style={styles.searchSectionLabel}>Classes</ThemedText>
-                {searchResults.sessions.map(session => {
+                {!searchLoading && searchQuery.trim().length >= 2 && totalSearchCount === 0 && (
+                  <View style={styles.searchEmpty}>
+                    <Ionicons name="search-outline" size={40} color={palette.gray300} />
+                    <ThemedText style={styles.searchEmptyText}>No results for &quot;{searchQuery}&quot;</ThemedText>
+                  </View>
+                )}
+
+                {filteredSearchClasses.length > 0 && (
+                  <ThemedText style={styles.searchSectionLabel}>Classes</ThemedText>
+                )}
+                {filteredSearchClasses.map(session => {
                   const { deposit } = sessionDeposit(session);
                   return (
                     <TouchableOpacity key={session.id} style={styles.searchResultRow}
-                      onPress={() => { closeSearch(); router.push({ pathname: '/session-details', params: { sessionId: session.id } }); }}>
+                      onPress={() => { closeSearch(); router.push(homeSearchResultRoute('classes', session) as any); }}>
                       {session.image_url
                         ? <Image source={{ uri: session.image_url }} style={styles.searchThumb} />
                         : <View style={[styles.searchThumb, styles.searchThumbFallback]}><Ionicons name="fitness" size={20} color="rgba(255,255,255,0.5)" /></View>}
                       <View style={{ flex: 1 }}>
                         <ThemedText style={styles.searchResultName} numberOfLines={1}>{session.name}</ThemedText>
                         <ThemedText style={styles.searchResultSub} numberOfLines={1}>
-                          {session.gyms?.name} · {new Date(session.date).toLocaleDateString('en-KE', { day: 'numeric', month: 'short' })} · KES {deposit.toLocaleString()} deposit
+                          {session.gyms?.name ?? 'Class'} · {new Date(session.date).toLocaleDateString('en-KE', { day: 'numeric', month: 'short' })}{deposit > 0 ? ` · KES ${deposit.toLocaleString()} deposit` : ''}
                         </ThemedText>
                       </View>
                       <Ionicons name="chevron-forward" size={16} color={palette.gray300} />
                     </TouchableOpacity>
                   );
                 })}
-              </View>
-            )}
 
-            {searchResults.gyms.length > 0 && (
-              <View>
-                <ThemedText style={styles.searchSectionLabel}>Venues</ThemedText>
-                {searchResults.gyms.map(gym => (
+                {filteredSearchVenues.length > 0 && (
+                  <ThemedText style={styles.searchSectionLabel}>Venues</ThemedText>
+                )}
+                {filteredSearchVenues.map(gym => (
                   <TouchableOpacity key={gym.id} style={styles.searchResultRow}
-                    onPress={() => { closeSearch(); router.push({ pathname: '/gym-details', params: { gymId: gym.id } }); }}>
+                    onPress={() => { closeSearch(); router.push(homeSearchResultRoute('venues', gym) as any); }}>
                     {gym.image_url
                       ? <Image source={{ uri: gym.image_url }} style={styles.searchThumb} />
                       : <View style={[styles.searchThumb, styles.searchThumbFallback, { backgroundColor: palette.blue500 }]}><Ionicons name="business" size={20} color="rgba(255,255,255,0.5)" /></View>}
@@ -2586,47 +2681,26 @@ export default function HomeScreen() {
                     <Ionicons name="chevron-forward" size={16} color={palette.gray300} />
                   </TouchableOpacity>
                 ))}
-              </View>
-            )}
 
-            {searchResults.experiences.length > 0 && (
-              <View>
-                <ThemedText style={styles.searchSectionLabel}>Experiences</ThemedText>
-                {searchResults.experiences.map(exp => (
-                  <TouchableOpacity key={exp.id} style={styles.searchResultRow}
-                    onPress={() => { closeSearch(); router.push({ pathname: '/experience-details', params: { id: exp.id } } as any); }}>
-                    {exp.image_url
-                      ? <Image source={{ uri: exp.image_url }} style={styles.searchThumb} />
-                      : <View style={[styles.searchThumb, styles.searchThumbFallback]}><Ionicons name="sparkles" size={20} color="rgba(255,255,255,0.5)" /></View>}
-                    <View style={{ flex: 1 }}>
-                      <ThemedText style={styles.searchResultName} numberOfLines={1}>{exp.name}</ThemedText>
-                      <ThemedText style={styles.searchResultSub} numberOfLines={1}>
-                        {exp.tagline ?? exp.category} · KES {(Number(exp.price_kes) - (exp.discount_kes || 0)).toLocaleString()}
-                      </ThemedText>
-                    </View>
-                    <Ionicons name="chevron-forward" size={16} color={palette.gray300} />
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            {searchResults.trainers.length > 0 && (
-              <View>
-                <ThemedText style={styles.searchSectionLabel}>Trainers</ThemedText>
-                {searchResults.trainers.map(pt => (
+                {filteredSearchTrainers.length > 0 && (
+                  <ThemedText style={styles.searchSectionLabel}>Personal Trainers</ThemedText>
+                )}
+                {filteredSearchTrainers.map(pt => (
                   <TouchableOpacity key={pt.id} style={styles.searchResultRow}
-                    onPress={() => { closeSearch(); router.push({ pathname: '/trainer-profile', params: { id: pt.id } }); }}>
+                    onPress={() => { closeSearch(); router.push(homeSearchResultRoute('trainers', pt) as any); }}>
                     {pt.photo_url
                       ? <Image source={{ uri: pt.photo_url }} style={[styles.searchThumb, { borderRadius: 24 }]} />
                       : <View style={[styles.searchThumb, styles.searchThumbFallback, { backgroundColor: palette.blue500, borderRadius: 24 }]}><Ionicons name="person" size={20} color="rgba(255,255,255,0.5)" /></View>}
                     <View style={{ flex: 1 }}>
                       <ThemedText style={styles.searchResultName} numberOfLines={1}>{pt.professional_name ?? pt.full_name}</ThemedText>
-                      <ThemedText style={styles.searchResultSub} numberOfLines={1}>{pt.specialisations.slice(0, 2).join(' · ')}</ThemedText>
+                      <ThemedText style={styles.searchResultSub} numberOfLines={1}>
+                        {(pt.specialisations ?? []).slice(0, 2).join(' · ') || 'Personal Trainer'}
+                      </ThemedText>
                     </View>
                     <Ionicons name="chevron-forward" size={16} color={palette.gray300} />
                   </TouchableOpacity>
                 ))}
-              </View>
+              </>
             )}
 
             <View style={{ height: 40 }} />
@@ -2937,6 +3011,7 @@ const styles = StyleSheet.create({
   searchHeader: { flexDirection: 'row', alignItems: 'center', paddingTop: 56, paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: palette.hairline, gap: 10 },
   searchBackBtn: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
   searchInput: { flex: 1, height: 42, backgroundColor: palette.surfaceMuted, borderRadius: radii.xl, paddingHorizontal: 16, fontSize: fontSize.base, color: palette.ink900, borderWidth: 1, borderColor: palette.borderFaint },
+  searchNoticeWrap: { paddingHorizontal: 20, paddingTop: 16 },
   searchSectionLabel: { fontSize: 11, fontWeight: '700', color: palette.gray300, textTransform: 'uppercase', letterSpacing: 0.8, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 8 },
   searchResultRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12, gap: 14, borderBottomWidth: 1, borderBottomColor: palette.hairline },
   searchThumb: { width: 48, height: 48, borderRadius: 10 },

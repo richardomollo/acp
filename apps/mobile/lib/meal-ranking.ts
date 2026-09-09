@@ -5,6 +5,7 @@
 // goal fit are ranking signals only, never exclusions (section 27).
 import { cuisineFitScore } from './nutrition-cuisine.ts';
 import { scoreMealForGoal, type GoalFitMeal } from './nutrition-goal-fit.ts';
+import { buildPoolReference, directionalFitScore, type WeightDirection } from './nutrition-goal-direction.ts';
 
 export interface MealRow {
   id: string;
@@ -41,8 +42,20 @@ export interface GetMealCandidatesParams {
   cuisinePreferences?: string[];
   /** Mirrors the existing hard-filter concept in lib/nutrition-matching.ts — the only dietary signal ACP's real `tags` data actually supports today (section 18). */
   requireVegetarian?: boolean;
+  /** LH-39 — the scale direction the user's own current-vs-goal weight implies
+   *  (the exact value lib/onboarding-validation.ts's `validateGoalDirection`
+   *  returns, LH-04 semantics). ONLY 'loss'/'gain' apply a gentle,
+   *  pool-relative directional tilt; 'none'/'unknown'/omitted leave ranking
+   *  byte-identical to the goal+cuisine-only behaviour. Never a hard filter,
+   *  never an absolute calorie/surplus target. */
+  weightDirection?: WeightDirection;
   limit?: number;
 }
+
+// LH-39 — how much the pool-relative weight-direction lean can move a meal's
+// score. Small on purpose: a genuinely stronger goal/cuisine match always
+// wins; this only reorders meals that are otherwise close.
+const DIRECTIONAL_WEIGHT = 0.15;
 
 function buildReasons(meal: MealRow, cuisineFit: number, goalFit: { proteinSignal: number; fibreSignal: number; balanceSignal: number }): ReasonCode[] {
   const reasons: ReasonCode[] = [];
@@ -69,10 +82,24 @@ export function getMealCandidates(params: GetMealCandidatesParams): MealCandidat
   }
 
   // ── Soft scoring (section 27) ──
+  // LH-39 — the directional lean is POOL-RELATIVE: the reference points are the
+  // medians of this slot's hard-constraint-safe pool, so nothing here is an
+  // absolute kcal target. Only computed when a real direction is supplied.
+  const direction: WeightDirection = params.weightDirection ?? 'unknown';
+  const applyDirection = direction === 'loss' || direction === 'gain';
+  const poolRef = buildPoolReference(pool);
+
   const scored: MealCandidate[] = pool.map(m => {
     const cuisineFit = cuisineFitScore(m.cuisine, cuisinePreferences);
     const goalFitBreakdown = scoreMealForGoal(m as GoalFitMeal, params.goal ?? null);
-    const overall = 0.5 * goalFitBreakdown.overall + 0.5 * cuisineFit;
+    const base = 0.5 * goalFitBreakdown.overall + 0.5 * cuisineFit;
+    const overall = applyDirection
+      ? (1 - DIRECTIONAL_WEIGHT) * base + DIRECTIONAL_WEIGHT * directionalFitScore(
+          { calories: m.calories, protein_g: m.protein_g, fibre_g: m.fibre_g, balanceSignal: goalFitBreakdown.balanceSignal },
+          direction,
+          poolRef,
+        )
+      : base;
     return {
       mealId: m.id,
       name: m.name,

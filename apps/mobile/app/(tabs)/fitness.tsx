@@ -3,20 +3,31 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { palette, radii, fontSize, shadows } from '@/constants/theme';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { buildDateRange } from '@/components/date-rail';
 import { LinearGradient } from 'expo-linear-gradient';
 import { authService } from '@/services/auth';
 import { useMarketplaceLocation } from '@/contexts/marketplace-location-context';
-import { MarketplaceUnavailableNotice } from '@/components/marketplace/marketplace-gate';
 import { getEligiblePersonalTrainerIds } from '@/services/professional-eligibility-service';
+import { SearchTrigger, SearchModal, SearchResultRow, SearchEmpty } from '@/components/search-trigger-modal';
+import { filterClassesLocally, filterTrainersLocally, homeSearchResultRoute } from '@/lib/marketplace/home-search';
 import {
-  resolveFitnessDayState, scheduleOccursOnDate,
-} from '@/lib/fitness-empty-state';
+  isValidAssessment, CATEGORY_LABEL,
+  type AIAssessment, type ActivityCategory as AssessmentCategory, type StartingPlanActivity,
+} from '@/lib/ai-assessment';
+import { resolveActivityDate } from '@/lib/home-intelligence';
+import { localISODate, getFulfilmentForActivity } from '@/lib/fulfilment';
+import { ActivityFulfilmentCard } from '@/components/activity-fulfilment-card';
+import type { PlanActivityCompletion } from '@/lib/completion';
+import {
+  resolvePlannedActivityForDate, isActivityCompleted,
+  checkInEligibleBookingsForDate, FITNESS_UPCOMING_BOOKING_STATUSES,
+  type FitnessBookingRow,
+} from '@/lib/fitness-tab';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -30,14 +41,6 @@ interface FitnessSession {
   gyms: { name: string } | null;
 }
 
-interface ScheduledWorkout {
-  workout_id: string;
-  start_date: string;
-  recurrence: string;
-  weekdays: number[];
-  workouts: { title: string | null } | null;
-}
-
 interface FitnessTrainer {
   id: string;
   full_name: string;
@@ -46,16 +49,23 @@ interface FitnessTrainer {
   specialisations: string[];
 }
 
-// Real `sessions.category` values seen in production — bucketed into two
-// honest, non-fabricated rails. Anything not recognised as a self-directed
-// workout style falls into Classes (the safer default for instructor-led
-// content like pilates/martial arts/dance).
-const WORKOUT_CATEGORIES = new Set(['hiit', 'strength training', 'cardio', 'crossfit', 'strength']);
+interface FitnessVenue {
+  id: string;
+  name: string;
+  location: string | null;
+  image_url: string | null;
+}
+
 const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-function isWorkoutCategory(category: string | null): boolean {
-  return WORKOUT_CATEGORIES.has((category ?? '').toLowerCase());
-}
+// Same icon mapping This Week's Plan uses for a plan activity's category.
+const PLAN_CATEGORY_ICON: Record<AssessmentCategory, string> = {
+  strength: 'barbell-outline',
+  cardio: 'walk-outline',
+  recovery: 'leaf-outline',
+  mobility: 'body-outline',
+  sport: 'football-outline',
+};
 
 // ── Card ───────────────────────────────────────────────────────────────────────
 
@@ -163,15 +173,121 @@ function TrainerRail({
   );
 }
 
+function VenueCard({ venue, onPress }: { venue: FitnessVenue; onPress: () => void }) {
+  return (
+    <TouchableOpacity style={s.card} onPress={onPress} activeOpacity={0.85}>
+      {venue.image_url ? (
+        <Image source={{ uri: venue.image_url }} style={s.cardImage} />
+      ) : (
+        <View style={[s.cardImage, s.cardImageFallback]}>
+          <Ionicons name="business-outline" size={28} color={palette.gray300} />
+        </View>
+      )}
+      <View style={s.cardBody}>
+        <ThemedText style={s.cardTitle} numberOfLines={2}>{venue.name}</ThemedText>
+        <ThemedText style={s.cardMeta} numberOfLines={1}>{venue.location ?? 'Venue'}</ThemedText>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function VenueRail({
+  title, venues, loading, onSeeAll, onPressVenue,
+}: {
+  title: string; venues: FitnessVenue[]; loading: boolean;
+  onSeeAll: () => void; onPressVenue: (v: FitnessVenue) => void;
+}) {
+  if (!loading && venues.length === 0) return null;
+  return (
+    <View style={s.section}>
+      <View style={s.sectionHeaderRow}>
+        <ThemedText style={s.sectionTitle}>{title}</ThemedText>
+        <TouchableOpacity onPress={onSeeAll} activeOpacity={0.7} style={s.seeAllRow}>
+          <ThemedText style={s.seeAllText}>See all</ThemedText>
+          <Ionicons name="chevron-forward" size={14} color={palette.blue600} />
+        </TouchableOpacity>
+      </View>
+      {loading ? (
+        <ActivityIndicator color={palette.blue500} style={{ marginVertical: 20 }} />
+      ) : (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.railContent}>
+          {venues.map(venue => (
+            <VenueCard key={venue.id} venue={venue} onPress={() => onPressVenue(venue)} />
+          ))}
+        </ScrollView>
+      )}
+    </View>
+  );
+}
+
+// ── Selected-day workout card ─────────────────────────────────────────────────
+// LH-36 — the canonical plan activity for the selected day. The activity
+// summary mirrors This Week's Plan (category / title / activity · duration /
+// description / completion); the CTA is the shared ActivityFulfilmentCard, so
+// "View workout" resolves to the SAME real /workout-detail session My Plan /
+// This Week's Plan / Home open — no separate prescription display or route.
+function SelectedDayWorkout({
+  activity, activityIndex, completed, userId, planId, plannedDate,
+}: {
+  activity: StartingPlanActivity;
+  activityIndex: number;
+  completed: boolean;
+  userId: string | null;
+  planId: string | null;
+  plannedDate: string;
+}) {
+  const fulfilment = useMemo(
+    () => getFulfilmentForActivity(activity, activityIndex, [], false, new Date()),
+    [activity, activityIndex],
+  );
+  return (
+    <View style={s.planCard}>
+      <View style={s.planCardHead}>
+        <View style={s.planIconWrap}>
+          <Ionicons name={(PLAN_CATEGORY_ICON[activity.category] ?? 'ellipse-outline') as any} size={18} color={palette.ink700} />
+        </View>
+        <View style={{ flex: 1 }}>
+          {completed ? (
+            <View style={s.planCompletedRow}>
+              <Ionicons name="checkmark-circle" size={13} color={palette.success700} />
+              <ThemedText style={s.planCompletedText}>{CATEGORY_LABEL[activity.category]} · Completed</ThemedText>
+            </View>
+          ) : (
+            <ThemedText style={s.planEyebrow}>{CATEGORY_LABEL[activity.category]}</ThemedText>
+          )}
+          <ThemedText style={s.planTitle}>{activity.title}</ThemedText>
+        </View>
+      </View>
+      <ThemedText style={s.planMeta}>{activity.activity} · {activity.duration_minutes} min</ThemedText>
+      {activity.description ? (
+        <ThemedText style={s.planDesc} numberOfLines={3}>{activity.description}</ThemedText>
+      ) : null}
+      <ActivityFulfilmentCard
+        userId={userId}
+        activity={activity}
+        fulfilment={fulfilment}
+        onInfoPress={() => {}}
+        planContext={planId ? { planId, activityIndex, plannedDate } : undefined}
+      />
+    </View>
+  );
+}
+
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function FitnessScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [sessions, setSessions] = useState<FitnessSession[]>([]);
-  const today = useMemo(() => new Date().toISOString().split('T')[0], []);
+  // LH-26 — the user's LOCAL calendar day, never a UTC slice.
+  const today = useMemo(() => localISODate(new Date()), []);
   const [selectedDate, setSelectedDate] = useState(today);
-  const days = useMemo(() => buildDateRange(14), []);
+  // buildDateRange returns Date objects; take the LOCAL YYYY-MM-DD off each
+  // (its own `dateStr` is a UTC slice — not used here).
+  const days = useMemo(
+    () => buildDateRange(14).map(d => ({ date: d.date, dateStr: localISODate(d.date) })),
+    [],
+  );
 
   // Beta #019 — these rails are bookable marketplace classes; scope to venues
   // within the supported radius. `venueScopeIds`: string[] → scope; null →
@@ -182,21 +298,85 @@ export default function FitnessScreen() {
   const scopeKey = scopeIds === null ? 'all' : scopeIds.join(',');
   useEffect(() => { ml.ensureResolved({ requestPermission: false }); }, [ml]);
 
-  // Beta #019B — self-guided / trainer-scheduled workouts for the selected day.
-  // These are NEVER hidden because marketplace supply is absent (§4).
-  const [scheduledWorkouts, setScheduledWorkouts] = useState<ScheduledWorkout[]>([]);
-  useEffect(() => {
+  // LH-36 — the user's ACTUAL plan for the selected day comes from the ONE
+  // canonical source My Plan / This Week's Plan / Today use
+  // (fitness_profile.ai_assessment.starting_plan.activities +
+  // plan_activity_completions). No second workout-schedule source, no
+  // marketplace/location gating on this data. `bookings` is a best-effort
+  // side lookup for the Check-in CTA and never blocks the plan from rendering.
+  const [userId, setUserId] = useState<string | null>(null);
+  const [planLoading, setPlanLoading] = useState(true);
+  const [assessment, setAssessment] = useState<AIAssessment | null>(null);
+  const [planId, setPlanId] = useState<string | null>(null);
+  const [completions, setCompletions] = useState<PlanActivityCompletion[]>([]);
+  const [bookings, setBookings] = useState<FitnessBookingRow[]>([]);
+
+  useFocusEffect(useCallback(() => {
+    let active = true;
     (async () => {
-      const session = await authService.getSession();
-      if (!session?.user) { setScheduledWorkouts([]); return; }
-      const { data } = await supabase
-        .from('workout_schedules')
-        .select('workout_id, start_date, recurrence, weekdays, workouts(title)')
-        .eq('user_id', session.user.id)
-        .eq('is_active', true);
-      setScheduledWorkouts((data as unknown as ScheduledWorkout[]) ?? []);
+      setPlanLoading(true);
+      try {
+        const session = await authService.getSession();
+        if (!session?.user?.id) {
+          if (active) { setUserId(null); setAssessment(null); setPlanId(null); setCompletions([]); setBookings([]); }
+          return;
+        }
+        const uid = session.user.id;
+        if (active) setUserId(uid);
+
+        const { data: profile } = await supabase
+          .from('fitness_profile')
+          .select('ai_assessment, ai_assessment_generated_at')
+          .eq('user_id', uid)
+          .maybeSingle();
+
+        const validAssessment = profile?.ai_assessment && isValidAssessment(profile.ai_assessment) && profile.ai_assessment_generated_at
+          ? (profile.ai_assessment as AIAssessment)
+          : null;
+        const resolvedPlanId = validAssessment ? (profile!.ai_assessment_generated_at as string) : null;
+        if (!active) return;
+        setAssessment(validAssessment);
+        setPlanId(resolvedPlanId);
+
+        if (validAssessment && resolvedPlanId) {
+          const { data: completionsData } = await supabase
+            .from('plan_activity_completions')
+            .select('id, plan_id, activity_index, planned_date, completed_at, completion_source, source_entity_id')
+            .eq('user_id', uid)
+            .eq('plan_id', resolvedPlanId);
+          if (!active) return;
+          setCompletions(((completionsData ?? []) as any[]).map(c => ({
+            id: c.id, planId: c.plan_id, activityIndex: c.activity_index, plannedDate: c.planned_date,
+            completedAt: c.completed_at, completionSource: c.completion_source, sourceEntityId: c.source_entity_id,
+          })));
+        } else if (active) {
+          setCompletions([]);
+        }
+
+        // Best-effort: bookings across the visible strip. A failure here NEVER
+        // hides the plan — only the Check-in CTA may be unavailable (§10 G).
+        const lastDay = days[days.length - 1]?.dateStr ?? today;
+        try {
+          const { data: bookingData, error } = await supabase
+            .from('bookings')
+            .select('id, user_id, booking_date, status, checked_in')
+            .eq('user_id', uid)
+            .in('status', [...FITNESS_UPCOMING_BOOKING_STATUSES])
+            .gte('booking_date', today)
+            .lte('booking_date', lastDay);
+          if (!active) return;
+          // A failure here NEVER hides the plan — `bookings` just stays empty
+          // so the Check-in CTA is simply absent (§10 G).
+          setBookings(error ? [] : ((bookingData ?? []) as FitnessBookingRow[]));
+        } catch {
+          if (active) setBookings([]);
+        }
+      } finally {
+        if (active) setPlanLoading(false);
+      }
     })();
-  }, []);
+    return () => { active = false; };
+  }, [days, today]));
 
   useEffect(() => {
     (async () => {
@@ -240,23 +420,46 @@ export default function FitnessScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scopeKey]);
 
-  const sessionDates = useMemo(() => new Set(sessions.map(sess => sess.date)), [sessions]);
-  const workoutSessions = useMemo(() => sessions.filter(sess => isWorkoutCategory(sess.category)), [sessions]);
-  const classSessions = useMemo(() => sessions.filter(sess => !isWorkoutCategory(sess.category)), [sessions]);
-  const plannedToday = sessionDates.has(selectedDate);
+  // Beta #019 — venues are marketplace supply; scope to gyms within the
+  // supported radius (same rule as the Venues tab).
+  const [venues, setVenues] = useState<FitnessVenue[]>([]);
+  const [venuesLoading, setVenuesLoading] = useState(true);
+  useEffect(() => {
+    (async () => {
+      if (scopeIds !== null && scopeIds.length === 0) { setVenues([]); setVenuesLoading(false); return; }
+      setVenuesLoading(true);
+      let q = supabase
+        .from('gyms')
+        .select('id, name, location, image_url')
+        .eq('is_active', true);
+      if (scopeIds !== null) q = q.in('id', scopeIds);
+      const { data } = await q.order('name', { ascending: true }).limit(20);
+      setVenues((data as unknown as FitnessVenue[]) ?? []);
+      setVenuesLoading(false);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeKey]);
 
-  // Beta #019B — the empty state depends on BOTH day content and #019
-  // marketplace availability, and a planned workout always wins.
-  const dayWorkouts = useMemo(
-    () => scheduledWorkouts.filter(w => scheduleOccursOnDate(w, selectedDate)),
-    [scheduledWorkouts, selectedDate],
+  // LH-36 — the canonical plan activity for the selected day (or null → honest
+  // empty state). Same date rule every plan surface uses.
+  const planActivities = useMemo(() => assessment?.starting_plan.activities ?? [], [assessment]);
+  const anchor = useMemo(() => new Date(), []);
+  const selectedActivity = useMemo(
+    () => resolvePlannedActivityForDate(planActivities, selectedDate, anchor),
+    [planActivities, selectedDate, anchor],
   );
-  const dayState = resolveFitnessDayState({
-    hasMarketplaceSessionOnDay: plannedToday,
-    hasPlannedWorkoutOnDay: dayWorkouts.length > 0,
-    marketplaceStatus: ml.availability?.status ?? null,
-    geoGatingEnabled: ml.geoGatingEnabled,
-  });
+  const selectedCompleted = selectedActivity
+    ? isActivityCompleted(selectedActivity.activityIndex, completions)
+    : false;
+  // Strip dot marks days the plan schedules something.
+  const plannedDates = useMemo(
+    () => new Set(planActivities.map(a => resolveActivityDate(a, anchor)).filter((d): d is string => !!d)),
+    [planActivities, anchor],
+  );
+  const checkInBookings = useMemo(
+    () => (userId ? checkInEligibleBookingsForDate(bookings, selectedDate, userId) : []),
+    [bookings, selectedDate, userId],
+  );
 
   const openSession = (session: FitnessSession) => {
     router.push({ pathname: '/session-details', params: { sessionId: session.id, gymName: session.gyms?.name || 'Gym' } } as any);
@@ -265,6 +468,24 @@ export default function FitnessScreen() {
   const openTrainer = (trainer: FitnessTrainer) => {
     router.push({ pathname: '/trainer-profile', params: { id: trainer.id } } as any);
   };
+
+  const openVenue = (venue: FitnessVenue) => {
+    router.push({ pathname: '/gym-details', params: { gymId: venue.id } } as any);
+  };
+
+  // Search — filters the workouts/classes and trainers this screen already
+  // loaded (no new query). Reuses the shared search sheet + the canonical
+  // match/route helpers so results and destinations match the rest of the app.
+  const [searchVisible, setSearchVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchedSessions = useMemo(
+    () => (searchQuery.trim() ? filterClassesLocally(sessions, searchQuery) : []),
+    [sessions, searchQuery],
+  );
+  const searchedTrainers = useMemo(
+    () => (searchQuery.trim() ? filterTrainersLocally(trainers, searchQuery) : []),
+    [trainers, searchQuery],
+  );
 
   return (
     <View style={s.root}>
@@ -276,6 +497,12 @@ export default function FitnessScreen() {
       <View style={s.header}>
         <ThemedText style={s.headerTitle}>Fitness</ThemedText>
         <ThemedText style={s.headerSub}>Plan your workouts and classes</ThemedText>
+        <View style={s.searchWrap}>
+          <SearchTrigger
+            placeholder="Search workouts, classes or trainers"
+            onPress={() => setSearchVisible(true)}
+          />
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
@@ -286,7 +513,7 @@ export default function FitnessScreen() {
             {days.map(({ date, dateStr }) => {
               const isSelected = dateStr === selectedDate;
               const isToday = dateStr === today;
-              const hasSessions = sessionDates.has(dateStr);
+              const hasSessions = plannedDates.has(dateStr);
               return (
                 <TouchableOpacity
                   key={dateStr}
@@ -305,66 +532,69 @@ export default function FitnessScreen() {
           </ScrollView>
         </View>
 
-        {/* Beta #019B — empty state depends on day content AND #019 market
-            availability; a self-guided workout is never hidden (§4). */}
-        {dayState === 'has_planned_workout' ? (
-          <TouchableOpacity
-            style={s.emptyCard}
-            activeOpacity={0.85}
-            onPress={() => router.push({ pathname: '/workout-detail', params: { workoutId: dayWorkouts[0].workout_id } } as any)}
-          >
-            <View style={s.emptyIconWrap}>
-              <Ionicons name="barbell-outline" size={22} color={palette.blue600} />
-            </View>
-            <ThemedText style={s.emptyText}>
-              {dayWorkouts[0].workouts?.title
-                ? `Planned: ${dayWorkouts[0].workouts.title}`
-                : 'You have a workout planned for this day'}
-            </ThemedText>
-            <ThemedText style={s.emptyCta}>Open workout</ThemedText>
-          </TouchableOpacity>
-        ) : dayState === 'has_marketplace_session' ? (
+        {/* LH-36 — the user's actual plan for the selected day. Personal-plan
+            data: renders regardless of marketplace location. Never a
+            "Plan something" marketplace CTA. */}
+        {planLoading ? (
+          <ActivityIndicator color={palette.blue500} style={{ marginVertical: 28 }} />
+        ) : !assessment ? (
           <View style={s.emptyCard}>
             <View style={s.emptyIconWrap}>
-              <Ionicons name="calendar-outline" size={22} color={palette.blue600} />
+              <Ionicons name="clipboard-outline" size={22} color={palette.blue600} />
             </View>
-            <ThemedText style={s.emptyText}>Sessions are available this day</ThemedText>
-            <TouchableOpacity onPress={() => router.push('/workout-hub' as any)} activeOpacity={0.7}>
-              <ThemedText style={s.emptyCta}>Plan something</ThemedText>
+            <ThemedText style={s.emptyText}>You don&apos;t have a fitness plan yet.</ThemedText>
+            <TouchableOpacity onPress={() => router.push('/my-plan' as any)} activeOpacity={0.7}>
+              <ThemedText style={s.emptyCta}>Set up my plan</ThemedText>
             </TouchableOpacity>
           </View>
-        ) : dayState === 'empty_available' ? (
-          <View style={s.emptyCard}>
-            <View style={s.emptyIconWrap}>
-              <Ionicons name="calendar-outline" size={22} color={palette.blue600} />
-            </View>
-            <ThemedText style={s.emptyText}>You&apos;ve got nothing planned for this day</ThemedText>
-            <TouchableOpacity onPress={() => router.push('/workout-hub' as any)} activeOpacity={0.7}>
-              <ThemedText style={s.emptyCta}>Plan something</ThemedText>
-            </TouchableOpacity>
-          </View>
+        ) : selectedActivity ? (
+          <SelectedDayWorkout
+            activity={selectedActivity.activity}
+            activityIndex={selectedActivity.activityIndex}
+            completed={selectedCompleted}
+            userId={userId}
+            planId={planId}
+            plannedDate={selectedDate}
+          />
         ) : (
-          // empty_no_local_inventory | empty_location_unknown — reuse the #019
-          // availability notice verbatim so Fitness, Discover and Home speak
-          // the same language (§2/§9).
-          <View style={s.noticeWrap}>
-            <MarketplaceUnavailableNotice supplyNoun="bookable gyms, classes or trainers" showLoading={false} />
+          <View style={s.emptyCard}>
+            <View style={s.emptyIconWrap}>
+              <Ionicons name="bed-outline" size={22} color={palette.blue600} />
+            </View>
+            <ThemedText style={s.emptyText}>No workout scheduled for this day.</ThemedText>
           </View>
         )}
 
-        <SessionRail
-          title="Workouts"
-          sessions={workoutSessions}
-          loading={loading}
-          onSeeAll={() => router.push('/(tabs)/discover' as any)}
-          onPressSession={openSession}
-        />
+        {/* An active class booking on the selected day → the existing check-in
+            flow. Independent of whether the plan has an activity that day. */}
+        {checkInBookings.length > 0 && (
+          <TouchableOpacity
+            style={s.checkInBtn}
+            onPress={() => router.push('/(tabs)/check-in' as any)}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Check in"
+          >
+            <Ionicons name="qr-code-outline" size={16} color={palette.white} />
+            <ThemedText style={s.checkInBtnText}>
+              Check in{checkInBookings.length > 1 ? ` (${checkInBookings.length})` : ''}
+            </ThemedText>
+          </TouchableOpacity>
+        )}
+
         <SessionRail
           title="Classes"
-          sessions={classSessions}
+          sessions={sessions}
           loading={loading}
-          onSeeAll={() => router.push('/(tabs)/discover' as any)}
+          onSeeAll={() => router.push('/(tabs)/classes' as any)}
           onPressSession={openSession}
+        />
+        <VenueRail
+          title="Venues"
+          venues={venues}
+          loading={venuesLoading}
+          onSeeAll={() => router.push('/(tabs)/venues' as any)}
+          onPressVenue={openVenue}
         />
         <TrainerRail
           title="Personal Trainers"
@@ -376,6 +606,53 @@ export default function FitnessScreen() {
 
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      <SearchModal
+        visible={searchVisible}
+        query={searchQuery}
+        onQueryChange={setSearchQuery}
+        onClose={() => { setSearchVisible(false); setSearchQuery(''); }}
+        placeholder="Search workouts, classes or trainers"
+      >
+        {searchedSessions.length > 0 && (
+          <ThemedText style={s.searchSectionLabel}>Workouts &amp; classes</ThemedText>
+        )}
+        {searchedSessions.map(session => (
+          <SearchResultRow
+            key={session.id}
+            image={session.image_url}
+            fallbackIcon="barbell"
+            fallbackBg={palette.blue500}
+            name={session.name}
+            subtitle={session.gyms?.name ?? 'Session'}
+            onPress={() => {
+              setSearchVisible(false); setSearchQuery('');
+              router.push(homeSearchResultRoute('classes', session) as any);
+            }}
+          />
+        ))}
+        {searchedTrainers.length > 0 && (
+          <ThemedText style={s.searchSectionLabel}>Personal trainers</ThemedText>
+        )}
+        {searchedTrainers.map(trainer => (
+          <SearchResultRow
+            key={trainer.id}
+            image={trainer.photo_url}
+            fallbackIcon="person"
+            fallbackBg={palette.blue500}
+            rounded
+            name={trainer.professional_name ?? trainer.full_name}
+            subtitle={trainer.specialisations.slice(0, 2).join(' · ') || 'Personal Trainer'}
+            onPress={() => {
+              setSearchVisible(false); setSearchQuery('');
+              router.push(homeSearchResultRoute('trainers', trainer) as any);
+            }}
+          />
+        ))}
+        {searchQuery.trim().length > 0 && searchedSessions.length === 0 && searchedTrainers.length === 0 && (
+          <SearchEmpty query={searchQuery} />
+        )}
+      </SearchModal>
     </View>
   );
 }
@@ -394,6 +671,12 @@ const s = StyleSheet.create({
   },
   headerTitle: { fontSize: 28, fontWeight: '800', letterSpacing: -0.56, color: palette.ink900, paddingTop: 10 },
   headerSub: { fontSize: fontSize.sm, color: palette.gray450, marginTop: 2 },
+  searchWrap: { marginTop: 14 },
+  searchSectionLabel: {
+    fontSize: 11, fontWeight: '700', color: palette.gray300,
+    textTransform: 'uppercase', letterSpacing: 0.8,
+    paddingHorizontal: 20, paddingTop: 18, paddingBottom: 6,
+  },
 
   content: { paddingTop: 4 },
 
@@ -431,7 +714,30 @@ const s = StyleSheet.create({
   },
   emptyText: { fontSize: 14, fontWeight: '600', color: palette.ink700, textAlign: 'center' },
   emptyCta: { fontSize: 13, fontWeight: '700', color: palette.blue600 },
-  noticeWrap: { paddingHorizontal: 20, marginTop: 4, marginBottom: 24 },
+
+  // LH-36 — selected-day plan workout card (mirrors This Week's Plan Day card).
+  planCard: {
+    marginHorizontal: 20, marginTop: 4, marginBottom: 16,
+    backgroundColor: palette.surfaceMuted, borderRadius: radii['2xl'], padding: 20,
+  },
+  planCardHead: { flexDirection: 'row', gap: 12 },
+  planIconWrap: {
+    width: 36, height: 36, borderRadius: 18, backgroundColor: palette.white,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  planEyebrow: { fontSize: 11, fontWeight: '800', color: palette.gray300, textTransform: 'uppercase', letterSpacing: 0.5 },
+  planCompletedRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  planCompletedText: { fontSize: 10, fontWeight: '800', color: palette.success700, letterSpacing: 0.5, textTransform: 'uppercase' },
+  planTitle: { fontSize: fontSize.lg, fontWeight: '800', color: palette.ink900, marginTop: 2 },
+  planMeta: { fontSize: fontSize.xs, fontWeight: '600', color: palette.gray450, marginTop: 10 },
+  planDesc: { fontSize: fontSize.xs, color: palette.ink600, marginTop: 6, lineHeight: 17, marginBottom: 4 },
+
+  checkInBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start',
+    marginHorizontal: 20, marginTop: 4, marginBottom: 24,
+    backgroundColor: palette.ink900, paddingHorizontal: 16, paddingVertical: 10, borderRadius: radii.xl,
+  },
+  checkInBtnText: { color: palette.white, fontSize: fontSize.sm, fontWeight: '700' },
 
   section: { marginBottom: 24 },
   sectionHeaderRow: {
