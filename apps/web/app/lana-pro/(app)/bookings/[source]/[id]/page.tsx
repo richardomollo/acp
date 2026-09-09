@@ -344,7 +344,7 @@ function ClassDetail({ sessionId }: { sessionId: string }) {
 // ── shared ──────────────────────────────────────────────────────────────
 
 function Shell({ children }: { children: React.ReactNode }) {
-  return <div className="p-6 md:p-10 max-w-2xl mx-auto">{children}</div>;
+  return <div className="p-6 md:p-10">{children}</div>;
 }
 function Back() {
   return (

@@ -53,7 +53,7 @@ export function WorkoutsClient({ workspace }: { workspace: "independent" | "empl
   }, [load]);
 
   return (
-    <div className="p-6 md:p-10 max-w-3xl mx-auto">
+    <div className="p-6 md:p-10">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Workouts</h1>
         <div className="flex gap-2">

@@ -14,7 +14,7 @@ export function SectionStub({
   classic?: { label: string; href: string } | null;
 }) {
   return (
-    <div className="p-6 md:p-10 max-w-3xl mx-auto">
+    <div className="p-6 md:p-10">
       <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{title}</h1>
       <p className="text-gray-500 text-[15px] mt-2 max-w-xl">{description}</p>
 

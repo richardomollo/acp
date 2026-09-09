@@ -10,7 +10,7 @@ import type { HomeAttentionItem } from "@/lib/lana-pro-home-attention/types";
 import type { LanaBusinessBrief, BusinessBriefItem } from "@/lib/lana-pro-intelligence/business-brief";
 
 export function PageWrap({ children }: { children: React.ReactNode }) {
-  return <div className="p-6 md:p-10 max-w-5xl mx-auto space-y-8">{children}</div>;
+  return <div className="p-6 md:p-10 space-y-8">{children}</div>;
 }
 
 export function Greeting({ line1, line2 }: { line1: string; line2: string }) {

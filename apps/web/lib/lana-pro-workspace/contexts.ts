@@ -34,9 +34,9 @@ export interface ContextInput {
   employments: { gymTrainerId: string; gymId: string; gymName: string | null }[];
 }
 
-const PROFESSIONAL_NAV: NavItemId[] = ['home', 'clients', 'bookings', 'services', 'schedule', 'profile'];
+const PROFESSIONAL_NAV: NavItemId[] = ['home', 'clients', 'workouts', 'bookings', 'services', 'schedule', 'profile'];
 const BUSINESS_NAV: NavItemId[] = ['home', 'bookings', 'services', 'schedule', 'team', 'business'];
-const EMPLOYED_NAV: NavItemId[] = ['home', 'clients', 'bookings', 'schedule', 'profile'];
+const EMPLOYED_NAV: NavItemId[] = ['home', 'clients', 'workouts', 'bookings', 'schedule', 'profile'];
 
 /**
  * Ordered contexts for this account. Professional-first (independent, then the

@@ -138,14 +138,14 @@ export default function NewBookingPage() {
   if (ctx === undefined) return <div className="p-10 text-sm text-gray-400">Loading…</div>;
   if (!ctx?.pt) {
     return (
-      <div className="p-6 md:p-10 max-w-2xl mx-auto">
+      <div className="p-6 md:p-10">
         <p className="text-sm text-gray-500">Direct bookings are for independent professionals with a client roster.</p>
       </div>
     );
   }
 
   return (
-    <div className="p-6 md:p-10 max-w-lg mx-auto">
+    <div className="p-6 md:p-10">
       <Link href="/lana-pro/bookings" className="text-sm font-semibold text-gray-400 hover:text-gray-700 inline-flex items-center gap-1 mb-5">
         ← Bookings
       </Link>

@@ -98,11 +98,11 @@ export function WorkoutDetailClient({
   };
 
   if (state === "loading") {
-    return <div className="p-6 md:p-10 max-w-2xl mx-auto text-sm text-gray-400">Loading…</div>;
+    return <div className="p-6 md:p-10 text-sm text-gray-400">Loading…</div>;
   }
   if (state === "missing") {
     return (
-      <div className="p-6 md:p-10 max-w-2xl mx-auto">
+      <div className="p-6 md:p-10">
         <button onClick={() => router.push("/lana-pro/workouts")} className="text-sm font-semibold text-gray-400 hover:text-gray-700 mb-5">
           ← Workouts
         </button>
@@ -112,7 +112,7 @@ export function WorkoutDetailClient({
   }
   if (state === "error") {
     return (
-      <div className="p-6 md:p-10 max-w-2xl mx-auto">
+      <div className="p-6 md:p-10">
         <button onClick={() => router.push("/lana-pro/workouts")} className="text-sm font-semibold text-gray-400 hover:text-gray-700 mb-5">
           ← Workouts
         </button>
@@ -129,7 +129,7 @@ export function WorkoutDetailClient({
   }
 
   return (
-    <div className="p-6 md:p-10 max-w-2xl mx-auto">
+    <div className="p-6 md:p-10">
       <button onClick={() => router.push("/lana-pro/workouts")} className="text-sm font-semibold text-gray-400 hover:text-gray-700 mb-5">
         ← Workouts
       </button>

@@ -7,11 +7,11 @@
 // the classifier, which has NO evidence producer in 4.1 → it stays empty with
 // an honest message. Counts come straight from `pt_clients.status` (safe).
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { supabase } from "@/app/lib/supabase/client";
 import { useRouter } from "next/navigation";
-import { ClientListRow } from "@/app/components/client-hub/ClientListRow";
+import { Avatar } from "@/app/components/ui/Avatar";
 import { EmptyState } from "@/app/components/ui/EmptyState";
 import { bucketForClient, type ClientBucket } from "@/lib/lana-pro-onboarding/client-attention";
 
@@ -24,6 +24,48 @@ type ClientRow = {
   invited_name: string | null;
   users: { name: string | null; email: string | null } | null;
 };
+
+function AttentionIcon() {
+  return (
+    <svg
+      className="w-4 h-4 flex-shrink-0 text-amber-500"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+      aria-label="Needs attention"
+      role="img"
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+    </svg>
+  );
+}
+
+// Transparent list row — no card surface, blends with the page.
+function Row({
+  name,
+  subtitle,
+  trailing,
+  alert = false,
+}: {
+  name: string;
+  subtitle: ReactNode;
+  trailing: ReactNode;
+  alert?: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-3 px-3 py-2.5 rounded-2xl hover:bg-gray-50 transition">
+      <Avatar name={name} size="sm" />
+      <div className="flex-1 min-w-0">
+        <p className="flex items-center gap-1.5 font-semibold text-gray-900">
+          {alert && <AttentionIcon />}
+          <span className="truncate">{name}</span>
+        </p>
+        <div className="text-xs text-gray-500 mt-0.5">{subtitle}</div>
+      </div>
+      {trailing}
+    </div>
+  );
+}
 
 const SECTIONS: { bucket: ClientBucket; title: string; blurb: string; emptyHint: string }[] = [
   {
@@ -114,8 +156,9 @@ export default function LanaProClientsPage() {
           ? "Sharing progress"
           : "Progress not shared";
     const row = (
-      <ClientListRow
+      <Row
         name={name}
+        alert={bucketOf(c) === "needs_attention"}
         subtitle={<span className={c.status === "pending" ? "text-amber-600" : ""}>{subtitle}</span>}
         trailing={
           c.status === "pending" ? null : (
@@ -136,7 +179,7 @@ export default function LanaProClientsPage() {
   };
 
   return (
-    <div className="p-6 md:p-10 max-w-4xl mx-auto">
+    <div className="p-6 md:p-10">
       <div className="flex items-start justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Clients</h1>
@@ -171,26 +214,44 @@ export default function LanaProClientsPage() {
         </div>
       ) : (
         <div className="space-y-8">
-          {SECTIONS.map((section) => {
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+            {SECTIONS.filter((s) => s.bucket !== "inactive").map((section) => {
+              const rows = clients.filter((c) => bucketOf(c) === section.bucket);
+              return (
+                <section key={section.bucket} className="rounded-2xl border border-gray-100 bg-white p-4">
+                  <div className="mb-3">
+                    <h2 className="text-sm font-bold text-gray-900 uppercase tracking-[0.12em]">
+                      {section.title}
+                      {rows.length > 0 && <span className="ml-2 text-gray-400 font-semibold">{rows.length}</span>}
+                    </h2>
+                    <p className="text-xs text-gray-400 mt-0.5">{section.blurb}</p>
+                  </div>
+                  {rows.length > 0 ? (
+                    <div className="space-y-1">{rows.map(renderRow)}</div>
+                  ) : (
+                    <EmptyState>{section.emptyHint}</EmptyState>
+                  )}
+                </section>
+              );
+            })}
+          </div>
+          {(() => {
+            const section = SECTIONS.find((s) => s.bucket === "inactive")!;
             const rows = clients.filter((c) => bucketOf(c) === section.bucket);
-            if (rows.length === 0 && section.bucket === "inactive") return null;
+            if (rows.length === 0) return null;
             return (
-              <section key={section.bucket}>
+              <section>
                 <div className="mb-3">
                   <h2 className="text-sm font-bold text-gray-900 uppercase tracking-[0.12em]">
                     {section.title}
-                    {rows.length > 0 && <span className="ml-2 text-gray-400 font-semibold">{rows.length}</span>}
+                    <span className="ml-2 text-gray-400 font-semibold">{rows.length}</span>
                   </h2>
                   <p className="text-xs text-gray-400 mt-0.5">{section.blurb}</p>
                 </div>
-                {rows.length > 0 ? (
-                  <div className="space-y-3">{rows.map(renderRow)}</div>
-                ) : (
-                  <EmptyState>{section.emptyHint}</EmptyState>
-                )}
+                <div className="space-y-1">{rows.map(renderRow)}</div>
               </section>
             );
-          })}
+          })()}
         </div>
       )}
     </div>

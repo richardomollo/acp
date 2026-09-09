@@ -176,7 +176,7 @@ export function TemplateBuilder({
   };
 
   return (
-    <div className="p-6 md:p-10 max-w-2xl mx-auto">
+    <div className="p-6 md:p-10">
       <button
         onClick={() => router.push("/lana-pro/workouts")}
         className="text-sm font-semibold text-gray-400 hover:text-gray-700 mb-5"

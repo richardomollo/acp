@@ -135,14 +135,14 @@ export default function LanaProBookingsPage() {
   }, [buckets, tab, query]);
 
   if (loading || ctx === undefined) {
-    return <div className="p-6 md:p-10 max-w-4xl mx-auto text-sm text-gray-400">Loading…</div>;
+    return <div className="p-6 md:p-10 text-sm text-gray-400">Loading…</div>;
   }
   if (!ctx) {
-    return <div className="p-6 md:p-10 max-w-4xl mx-auto text-sm text-gray-500">Please sign in again.</div>;
+    return <div className="p-6 md:p-10 text-sm text-gray-500">Please sign in again.</div>;
   }
 
   return (
-    <div className="p-6 md:p-10 max-w-4xl mx-auto">
+    <div className="p-6 md:p-10">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Bookings</h1>

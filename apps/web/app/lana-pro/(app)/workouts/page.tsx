@@ -13,7 +13,7 @@ export default async function LanaProWorkoutsPage() {
   const pro = proContextFor(identity);
   if (!pro || pro.workspace === "business") {
     return (
-      <div className="p-6 md:p-10 max-w-3xl mx-auto">
+      <div className="p-6 md:p-10">
         <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Workouts</h1>
         <p className="text-gray-500 text-[15px] mt-2">
           The workout library is for personal trainers and coaches.

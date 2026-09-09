@@ -59,7 +59,7 @@ export default async function LanaProBusinessPage() {
       : { label: "Pending review", tone: "muted" as const };
 
   return (
-    <div className="p-6 md:p-10 max-w-3xl mx-auto">
+    <div className="p-6 md:p-10">
       <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Business</h1>
       <p className="text-gray-500 text-[15px] mt-2 max-w-xl">
         Your business identity in Lana Pro. Your workspace is fully usable while your

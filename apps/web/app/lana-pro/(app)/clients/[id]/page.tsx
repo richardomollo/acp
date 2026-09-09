@@ -136,20 +136,56 @@ export default async function LanaProClientPage({
         />
       </dl>
 
-      {/* ── CLIENT PROGRESS (L1 — facts) ── */}
+      {/* ── CLIENT PROGRESS (L1 — facts): summary row + weight trend + activity row ── */}
       <ClientProgress
         data={progress}
         todayStr={todayStr}
         firstName={firstName}
         sharedLanaLoadFailed={sharedLanaLoadFailed}
+        insights={insights}
+        actions={actions}
       />
 
-      {/* ── LANA INSIGHTS (L4 — what Lana noticed) ── */}
-      <LanaInsights insights={insights} todayStr={todayStr} />
-
-      {/* ── SUGGESTED ACTIONS (L5 — what you may want to review) ── */}
-      <SuggestedActions actions={actions} />
+      {/* non-"ok" states don't get the summary row — show insights / actions stacked */}
+      {progress.state !== "ok" && (
+        <>
+          <LanaInsights insights={insights} todayStr={todayStr} />
+          <SuggestedActions actions={actions} />
+        </>
+      )}
     </Wrap>
+  );
+}
+
+// column heading — same style as the section <H>, minus the top margin
+function ColH({ children }: { children: React.ReactNode }) {
+  return <h2 className="text-xs font-bold text-gray-400 uppercase tracking-[0.14em] mb-3">{children}</h2>;
+}
+
+// ── Progress snapshot (L1 — headline facts) — a column in the summary row ──
+function ProgressSnapshot({ data }: { data: ClientProgressV1 }) {
+  if (data.state !== "ok") return null;
+  const { goal, trainingProgress: tp } = data;
+  const kg = (n: number | null | undefined) => (n == null ? "—" : `${n} kg`);
+  const signed = (n: number | null | undefined) =>
+    n == null ? "—" : `${n > 0 ? "+" : ""}${n} kg`;
+  return (
+    <div>
+      <ColH>Progress snapshot</ColH>
+      <dl className="grid grid-cols-2 gap-3">
+        <Stat label="Current weight" value={kg(goal?.currentWeightKg)} sub={goal?.currentWeightSource === "profile" ? "from profile" : goal?.currentWeightSource === "measurement" ? "latest weigh-in" : undefined} />
+        <Stat label="Since start" value={signed(goal?.changeSinceStartKg)} sub={goal?.startingWeightKg != null ? `from ${goal.startingWeightKg} kg` : undefined} />
+        <Stat label="To goal" value={goal?.goalWeightKg != null ? signed(goal?.toGoalKg) : "—"} sub={goal?.goalWeightKg != null ? `goal ${goal.goalWeightKg} kg` : "no goal weight"} />
+        <Stat
+          label="Training adherence"
+          value={tp.adherencePct != null ? `${tp.adherencePct}%` : "—"}
+          sub={tp.completed != null ? `${tp.completed}/${tp.planned} this week` : `${tp.planned} planned`}
+        />
+      </dl>
+      {goal?.targetDate && (
+        <p className="text-xs text-gray-400 mt-2">Target date: {goal.targetDate}</p>
+      )}
+    </div>
   );
 }
 
@@ -159,10 +195,18 @@ export default async function LanaProClientPage({
 // "Based on: <insight>" keeps the chain visible (§20). No Review / Discuss /
 // Dismiss buttons in V1 — those need an L6 destination / state model that
 // doesn't exist yet (§15-18). Empty → the section is hidden entirely (§22).
-function SuggestedActions({ actions }: { actions: SuggestedCoachingAction[] }) {
-  if (actions.length === 0) return null;
+function SuggestedActions({ actions, inColumn = false }: { actions: SuggestedCoachingAction[]; inColumn?: boolean }) {
+  if (actions.length === 0) {
+    if (!inColumn) return null;
+    return (
+      <div>
+        <ColH>Suggested actions</ColH>
+        <p className="text-sm text-gray-400">Nothing to review right now.</p>
+      </div>
+    );
+  }
   return (
-    <section className="mt-8">
+    <section className={inColumn ? undefined : "mt-8"}>
       <h2 className="text-xs font-bold text-gray-400 uppercase tracking-[0.14em]">Suggested actions</h2>
       <p className="text-[11px] text-gray-400 mt-1 mb-3">What you may want to review</p>
       <ul className="space-y-3">
@@ -184,11 +228,19 @@ function SuggestedActions({ actions }: { actions: SuggestedCoachingAction[] }) {
 // never a recommendation. The client's verbatim words appear ONLY under
 // "CLIENT SAID", in quotes, in the drill-down. No signal labels / provenance
 // fields are shown (§16). Empty → the section is hidden entirely (§19).
-function LanaInsights({ insights, todayStr }: { insights: PTInsight[]; todayStr: string }) {
-  if (insights.length === 0) return null;
+function LanaInsights({ insights, todayStr, inColumn = false }: { insights: PTInsight[]; todayStr: string; inColumn?: boolean }) {
+  if (insights.length === 0) {
+    if (!inColumn) return null;
+    return (
+      <div>
+        <ColH>Lana Insights</ColH>
+        <p className="text-sm text-gray-400">Nothing noticed yet.</p>
+      </div>
+    );
+  }
   const dateLabel = (d: string) => (d === todayStr ? "Today" : d);
   return (
-    <section className="mt-8">
+    <section className={inColumn ? undefined : "mt-8"}>
       <h2 className="text-xs font-bold text-gray-400 uppercase tracking-[0.14em] mb-3">Lana Insights</h2>
       <ul className="space-y-3">
         {insights.map((i) => (
@@ -286,22 +338,23 @@ function ClientProgress({
   todayStr,
   firstName,
   sharedLanaLoadFailed = false,
+  insights,
+  actions,
 }: {
   data: ClientProgressV1;
   todayStr: string;
   firstName: string;
   /** the shared Lana-plan RPC errored — an empty week is NOT a fact here */
   sharedLanaLoadFailed?: boolean;
+  insights: PTInsight[];
+  actions: SuggestedCoachingAction[];
 }) {
   if (data.state === "no_relationship") return null;
 
-  const { goal, bodyProgress, trainingProgress: tp, recentActivity, lastActive } = data;
+  const { bodyProgress, trainingProgress: tp, recentActivity, lastActive } = data;
   const H = ({ children }: { children: React.ReactNode }) => (
     <h2 className="text-xs font-bold text-gray-400 uppercase tracking-[0.14em] mt-9 mb-3">{children}</h2>
   );
-  const kg = (n: number | null | undefined) => (n == null ? "—" : `${n} kg`);
-  const signed = (n: number | null | undefined) =>
-    n == null ? "—" : `${n > 0 ? "+" : ""}${n} kg`;
 
   if (data.state === "not_shared") {
     return (
@@ -324,20 +377,12 @@ function ClientProgress({
 
   return (
     <section>
-      <H>Progress snapshot</H>
-      <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Stat label="Current weight" value={kg(goal?.currentWeightKg)} sub={goal?.currentWeightSource === "profile" ? "from profile" : goal?.currentWeightSource === "measurement" ? "latest weigh-in" : undefined} />
-        <Stat label="Since start" value={signed(goal?.changeSinceStartKg)} sub={goal?.startingWeightKg != null ? `from ${goal.startingWeightKg} kg` : undefined} />
-        <Stat label="To goal" value={goal?.goalWeightKg != null ? signed(goal?.toGoalKg) : "—"} sub={goal?.goalWeightKg != null ? `goal ${goal.goalWeightKg} kg` : "no goal weight"} />
-        <Stat
-          label="Training adherence"
-          value={tp.adherencePct != null ? `${tp.adherencePct}%` : "—"}
-          sub={tp.completed != null ? `${tp.completed}/${tp.planned} this week` : `${tp.planned} planned`}
-        />
-      </dl>
-      {goal?.targetDate && (
-        <p className="text-xs text-gray-400 mt-2">Target date: {goal.targetDate}</p>
-      )}
+      {/* ── SUMMARY ROW: Progress snapshot · Lana Insights · Suggested actions ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start mt-9">
+        <ProgressSnapshot data={data} />
+        <LanaInsights insights={insights} todayStr={todayStr} inColumn />
+        <SuggestedActions actions={actions} inColumn />
+      </div>
 
       {/* ── TRENDS ── */}
       <H>Weight trend</H>
@@ -359,119 +404,127 @@ function ClientProgress({
         </p>
       )}
 
-      {/* ── TRAINING THIS WEEK ── */}
-      <H>Training this week</H>
-      {tp.planned === 0 ? (
-        sharedLanaLoadFailed ? (
-          <p className="text-sm text-amber-600">
-            Couldn&apos;t load this client&apos;s Lana plan just now — refresh to try again.
-          </p>
-        ) : (
-          <p className="text-sm text-gray-400">No workouts scheduled for this week.</p>
-        )
-      ) : (
-        <>
-          <p className="text-sm text-gray-700">
-            <span className="font-medium text-gray-900">{tp.completed}</span> completed
-            {" · "}
-            <span className="font-medium text-gray-900">{tp.missed}</span> missed
-            {" · "}
-            <span className="font-medium text-gray-900">{tp.upcoming}</span> upcoming
-            <span className="text-gray-400"> · of {tp.planned} planned</span>
-          </p>
-          <ul className="mt-3 rounded-2xl border border-gray-100 bg-white divide-y divide-gray-100">
-            {tp.sessions.map((s, i) => (
-              <li key={i} className="px-5 py-3 flex items-center gap-4">
-                <span className="text-xs font-semibold text-gray-400 w-16 flex-shrink-0">
-                  {s.date === todayStr ? "Today" : s.date.slice(5)}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium text-gray-900 truncate">{s.workoutTitle}</span>
-                  <span className="block text-[11px] text-gray-400">
-                    {s.source === "lana_plan" ? "Lana plan" : "Trainer plan"}
+      {/* ── ACTIVITY ROW: Recent activity · Training this week · Workout feedback ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start mt-9">
+        {/* 1. Recent activity */}
+        <div>
+          <ColH>Recent activity</ColH>
+          {recentActivity.length === 0 ? (
+            <p className="text-sm text-gray-400">No recent activity yet.</p>
+          ) : (
+            <ul className="rounded-2xl border border-gray-100 bg-white divide-y divide-gray-100">
+              {recentActivity.map((e, i) => (
+                <li key={i} className="px-5 py-3 flex items-start gap-4">
+                  <span className="text-xs font-semibold text-gray-400 w-16 flex-shrink-0 mt-0.5">
+                    {e.date === todayStr ? "Today" : e.date.slice(5)}
                   </span>
-                </span>
-                <span
-                  className={
-                    s.status === "completed"
-                      ? "text-xs font-semibold text-green-600"
-                      : s.status === "missed"
-                        ? "text-xs font-semibold text-red-500"
-                        : "text-xs font-semibold text-gray-400"
-                  }
-                >
-                  {s.status === "completed"
-                    ? "Completed"
-                    : s.status === "missed"
-                      ? "Missed"
-                      : s.date === todayStr
-                        ? "Today"
-                        : "Upcoming"}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
+                  <p className="text-sm font-medium text-gray-900 min-w-0 flex-1">{e.label}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+          {lastActive && (
+            <p className="text-xs text-gray-400 mt-3">
+              Last active: {lastActive.date === todayStr ? "today" : lastActive.date} ({lastActive.source})
+            </p>
+          )}
+        </div>
 
-      {/* ── WORKOUT FEEDBACK (verbatim — no Lana interpretation) ── */}
-      <H>Workout feedback</H>
-      {data.workoutFeedback.length === 0 ? (
-        <p className="text-sm text-gray-400">No workout feedback yet.</p>
-      ) : (
-        <ul className="space-y-3">
-          {data.workoutFeedback.map((f) => (
-            <li key={f.id} className="rounded-2xl border border-gray-100 bg-white p-4">
-              <p className="text-xs font-semibold text-gray-400">
-                {f.scheduledDate === todayStr ? "Today" : f.scheduledDate} · {f.workoutTitle}
-                {f.scope === "exercise" && (f.exerciseName ?? f.exerciseId) ? (
-                  <> · {f.exerciseName ?? "an exercise"}</>
-                ) : null}
+        {/* 2. Training this week */}
+        <div>
+          <ColH>Training this week</ColH>
+          {tp.planned === 0 ? (
+            sharedLanaLoadFailed ? (
+              <p className="text-sm text-amber-600">
+                Couldn&apos;t load this client&apos;s Lana plan just now — refresh to try again.
               </p>
-              {/* the client's exact words — shown prominently, never rewritten */}
-              <p className="text-sm text-gray-900 mt-1.5">&ldquo;{f.comment}&rdquo;</p>
-              {(f.completionContext.status !== "completed" ||
-                f.completionContext.completionPercentage != null ||
-                f.completionContext.perceivedDifficulty) && (
-                <p className="text-[11px] text-gray-400 mt-1.5">
-                  {[
-                    f.completionContext.status !== "completed" ? f.completionContext.status.replace(/_/g, " ") : null,
-                    f.completionContext.completionPercentage != null
-                      ? `${Math.round(f.completionContext.completionPercentage)}% of sets logged`
-                      : null,
-                    f.completionContext.perceivedDifficulty ? `felt ${f.completionContext.perceivedDifficulty.replace(/_/g, " ")}` : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </p>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+            ) : (
+              <p className="text-sm text-gray-400">No workouts scheduled for this week.</p>
+            )
+          ) : (
+            <>
+              <p className="text-sm text-gray-700">
+                <span className="font-medium text-gray-900">{tp.completed}</span> completed
+                {" · "}
+                <span className="font-medium text-gray-900">{tp.missed}</span> missed
+                {" · "}
+                <span className="font-medium text-gray-900">{tp.upcoming}</span> upcoming
+                <span className="text-gray-400"> · of {tp.planned} planned</span>
+              </p>
+              <ul className="mt-3 rounded-2xl border border-gray-100 bg-white divide-y divide-gray-100">
+                {tp.sessions.map((s, i) => (
+                  <li key={i} className="px-5 py-3 flex items-center gap-4">
+                    <span className="text-xs font-semibold text-gray-400 w-16 flex-shrink-0">
+                      {s.date === todayStr ? "Today" : s.date.slice(5)}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium text-gray-900 truncate">{s.workoutTitle}</span>
+                      <span className="block text-[11px] text-gray-400">
+                        {s.source === "lana_plan" ? "Lana plan" : "Trainer plan"}
+                      </span>
+                    </span>
+                    <span
+                      className={
+                        s.status === "completed"
+                          ? "text-xs font-semibold text-green-600"
+                          : s.status === "missed"
+                            ? "text-xs font-semibold text-red-500"
+                            : "text-xs font-semibold text-gray-400"
+                      }
+                    >
+                      {s.status === "completed"
+                        ? "Completed"
+                        : s.status === "missed"
+                          ? "Missed"
+                          : s.date === todayStr
+                            ? "Today"
+                            : "Upcoming"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
 
-      {/* ── RECENT ACTIVITY ── */}
-      <H>Recent activity</H>
-      {recentActivity.length === 0 ? (
-        <p className="text-sm text-gray-400">No recent activity yet.</p>
-      ) : (
-        <ul className="rounded-2xl border border-gray-100 bg-white divide-y divide-gray-100">
-          {recentActivity.map((e, i) => (
-            <li key={i} className="px-5 py-3 flex items-start gap-4">
-              <span className="text-xs font-semibold text-gray-400 w-16 flex-shrink-0 mt-0.5">
-                {e.date === todayStr ? "Today" : e.date.slice(5)}
-              </span>
-              <p className="text-sm font-medium text-gray-900 min-w-0 flex-1">{e.label}</p>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {lastActive && (
-        <p className="text-xs text-gray-400 mt-3">
-          Last active: {lastActive.date === todayStr ? "today" : lastActive.date} ({lastActive.source})
-        </p>
-      )}
+        {/* 3. Workout feedback */}
+        <div>
+          <ColH>Workout feedback</ColH>
+          {data.workoutFeedback.length === 0 ? (
+            <p className="text-sm text-gray-400">No workout feedback yet.</p>
+          ) : (
+            <ul className="space-y-3">
+              {data.workoutFeedback.map((f) => (
+                <li key={f.id} className="rounded-2xl border border-gray-100 bg-white p-4">
+                  <p className="text-xs font-semibold text-gray-400">
+                    {f.scheduledDate === todayStr ? "Today" : f.scheduledDate} · {f.workoutTitle}
+                    {f.scope === "exercise" && (f.exerciseName ?? f.exerciseId) ? (
+                      <> · {f.exerciseName ?? "an exercise"}</>
+                    ) : null}
+                  </p>
+                  {/* the client's exact words — shown prominently, never rewritten */}
+                  <p className="text-sm text-gray-900 mt-1.5">&ldquo;{f.comment}&rdquo;</p>
+                  {(f.completionContext.status !== "completed" ||
+                    f.completionContext.completionPercentage != null ||
+                    f.completionContext.perceivedDifficulty) && (
+                    <p className="text-[11px] text-gray-400 mt-1.5">
+                      {[
+                        f.completionContext.status !== "completed" ? f.completionContext.status.replace(/_/g, " ") : null,
+                        f.completionContext.completionPercentage != null
+                          ? `${Math.round(f.completionContext.completionPercentage)}% of sets logged`
+                          : null,
+                        f.completionContext.perceivedDifficulty ? `felt ${f.completionContext.perceivedDifficulty.replace(/_/g, " ")}` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
     </section>
   );
 }
@@ -487,5 +540,5 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
 }
 
 function Wrap({ children }: { children: React.ReactNode }) {
-  return <div className="p-6 md:p-10 max-w-2xl mx-auto">{children}</div>;
+  return <div className="p-6 md:p-10">{children}</div>;
 }

@@ -172,14 +172,14 @@ export default function NewVenueBookingPage() {
   if (ctx === undefined) return <div className="p-10 text-sm text-gray-400">Loading…</div>;
   if (!ctx || (ctx.activeContext?.kind !== "business" && ctx.activeContext?.kind !== "employed")) {
     return (
-      <div className="p-6 md:p-10 max-w-2xl mx-auto">
+      <div className="p-6 md:p-10">
         <p className="text-sm text-gray-500">Switch to a venue or employed-professional context to book a venue appointment.</p>
       </div>
     );
   }
 
   return (
-    <div className="p-6 md:p-10 max-w-lg mx-auto">
+    <div className="p-6 md:p-10">
       <Link href="/lana-pro/bookings" className="text-sm font-semibold text-gray-400 hover:text-gray-700 inline-flex items-center gap-1 mb-5">
         ← Bookings
       </Link>

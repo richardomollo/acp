@@ -212,7 +212,7 @@ async function VenueSession({ id }: { id: string }) {
 
 function Missing() {
   return (
-    <div className="p-6 md:p-10 max-w-2xl mx-auto">
+    <div className="p-6 md:p-10">
       <Link href="/lana-pro/bookings" className="text-sm font-semibold text-gray-400 hover:text-gray-700">
         ← Bookings
       </Link>

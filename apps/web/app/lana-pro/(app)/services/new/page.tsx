@@ -168,14 +168,14 @@ function AddServiceInner() {
   }, [ctx, plan, option, details, sched, venue, editId, router]);
 
   if (ctx === undefined) {
-    return <div className="p-6 md:p-10 max-w-3xl mx-auto text-sm text-gray-400">Loading…</div>;
+    return <div className="p-6 md:p-10 text-sm text-gray-400">Loading…</div>;
   }
   if (!ctx) {
-    return <div className="p-6 md:p-10 max-w-3xl mx-auto text-sm text-gray-500">Please sign in again.</div>;
+    return <div className="p-6 md:p-10 text-sm text-gray-500">Please sign in again.</div>;
   }
 
   return (
-    <div className="p-6 md:p-10 max-w-3xl mx-auto">
+    <div className="p-6 md:p-10">
       <Link
         href="/lana-pro/services"
         className="text-sm font-semibold text-gray-400 hover:text-gray-700 inline-flex items-center gap-1 mb-6"

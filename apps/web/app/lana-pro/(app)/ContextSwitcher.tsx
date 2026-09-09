@@ -40,7 +40,7 @@ export function ContextSwitcher({
     <div className="mt-4">
       <label
         htmlFor="lana-pro-context"
-        className="block text-[10px] font-bold text-white/40 uppercase tracking-[0.16em] mb-1"
+        className="block text-[10px] font-bold text-gray-400 uppercase tracking-[0.16em] mb-1"
       >
         Working as
       </label>
@@ -50,7 +50,7 @@ export function ContextSwitcher({
           value={value}
           disabled={pending}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full appearance-none rounded-lg bg-white/10 text-white text-sm font-medium pl-3 pr-8 py-2 border border-white/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:opacity-60"
+          className="w-full appearance-none rounded-lg bg-white text-gray-900 text-sm font-medium pl-3 pr-8 py-2 border border-gray-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#050040] disabled:opacity-60"
         >
           {contexts.map((c) => (
             <option key={c.id} value={c.id} className="text-gray-900">
@@ -59,7 +59,7 @@ export function ContextSwitcher({
           ))}
         </select>
         <svg
-          className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/60"
+          className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"

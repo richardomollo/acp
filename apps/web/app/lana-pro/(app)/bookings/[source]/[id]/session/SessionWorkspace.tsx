@@ -204,7 +204,7 @@ export function SessionWorkspace(props: {
 
   // ── render ───────────────────────────────────────────────────────────
   return (
-    <div className="p-6 md:p-10 max-w-2xl mx-auto">
+    <div className="p-6 md:p-10">
       <Link
         href={backHref}
         className="text-sm font-semibold text-gray-400 hover:text-gray-700 inline-flex items-center gap-1 mb-5"

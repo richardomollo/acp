@@ -108,13 +108,13 @@ describe('resolveActiveContext', () => {
 
 describe('navForContextKind', () => {
   test('independent', () => {
-    assert.deepEqual(navForContextKind('independent'), ['home', 'clients', 'bookings', 'services', 'schedule', 'profile']);
+    assert.deepEqual(navForContextKind('independent'), ['home', 'clients', 'workouts', 'bookings', 'services', 'schedule', 'profile']);
   });
   test('business', () => {
     assert.deepEqual(navForContextKind('business'), ['home', 'bookings', 'services', 'schedule', 'team', 'business']);
   });
   test('employed — no services / team / business', () => {
-    assert.deepEqual(navForContextKind('employed'), ['home', 'clients', 'bookings', 'schedule', 'profile']);
+    assert.deepEqual(navForContextKind('employed'), ['home', 'clients', 'workouts', 'bookings', 'schedule', 'profile']);
   });
 });
 

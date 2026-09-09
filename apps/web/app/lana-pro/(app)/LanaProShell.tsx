@@ -73,6 +73,11 @@ function isActivePath(pathname: string, href: string): boolean {
   return href === "/lana-pro/home" ? pathname === href : pathname.startsWith(href);
 }
 
+// Same blue→surface top-fade the content column uses, so the two panels read
+// as one surface.
+const PANEL_BG =
+  "linear-gradient(180deg, #d0e0ff 0%, rgba(208,224,255,0) 460px), #f9fafb";
+
 function Brand({
   displayName,
   roleLabel,
@@ -85,19 +90,19 @@ function Brand({
   activeContextId: string | null;
 }) {
   return (
-    <div className="px-5 pt-7 pb-5 border-b border-white/10">
+    <div className="px-5 pt-7 pb-5 border-b border-gray-200">
       <div className="flex items-center gap-2 mb-4">
-        {/* dark-on-transparent wordmark, flipped to solid white for the sidebar */}
-        <img src="/images/lana-wordmark.png" alt="Lana" className="h-5 w-auto brightness-0 invert opacity-90" />
-        <span className="text-[10px] font-bold text-white/40 uppercase tracking-[0.18em]">Pro</span>
+        {/* dark-on-transparent wordmark — sits as-is on the light panel */}
+        <img src="/images/lana-wordmark.png" alt="Lana" className="h-5 w-auto opacity-90" />
+        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.18em]">Pro</span>
       </div>
       <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center text-xs font-bold text-white">
+        <div className="w-9 h-9 rounded-full bg-[#050040]/10 flex items-center justify-center text-xs font-bold text-[#050040]">
           {initialsOf(displayName)}
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-white truncate">{displayName}</p>
-          <p className="text-xs text-white/45 truncate">{roleLabel}</p>
+          <p className="text-sm font-semibold text-gray-900 truncate">{displayName}</p>
+          <p className="text-xs text-gray-500 truncate">{roleLabel}</p>
         </div>
       </div>
       <ContextSwitcher contexts={contexts} activeId={activeContextId} />
@@ -124,8 +129,8 @@ function NavList({
             href={item.href}
             onClick={onNavigate}
             aria-current={active ? "page" : undefined}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${
-              active ? "bg-white/12 text-white" : "text-white/60 hover:bg-white/5 hover:text-white"
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#050040] ${
+              active ? "bg-[#050040]/10 text-[#050040]" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
             }`}
           >
             <NavIcon id={item.id} />
@@ -147,11 +152,11 @@ function ShellFooter({
   onNavigate?: () => void;
 }) {
   return (
-    <div className="px-3 py-4 border-t border-white/10 space-y-1">
+    <div className="px-3 py-4 border-t border-gray-200 space-y-1">
       <button
         onClick={onSignOut}
         disabled={signingOut}
-        className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-white/60 hover:bg-white/5 hover:text-white transition-colors disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+        className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#050040]"
       >
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -196,7 +201,10 @@ export function LanaProShell({
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
       {/* ── Desktop sidebar ── */}
-      <aside className="hidden md:flex flex-col w-64 bg-[#050040] flex-shrink-0">
+      <aside
+        className="hidden md:flex flex-col w-64 flex-shrink-0 border-r border-gray-200"
+        style={{ background: PANEL_BG }}
+      >
         <Brand displayName={displayName} roleLabel={roleLabel} contexts={contexts} activeContextId={activeContextId} />
         <NavList nav={nav} pathname={pathname} />
         <ShellFooter signingOut={signingOut} onSignOut={signOut} />
@@ -207,22 +215,19 @@ export function LanaProShell({
         // Same top-fade as the mobile app's entry screens: brand blue easing to
         // the app surface over the first 460px. Sits on the non-scrolling
         // wrapper so it stays put while the content column scrolls over it.
-        style={{
-          background:
-            "linear-gradient(180deg, #d0e0ff 0%, rgba(208,224,255,0) 460px), #f9fafb",
-        }}
+        style={{ background: PANEL_BG }}
       >
         {/* ── Mobile top bar ── */}
-        <header className="md:hidden flex items-center justify-between px-4 py-3 bg-[#050040] text-white flex-shrink-0">
+        <header className="md:hidden flex items-center justify-between px-4 py-3 text-gray-900 border-b border-gray-200 flex-shrink-0 bg-transparent">
           <div className="flex items-center gap-2 min-w-0">
-            <div className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center text-xs font-bold">
+            <div className="w-8 h-8 rounded-full bg-[#050040]/10 text-[#050040] flex items-center justify-center text-xs font-bold">
               {initialsOf(displayName)}
             </div>
             <span className="text-sm font-semibold truncate">{displayName}</span>
           </div>
           <button
             onClick={() => setDrawerOpen((v) => !v)}
-            className="p-1.5 rounded-lg hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            className="p-1.5 rounded-lg hover:bg-gray-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#050040]"
             aria-label={drawerOpen ? "Close menu" : "Open menu"}
             aria-expanded={drawerOpen}
             aria-controls="lana-pro-mobile-nav"
@@ -240,7 +245,11 @@ export function LanaProShell({
         {drawerOpen && (
           <div className="md:hidden fixed inset-0 z-40 flex">
             <div className="fixed inset-0 bg-black/50" onClick={() => setDrawerOpen(false)} aria-hidden="true" />
-            <div id="lana-pro-mobile-nav" className="relative z-50 flex flex-col w-72 max-w-[85%] bg-[#050040] h-full">
+            <div
+              id="lana-pro-mobile-nav"
+              className="relative z-50 flex flex-col w-72 max-w-[85%] h-full border-r border-gray-200"
+              style={{ background: PANEL_BG }}
+            >
               <Brand displayName={displayName} roleLabel={roleLabel} contexts={contexts} activeContextId={activeContextId} />
               <NavList nav={nav} pathname={pathname} onNavigate={() => setDrawerOpen(false)} />
               <ShellFooter
