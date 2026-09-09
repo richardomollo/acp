@@ -104,13 +104,13 @@ export default function NutritionHistoryScreen() {
 
           {!error && loggedDayCount === 0 ? (
             <ThemedText style={s.emptyText}>
-              Log meals over a few days to start seeing your recent nutrition here.
+              No recent nutrition history to show yet.
             </ThemedText>
           ) : (
             <>
               {loggedDayCount > 0 && loggedDayCount < 2 && (
                 <ThemedText style={s.hint}>
-                  Keep logging — patterns appear once you have a couple of logged days.
+                  Patterns appear once you have a couple of days of nutrition history.
                 </ThemedText>
               )}
               <View style={s.list}>

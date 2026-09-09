@@ -13,6 +13,10 @@ import {
   resolveGrams, computeLogSnapshot, sumDailyNutrition,
 } from '@/lib/nutrition/food-nutrition';
 import { normaliseUserNutrients, HOMEMADE_MEAL_SOURCE } from '@/lib/nutrition/homemade-meal';
+import {
+  followMealGroupId, buildFollowedMealLogInput,
+  FOLLOWED_MEAL_CAPTURE_METHOD, FOLLOWED_MEAL_SOURCE_TYPE,
+} from '@/lib/nutrition/followed-meal';
 import { buildHistory, addLocalDays, type DayNutrition } from '@/lib/nutrition/nutrition-history';
 import {
   NUTRIENT_KEYS, emptyNutrients,
@@ -361,5 +365,84 @@ export const foodLogService = {
       entriesByDate,
       entries,
     };
+  },
+
+  /**
+   * Lana Nutrition — the user tapped ✓ on a SUGGESTED / PLANNED meal to say
+   * they actually ate it. Persists it as a real consumption record through the
+   * SAME N1 path any other entry uses (food_log_entries), with the meal's own
+   * curated macros frozen verbatim and attributed truthfully to the catalogue
+   * (never as the user's own numbers). "Logged Today", Recent Nutrition and
+   * every N2–N8 surface read food_log_entries, so this shows up everywhere
+   * with no extra plumbing.
+   *
+   * Idempotent: the row's `log_group_id` is DETERMINISTIC in
+   * (userId, followKey, localDate), so a repeated tap that races the UI state
+   * finds the existing row and no-ops instead of double-logging.
+   *
+   * `now` (injectable for tests) fixes the LOCAL calendar date — a meal
+   * followed on the 8th in Africa/Nairobi is logged on the 8th, never shifted
+   * by a UTC slice.
+   */
+  async markMealFollowed(
+    userId: string,
+    input: {
+      followKey: string;
+      mealName: string;
+      slot: string | null;
+      macros: { calories: number | null; proteinG: number | null; carbsG: number | null; fatG: number | null; fibreG: number | null };
+    },
+    now: Date = new Date(),
+  ): Promise<{ localDate: string; logGroupId: string; created: boolean }> {
+    const localDate = localISODate(now);
+    const logGroupId = followMealGroupId(userId, input.followKey, localDate);
+
+    const { data: existing } = await supabase
+      .from('food_log_entries')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('log_group_id', logGroupId)
+      .limit(1);
+    if ((existing as any[])?.length) return { localDate, logGroupId, created: false };
+
+    await this.logFood(
+      userId,
+      buildFollowedMealLogInput({
+        mealName: input.mealName,
+        slot: input.slot,
+        macros: input.macros,
+        logGroupId,
+      }),
+      now,
+    );
+    return { localDate, logGroupId, created: true };
+  },
+
+  /**
+   * Reverses exactly one `markMealFollowed` — deletes only the occurrence it
+   * created for that meal + local date. Never touches the meals catalogue or
+   * meal_plan_items. A no-op (0 rows) if it was never followed / already
+   * un-followed, so repeated taps can't error.
+   */
+  async unmarkMealFollowed(userId: string, followKey: string, localDate: string): Promise<void> {
+    await this.deleteLogGroup(userId, followMealGroupId(userId, followKey, localDate));
+  },
+
+  /**
+   * The set of followed-meal `log_group_id`s already recorded for `localDate`
+   * — used to seed the ✓ state on load so a reload keeps checked meals
+   * checked. The caller recomputes each visible meal's deterministic id and
+   * tests membership.
+   */
+  async getFollowedMealGroupIds(userId: string, localDate: string): Promise<Set<string>> {
+    const { data } = await supabase
+      .from('food_log_entries')
+      .select('log_group_id')
+      .eq('user_id', userId)
+      .eq('local_date', localDate)
+      .eq('capture_method', FOLLOWED_MEAL_CAPTURE_METHOD)
+      .eq('source_type', FOLLOWED_MEAL_SOURCE_TYPE)
+      .not('log_group_id', 'is', null);
+    return new Set(((data as any[]) ?? []).map(r => String(r.log_group_id)));
   },
 };

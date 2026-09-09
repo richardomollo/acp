@@ -4,6 +4,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/themed-text';
 import { palette, radii, fontSize } from '@/constants/theme';
+import { toCalendarDate, parseCalendarDateOrNull } from '@/lib/calendar-date';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -11,8 +12,10 @@ const MONTHS = [
 ];
 
 export function formatMonthYear(iso: string) {
-  const d = new Date(iso + 'T00:00:00');
-  return `${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+  // LH-26 — parse the canonical calendar date to LOCAL midnight; never
+  // `new Date(iso)` (UTC) which could roll the month at a boundary.
+  const d = parseCalendarDateOrNull(iso);
+  return d ? `${MONTHS[d.getMonth()]} ${d.getFullYear()}` : '';
 }
 
 export function DateSelector({
@@ -27,13 +30,16 @@ export function DateSelector({
   const [showPicker, setShowPicker] = useState(false);
   const minimumDate = new Date(Date.now() + 21 * 24 * 60 * 60 * 1000); // at least 3 weeks out
 
-  const dateValue = value ? new Date(value + 'T00:00:00') : minimumDate;
+  // LH-26 — seed the picker at LOCAL midnight of the stored calendar day so it
+  // opens on exactly the day the user chose.
+  const dateValue = parseCalendarDateOrNull(value) ?? minimumDate;
 
   const onChangeDate = (_e: any, selected?: Date) => {
     setShowPicker(false);
     if (selected) {
-      const iso = selected.toISOString().split('T')[0];
-      onChange(iso);
+      // LH-26 — keep the user's LOCAL calendar components. `toISOString()`
+      // here would store the previous day for any UTC+ timezone (Nairobi).
+      onChange(toCalendarDate(selected));
     }
   };
 
@@ -52,6 +58,12 @@ export function DateSelector({
           value={dateValue}
           mode="date"
           display={Platform.OS === 'ios' ? 'inline' : 'default'}
+          // The app is light-only (`userInterfaceStyle: "light"`). Pin the iOS
+          // native picker to light so an OS dark-mode device can't render it
+          // dark-on-light. Android legibility is handled by the light app
+          // theme (plugins/with-light-native-theme.js); `themeVariant` is a
+          // no-op there.
+          themeVariant="light"
           minimumDate={minimumDate}
           onChange={onChangeDate}
         />

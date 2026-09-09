@@ -10,7 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { authService } from '@/services/auth';
 import { foodLogService } from '@/services/food-log-service';
 import { resolveGrams, computeLogSnapshot, PortionError } from '@/lib/nutrition/food-nutrition';
-import { isNutritionCameraEnabled, isNutritionSavedMealsEnabled } from '@/lib/flags';
+import { isNutritionCameraEnabled, isNutritionSavedMealsEnabled, isManualFoodLoggingEnabled } from '@/lib/flags';
 import { captureMealPhoto, pickMealPhotoFromLibrary, type PhotoCaptureResult } from '@/lib/nutrition/photo-capture';
 import { analysePhoto, type PhotoAnalysisFailure } from '@/lib/nutrition/nutrition-photo-request';
 import {
@@ -86,7 +86,7 @@ export default function PhotoMealScreen() {
   const didAutoStart = useRef(false);
 
   useEffect(() => {
-    if (!isNutritionCameraEnabled()) { router.replace('/log-food'); return; }
+    if (!isNutritionCameraEnabled()) { router.replace('/today-nutrition'); return; }
     authService.getSession().then(sess => {
       setUserId(sess?.user.id ?? null);
       setAccessToken(sess?.access_token ?? null);
@@ -243,9 +243,11 @@ export default function PhotoMealScreen() {
               <Ionicons name="images-outline" size={18} color={palette.ink900} />
               <ThemedText style={s.secondaryBtnText}>Choose from library</ThemedText>
             </TouchableOpacity>
-            <TouchableOpacity style={s.linkBtn} onPress={() => router.replace('/log-food')}>
-              <ThemedText style={s.linkBtnText}>Search for a food instead</ThemedText>
-            </TouchableOpacity>
+            {isManualFoodLoggingEnabled() && (
+              <TouchableOpacity style={s.linkBtn} onPress={() => router.replace('/log-food')}>
+                <ThemedText style={s.linkBtnText}>Search for a food instead</ThemedText>
+              </TouchableOpacity>
+            )}
           </ScrollView>
         )}
 
@@ -310,17 +312,19 @@ export default function PhotoMealScreen() {
                       <TouchableOpacity onPress={() => setPickerItemId(item.id)}>
                         <ThemedText style={s.actionLink}>Choose food</ThemedText>
                       </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() => router.push({
-                          pathname: '/homemade-meal',
-                          params: {
-                            ...(item.visionLabel ? { name: item.visionLabel } : {}),
-                            ...(slot ? { slot } : {}),
-                          },
-                        })}
-                      >
-                        <ThemedText style={s.actionLink}>Log as homemade</ThemedText>
-                      </TouchableOpacity>
+                      {isManualFoodLoggingEnabled() && (
+                        <TouchableOpacity
+                          onPress={() => router.push({
+                            pathname: '/homemade-meal',
+                            params: {
+                              ...(item.visionLabel ? { name: item.visionLabel } : {}),
+                              ...(slot ? { slot } : {}),
+                            },
+                          })}
+                        >
+                          <ThemedText style={s.actionLink}>Log as homemade</ThemedText>
+                        </TouchableOpacity>
+                      )}
                       <TouchableOpacity onPress={() => patchItem(item.id, removeItem(item))}>
                         <ThemedText style={s.actionLinkMuted}>Remove</ThemedText>
                       </TouchableOpacity>

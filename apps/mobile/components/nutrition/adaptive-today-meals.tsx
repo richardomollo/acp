@@ -13,6 +13,7 @@ import { ThemedText } from '@/components/themed-text';
 import { palette, radii, fontSize } from '@/constants/theme';
 import type { FoodLogEntry, MealSlot } from '@/lib/nutrition/food-types';
 import { PORTION_MULTIPLIERS, DEFAULT_PORTION_MULTIPLIER } from '@/lib/nutrition/nutrition-meal-model';
+import { isManualFoodLoggingEnabled } from '@/lib/flags';
 import {
   nutritionRecommendationService, NUTRITION_PLAN_SLOTS,
   type TodayNutritionPlanResult, type TodayNutritionPlanSlot,
@@ -159,13 +160,17 @@ export function AdaptiveTodayMeals({ userId, date, todayFoodLog }: { userId: str
         );
       })}
 
-      <TouchableOpacity
-        style={s.somethingElseRow}
-        activeOpacity={0.7}
-        onPress={() => router.push('/log-food' as any)}
-      >
-        <ThemedText style={s.somethingElseText}>Having something else? Log a meal →</ThemedText>
-      </TouchableOpacity>
+      {/* Manual "log a meal" escape hatch removed from the consumer app
+          (product decision). Re-enable via isManualFoodLoggingEnabled(). */}
+      {isManualFoodLoggingEnabled() && (
+        <TouchableOpacity
+          style={s.somethingElseRow}
+          activeOpacity={0.7}
+          onPress={() => router.push('/log-food' as any)}
+        >
+          <ThemedText style={s.somethingElseText}>Having something else? Log a meal →</ThemedText>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }

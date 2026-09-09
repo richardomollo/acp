@@ -4,6 +4,8 @@
 // future recommendation engine can import/replace pieces of it in
 // isolation. Supabase-backed helpers live in lib/onboarding-auth.ts.
 
+import { isPlausibleWeightKg } from './onboarding-validation.ts';
+
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export type PrimaryGoal =
@@ -290,7 +292,11 @@ export function buildPlanSummary(answers: OnboardingAnswers): PlanSummary {
   const goalOpt = GOAL_OPTIONS.find(g => g.key === answers.goal);
 
   let goalLine = goalOpt?.label ?? 'Your fitness goal';
-  if ((answers.goal === 'lose_weight' || answers.goal === 'build_muscle' || answers.goal === 'maintain_weight') && answers.startingWeightKg && answers.goalWeightKg) {
+  // LH-18 — only build a numeric weight goal line from plausible, in-range
+  // weights. Out-of-range values fall back to the plain goal label rather
+  // than producing "Lose 998 kg by …".
+  if ((answers.goal === 'lose_weight' || answers.goal === 'build_muscle' || answers.goal === 'maintain_weight')
+    && isPlausibleWeightKg(answers.startingWeightKg) && isPlausibleWeightKg(answers.goalWeightKg)) {
     const diff = Math.round((answers.goalWeightKg - answers.startingWeightKg) * 10) / 10;
     if (diff > 0) {
       goalLine = answers.goalTargetDate ? `Gain ${diff} kg by ${monthYear(answers.goalTargetDate)}` : `Gain ${diff} kg`;
@@ -379,7 +385,8 @@ export function isStep2Complete(answers: OnboardingAnswers): boolean {
     case 'lose_weight':
     case 'build_muscle':
     case 'maintain_weight':
-      return !!answers.startingWeightKg && !!answers.goalWeightKg
+      // LH-01 — "complete" means the weights are present AND plausible.
+      return isPlausibleWeightKg(answers.startingWeightKg) && isPlausibleWeightKg(answers.goalWeightKg)
         && !!answers.goalTargetDate && !!answers.strengthExperience;
     case 'reduce_stress':
       return (answers.goalDetails.health_focus ?? []).length > 0;

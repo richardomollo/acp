@@ -42,7 +42,7 @@ export default function SavedMealLogScreen() {
   const [prepareErrors, setPrepareErrors] = useState<{ key: string; message: string }[]>([]);
 
   useEffect(() => {
-    if (!isNutritionSavedMealsEnabled()) { router.replace('/log-food'); return; }
+    if (!isNutritionSavedMealsEnabled()) { router.replace('/today-nutrition'); return; }
     let active = true;
     (async () => {
       const sess = await authService.getSession();

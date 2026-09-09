@@ -1,6 +1,6 @@
 import {
   StyleSheet, View, ScrollView, TouchableOpacity, Image,
-  ActivityIndicator,
+  ActivityIndicator, Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ThemedText } from '@/components/themed-text';
@@ -35,8 +35,9 @@ import { buildNutritionReferenceComparisons, type UserReferenceContext, type Nut
 import { NutritionCoachingSection } from '@/components/nutrition/nutrition-coaching-section';
 import { getNutritionCoaching } from '@/lib/nutrition/nutrition-coaching';
 import type { CoachingValidationResult } from '@/lib/nutrition/nutrition-coaching-safety';
-import { isNutritionSavedMealsEnabled } from '@/lib/flags';
+import { isNutritionSavedMealsEnabled, isManualFoodLoggingEnabled } from '@/lib/flags';
 import { prefillFromEntries } from '@/lib/nutrition/saved-meal';
+import { followMealKey, followMealGroupId, FOLLOWED_MEAL_CAPTURE_METHOD, FOLLOWED_MEAL_SOURCE_TYPE } from '@/lib/nutrition/followed-meal';
 import { NutritionActivityContext } from '@/components/nutrition/nutrition-activity-context';
 import { nutritionFitnessContextService } from '@/services/nutrition-fitness-context-service';
 import type { CrossDomainNutritionObservation } from '@/lib/nutrition/nutrition-fitness-context';
@@ -56,6 +57,7 @@ interface TodayMealItem {
   protein_g: number;
   carbs_g: number;
   fat_g: number;
+  fibre_g: number | null;
   prep_time_minutes: number | null;
 }
 
@@ -175,7 +177,7 @@ export default function TodayNutritionScreen() {
         const todayDow = new Date().getDay();
         const { data: itemsData } = await supabase
           .from('meal_plan_items')
-          .select('id, meal_slot, sort_order, meals(id, name, image_url, calories, protein_g, carbs_g, fat_g, prep_time_minutes)')
+          .select('id, meal_slot, sort_order, meals(id, name, image_url, calories, protein_g, carbs_g, fat_g, fibre_g, prep_time_minutes)')
           .eq('meal_plan_id', planData.id)
           .eq('day_of_week', todayDow)
           .order('sort_order');
@@ -191,13 +193,15 @@ export default function TodayNutritionScreen() {
             protein_g: i.meals.protein_g ?? 0,
             carbs_g: i.meals.carbs_g ?? 0,
             fat_g: i.meals.fat_g ?? 0,
+            fibre_g: i.meals.fibre_g ?? null,
             prep_time_minutes: i.meals.prep_time_minutes,
           }));
       }
 
-      const todayStr = new Date().toISOString().slice(0, 10);
-
-      // Nutrition N1 — the user's actual food log for today (local date).
+      // The user's LOCAL calendar day — the single date key for everything on
+      // this screen (food log, meal_logs, followed-meal ✓, the daily pick).
+      // Never a UTC slice (LH-26): a meal followed on the 8th in Nairobi stays
+      // on the 8th.
       const todayLocal = localISODate(new Date());
       foodLogService.getDailyNutrition(session.user.id, todayLocal)
         .then(({ summary, entries }) => {
@@ -279,13 +283,31 @@ export default function TodayNutritionScreen() {
         setItems(planItems);
         setIsSuggested(false);
 
-        const { data: logsData } = await supabase
-          .from('meal_logs')
-          .select('meal_plan_item_id, status')
-          .eq('user_id', session.user.id)
-          .eq('log_date', todayStr)
-          .in('meal_plan_item_id', planItems.map(i => i.id));
-        if (active) setLoggedIds(new Set((logsData ?? []).filter(l => l.status === 'eaten').map(l => l.meal_plan_item_id)));
+        // ✓ state = "user said they ate this". Sourced from the followed-meal
+        // consumption rows in food_log_entries (the record that carries macros
+        // and drives Logged Today), unioned with any pre-existing meal_logs
+        // adherence rows so nutritionist-plan clients keep their prior checks.
+        const [{ data: logsData }, followedIds] = await Promise.all([
+          supabase
+            .from('meal_logs')
+            .select('meal_plan_item_id, status')
+            .eq('user_id', session.user.id)
+            .eq('log_date', todayLocal)
+            .in('meal_plan_item_id', planItems.map(i => i.id)),
+          foodLogService.getFollowedMealGroupIds(session.user.id, todayLocal),
+        ]);
+        const checked = new Set<string>(
+          (logsData ?? []).filter(l => l.status === 'eaten').map(l => l.meal_plan_item_id),
+        );
+        for (const it of planItems) {
+          const gid = followMealGroupId(
+            session.user.id,
+            followMealKey({ suggested: false, mealId: it.mealId, mealPlanItemId: it.id }),
+            todayLocal,
+          );
+          if (followedIds.has(gid)) checked.add(it.id);
+        }
+        if (active) setLoggedIds(checked);
       } else {
         // No active plan — suggest one meal per category. Ranking (which
         // candidates are actually good picks) is deterministic goal/cuisine
@@ -324,7 +346,7 @@ export default function TodayNutritionScreen() {
           const tiedTopIds = new Set(candidates.filter(c => c.scoring.overall === topScore).map(c => c.mealId));
           return { category, foods: rows.filter(r => tiedTopIds.has(r.id)) };
         });
-        const dailySelections = selectDailyMeals(session.user.id, todayStr, mealsBySlot);
+        const dailySelections = selectDailyMeals(session.user.id, todayLocal, mealsBySlot);
         const suggested: TodayMealItem[] = dailySelections.map(({ category, food: meal }) => ({
           id: meal.id,
           mealId: meal.id,
@@ -335,12 +357,25 @@ export default function TodayNutritionScreen() {
           protein_g: meal.protein_g ?? 0,
           carbs_g: meal.carbs_g ?? 0,
           fat_g: meal.fat_g ?? 0,
+          fibre_g: meal.fibre_g ?? null,
           prep_time_minutes: meal.prep_time_minutes,
         }));
         if (!active) return;
         setItems(suggested);
         setIsSuggested(true);
-        setLoggedIds(new Set());
+        // Seed ✓ from today's followed-meal consumption rows so a reload keeps
+        // checked suggestions checked (SUGGESTED alone is never pre-checked).
+        const followedIds = await foodLogService.getFollowedMealGroupIds(session.user.id, todayLocal);
+        const checkedSug = new Set<string>();
+        for (const it of suggested) {
+          const gid = followMealGroupId(
+            session.user.id,
+            followMealKey({ suggested: true, mealId: it.mealId }),
+            todayLocal,
+          );
+          if (followedIds.has(gid)) checkedSug.add(it.id);
+        }
+        if (active) setLoggedIds(checkedSug);
       }
       } finally {
         if (active) setLoading(false);
@@ -349,9 +384,41 @@ export default function TodayNutritionScreen() {
     return () => { active = false; };
   }, []));
 
+  // Refetch today + the 7-day window so every derived aggregate (Logged Today
+  // totals, per-nutrient completeness, the recent strip, N2–N8 evidence) is
+  // recomputed from food_log_entries. Shared by the ✓ toggle and entry delete
+  // so the screen updates in place — no leave/reopen required (§3).
+  const reloadNutrition = useCallback(async () => {
+    if (!userId) return;
+    const today = localISODate(new Date());
+    const [{ summary, entries }, range] = await Promise.all([
+      foodLogService.getDailyNutrition(userId, today),
+      foodLogService.getNutritionRange(userId, 7, today).catch(() => null),
+    ]);
+    setFoodTotals(summary); setFoodLog(entries);
+    setTodayDay(summariseDay(today, entries));
+    if (range) {
+      setRecentDays(range.days);
+      const p = buildNutritionPatterns(range.entries, { windowDays: 7, endLocalDate: today });
+      setPatterns(p);
+      if (refContext) {
+        const comparisons = buildNutritionReferenceComparisons(refContext, range.days, p);
+        setRefComparisons(comparisons);
+        getNutritionCoaching(null, comparisons, range.entries)
+          .then(res => setCoaching(res.validated))
+          .catch(() => { /* keep prior cards */ });
+      }
+    }
+  }, [userId, refContext]);
+
+  // Tapping ✓ on a SUGGESTED or PLANNED meal = "I actually ate this" → a real
+  // consumption record (food_log_entries, the meal's own curated macros frozen
+  // verbatim). SUGGESTED alone never counts. Reversible, idempotent, local-date
+  // safe. Nothing here deletes a meal or a meal-plan item.
   const toggleMeal = async (item: TodayMealItem) => {
     if (togglingId) return;
-    if (isSuggested || !userId) {
+    // Signed-out preview: local-only, nothing to persist.
+    if (!userId) {
       setLoggedIds(prev => {
         const next = new Set(prev);
         if (next.has(item.id)) next.delete(item.id); else next.add(item.id);
@@ -360,20 +427,59 @@ export default function TodayNutritionScreen() {
       return;
     }
     setTogglingId(item.id);
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const isEaten = loggedIds.has(item.id);
-    if (isEaten) {
-      setLoggedIds(prev => { const next = new Set(prev); next.delete(item.id); return next; });
-      await supabase.from('meal_logs').delete()
-        .eq('user_id', userId).eq('meal_plan_item_id', item.id).eq('log_date', todayStr);
-    } else {
-      setLoggedIds(prev => new Set(prev).add(item.id));
-      await supabase.from('meal_logs').upsert(
-        { user_id: userId, meal_plan_item_id: item.id, log_date: todayStr, status: 'eaten' },
-        { onConflict: 'user_id,meal_plan_item_id,log_date' },
-      );
+    const now = new Date();
+    const localDate = localISODate(now);
+    const wasChecked = loggedIds.has(item.id);
+    const followKey = followMealKey({
+      suggested: isSuggested,
+      mealId: item.mealId,
+      mealPlanItemId: isSuggested ? null : item.id,
+    });
+    // optimistic ✓ flip
+    setLoggedIds(prev => {
+      const next = new Set(prev);
+      if (wasChecked) next.delete(item.id); else next.add(item.id);
+      return next;
+    });
+    try {
+      if (wasChecked) {
+        await foodLogService.unmarkMealFollowed(userId, followKey, localDate);
+        if (!isSuggested) {
+          await supabase.from('meal_logs').delete()
+            .eq('user_id', userId).eq('meal_plan_item_id', item.id).eq('log_date', localDate);
+        }
+      } else {
+        await foodLogService.markMealFollowed(userId, {
+          followKey,
+          mealName: item.name,
+          slot: item.slot,
+          macros: {
+            calories: item.calories || null,
+            proteinG: item.protein_g,
+            carbsG: item.carbs_g,
+            fatG: item.fat_g,
+            fibreG: item.fibre_g,
+          },
+        }, now);
+        if (!isSuggested) {
+          await supabase.from('meal_logs').upsert(
+            { user_id: userId, meal_plan_item_id: item.id, log_date: localDate, status: 'eaten' },
+            { onConflict: 'user_id,meal_plan_item_id,log_date' },
+          );
+        }
+      }
+      await reloadNutrition();
+    } catch {
+      // revert the optimistic flip on failure — never a false ✓
+      setLoggedIds(prev => {
+        const next = new Set(prev);
+        if (wasChecked) next.add(item.id); else next.delete(item.id);
+        return next;
+      });
+      Alert.alert('Could not update', 'Please try again.');
+    } finally {
+      setTogglingId(null);
     }
-    setTogglingId(null);
   };
 
   // Same behaviour as My Plan's "Explore support" — professional matching is
@@ -440,8 +546,10 @@ export default function TodayNutritionScreen() {
     fat: acc.fat + i.fat_g,
   }), { calories: 0, protein: 0, carbs: 0, fat: 0 });
 
-  // "Logged" = what the user actually ate, from food_log_entries only
-  // (Nutrition N1). Never derived from the eaten/skipped toggle.
+  // "Logged" = what the user actually ate, from food_log_entries (Nutrition
+  // N1). This now includes suggested/planned meals the user explicitly
+  // ✓-followed (a real consumption row with the meal's frozen macros) — never
+  // a suggestion that was merely shown.
   const logged = {
     calories: foodTotals?.energyKcal ?? 0,
     protein: foodTotals?.proteinG ?? 0,
@@ -449,10 +557,18 @@ export default function TodayNutritionScreen() {
     fat: foodTotals?.fatG ?? 0,
   };
 
+  // Followed-meal rows are shown by the checked ✓ meal card (with its kcal),
+  // not as separate deletable log lines — excluded here, still counted above.
+  const manualFoodLog = foodLog.filter(
+    e => !(e.foodId == null
+      && e.captureMethod === FOLLOWED_MEAL_CAPTURE_METHOD
+      && e.sourceType === FOLLOWED_MEAL_SOURCE_TYPE),
+  );
+
   const foodLogBySlot: { slot: 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'other'; entries: FoodLogEntry[] }[] = [
     ...(['breakfast', 'lunch', 'dinner', 'snack'] as const)
-      .map(slot => ({ slot, entries: foodLog.filter(e => e.mealSlot === slot) })),
-    { slot: 'other' as const, entries: foodLog.filter(e => !e.mealSlot) },
+      .map(slot => ({ slot, entries: manualFoodLog.filter(e => e.mealSlot === slot) })),
+    { slot: 'other' as const, entries: manualFoodLog.filter(e => !e.mealSlot) },
   ].filter(g => g.entries.length > 0);
 
   const deleteEntry = async (id: string) => {
@@ -460,33 +576,9 @@ export default function TodayNutritionScreen() {
     try {
       await foodLogService.deleteFoodLog(id);
     } finally {
-      if (userId) {
-        // Refetch today AND the recent window so no derived aggregate (totals,
-        // completeness, strip, observations) is left stale (N2 §21).
-        const today = localISODate(new Date());
-        const [{ summary, entries }, range] = await Promise.all([
-          foodLogService.getDailyNutrition(userId, today),
-          foodLogService.getNutritionRange(userId, 7, today).catch(() => null),
-        ]);
-        setFoodTotals(summary); setFoodLog(entries);
-        setTodayDay(summariseDay(today, entries));
-        if (range) {
-          setRecentDays(range.days);
-          const p = buildNutritionPatterns(range.entries, { windowDays: 7, endLocalDate: today });
-          setPatterns(p);
-          if (refContext) {
-            const comparisons = buildNutritionReferenceComparisons(refContext, range.days, p);
-            setRefComparisons(comparisons);
-            // N4 — recompute deterministic coaching from the new evidence so a
-            // deleted entry never leaves a stale card (§21). Deterministic
-            // only here (no LLM re-call on a delete); the next focus refresh
-            // will re-fetch the rephrase.
-            getNutritionCoaching(null, comparisons, range.entries)
-              .then(res => setCoaching(res.validated))
-              .catch(() => { /* keep prior cards */ });
-          }
-        }
-      }
+      // Refetch today + the recent window so no derived aggregate (totals,
+      // completeness, strip, observations) is left stale (N2 §21).
+      await reloadNutrition();
     }
   };
   const todayLabel = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
@@ -527,25 +619,30 @@ export default function TodayNutritionScreen() {
                 <MacroStat label="Fibre" value={foodTotals?.fibreG ?? 0} unit="g" />
               </View>
               {foodLog.length === 0 && (
-                <ThemedText style={s.heroEmpty}>Nothing logged yet today.</ThemedText>
+                <ThemedText style={s.heroEmpty}>No food recorded for today.</ThemedText>
               )}
             </SafeAreaView>
           </LinearGradient>
 
           <View style={s.content}>
             {/* Nutrition N1 — the actual food log. Separate from the planned
-                meals below; this is the record of what was really eaten. */}
-            <TouchableOpacity
-              style={s.logFoodCta}
-              onPress={() => router.push('/log-food' as any)}
-              activeOpacity={0.85}
-            >
-              <Ionicons name="add-circle" size={20} color={palette.success700} />
-              <ThemedText style={s.logFoodCtaText}>Log food</ThemedText>
-              <ThemedText style={s.logFoodCtaSub}>What did you eat?</ThemedText>
-            </TouchableOpacity>
+                meals below; this is the record of what was really eaten.
+                Manual "Log food" entry point removed from the consumer app
+                (product decision) — this list now shows only pre-existing /
+                automated entries. Re-enable via isManualFoodLoggingEnabled(). */}
+            {isManualFoodLoggingEnabled() && (
+              <TouchableOpacity
+                style={s.logFoodCta}
+                onPress={() => router.push('/log-food' as any)}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="add-circle" size={20} color={palette.success700} />
+                <ThemedText style={s.logFoodCtaText}>Log food</ThemedText>
+                <ThemedText style={s.logFoodCtaSub}>What did you eat?</ThemedText>
+              </TouchableOpacity>
+            )}
 
-            {foodLog.length > 0 && (
+            {manualFoodLog.length > 0 && (
               <View style={s.loggedWrap}>
                 <ThemedText style={s.sourceNote}>Logged today</ThemedText>
                 {foodLogBySlot.map(({ slot, entries }) => (
@@ -673,9 +770,16 @@ export default function TodayNutritionScreen() {
             ) : (
               <>
                 <ThemedText style={s.sourceNote}>
-                  {isSuggested ? 'Suggested meals (not a log — tap ✓ if you followed one)' : 'From your meal plan'}
-                  {planned.calories > 0 ? `  ·  planned ≈ ${Math.round(planned.calories)} kcal (reference, not a target)` : ''}
+                  {isSuggested
+                    ? `Suggested meals${planned.calories > 0 ? ` total ≈ ${Math.round(planned.calories)} kcal` : ''} · reference, not a target`
+                    : 'From your meal plan'}
                 </ThemedText>
+                {isSuggested && (
+                  <ThemedText style={s.suggestionCaption}>
+                    Tap ✓ on a meal you actually ate to log it. Meal suggestions are
+                    examples and may not add up to your full daily energy needs.
+                  </ThemedText>
+                )}
                 <View style={s.mealsList}>
                   {orderedItems.map(item => {
                     const done = loggedIds.has(item.id);
@@ -802,6 +906,7 @@ const s = StyleSheet.create({
   content: { paddingHorizontal: 20, paddingTop: 24 },
   emptyText: { fontSize: 13, color: palette.gray300, textAlign: 'center', marginTop: 40 },
   sourceNote: { fontSize: 12, color: palette.gray300, marginBottom: 16 },
+  suggestionCaption: { fontSize: 11.5, color: palette.gray450, lineHeight: 16, marginTop: -8, marginBottom: 16 },
 
   section: { marginBottom: 22 },
   sectionTitle: {

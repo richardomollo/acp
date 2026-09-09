@@ -122,6 +122,23 @@ describe('buildPlanSummary', () => {
     assert.equal(buildPlanSummary(answers).goalLine, 'Build strength');
   });
 
+  // LH-18 — impossible weights must NEVER produce a numeric goal line like
+  // "Lose 998 kg by September 2026". They fall back to the plain goal label.
+  test('LH-18: an out-of-range current weight falls back to the goal label, no "Lose 998 kg"', () => {
+    const answers: OnboardingAnswers = {
+      ...base, goal: 'lose_weight', startingWeightKg: 999, goalWeightKg: 1, goalTargetDate: '2026-09-15',
+    };
+    const line = buildPlanSummary(answers).goalLine;
+    assert.equal(line, 'Lose weight');
+    assert.doesNotMatch(line, /\d+\s*kg/);
+  });
+  test('LH-18: a below-range goal weight also falls back to the goal label', () => {
+    const answers: OnboardingAnswers = {
+      ...base, goal: 'build_muscle', startingWeightKg: 80, goalWeightKg: 2, goalTargetDate: '2026-09-15',
+    };
+    assert.equal(buildPlanSummary(answers).goalLine, 'Build strength');
+  });
+
   test('gain weight: goal weight equal to current weight is allowed (build muscle without gaining)', () => {
     const answers: OnboardingAnswers = {
       ...base,
@@ -239,6 +256,16 @@ describe('resolveOnboardingResumeStep', () => {
     };
     assert.equal(isStep2Complete(answers), false);
     assert.equal(isStep2Complete({ ...answers, strengthExperience: 'beginner' }), true);
+  });
+
+  // LH-01 — "step 2 complete" means the weights are present AND in range.
+  test('LH-01: step 2 is NOT complete with an out-of-range weight, even with every other field set', () => {
+    const otherwiseComplete = {
+      ...base, goal: 'lose_weight' as const, goalTargetDate: '2026-12-15', strengthExperience: 'beginner' as const,
+    };
+    assert.equal(isStep2Complete({ ...otherwiseComplete, startingWeightKg: 999, goalWeightKg: 72 }), false);
+    assert.equal(isStep2Complete({ ...otherwiseComplete, startingWeightKg: 80, goalWeightKg: 1 }), false);
+    assert.equal(isStep2Complete({ ...otherwiseComplete, startingWeightKg: 80, goalWeightKg: 72 }), true);
   });
 
   test('maintain weight step 2 requires weight fields + strength experience, same as build strength', () => {

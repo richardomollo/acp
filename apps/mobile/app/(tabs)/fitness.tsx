@@ -13,6 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { authService } from '@/services/auth';
 import { useMarketplaceLocation } from '@/contexts/marketplace-location-context';
 import { MarketplaceUnavailableNotice } from '@/components/marketplace/marketplace-gate';
+import { getEligiblePersonalTrainerIds } from '@/services/professional-eligibility-service';
 import {
   resolveFitnessDayState, scheduleOccursOnDate,
 } from '@/lib/fitness-empty-state';
@@ -35,6 +36,14 @@ interface ScheduledWorkout {
   recurrence: string;
   weekdays: number[];
   workouts: { title: string | null } | null;
+}
+
+interface FitnessTrainer {
+  id: string;
+  full_name: string;
+  professional_name: string | null;
+  photo_url: string | null;
+  specialisations: string[];
 }
 
 // Real `sessions.category` values seen in production — bucketed into two
@@ -104,6 +113,56 @@ function SessionRail({
   );
 }
 
+function TrainerCard({ trainer, onPress }: { trainer: FitnessTrainer; onPress: () => void }) {
+  const name = trainer.professional_name ?? trainer.full_name;
+  return (
+    <TouchableOpacity style={s.card} onPress={onPress} activeOpacity={0.85}>
+      {trainer.photo_url ? (
+        <Image source={{ uri: trainer.photo_url }} style={s.cardImage} />
+      ) : (
+        <View style={[s.cardImage, s.cardImageFallback]}>
+          <Ionicons name="person-outline" size={28} color={palette.gray300} />
+        </View>
+      )}
+      <View style={s.cardBody}>
+        <ThemedText style={s.cardTitle} numberOfLines={2}>{name}</ThemedText>
+        <ThemedText style={s.cardMeta} numberOfLines={1}>
+          {trainer.specialisations.slice(0, 2).join(' · ') || 'Personal Trainer'}
+        </ThemedText>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function TrainerRail({
+  title, trainers, loading, onSeeAll, onPressTrainer,
+}: {
+  title: string; trainers: FitnessTrainer[]; loading: boolean;
+  onSeeAll: () => void; onPressTrainer: (t: FitnessTrainer) => void;
+}) {
+  if (!loading && trainers.length === 0) return null;
+  return (
+    <View style={s.section}>
+      <View style={s.sectionHeaderRow}>
+        <ThemedText style={s.sectionTitle}>{title}</ThemedText>
+        <TouchableOpacity onPress={onSeeAll} activeOpacity={0.7} style={s.seeAllRow}>
+          <ThemedText style={s.seeAllText}>See all</ThemedText>
+          <Ionicons name="chevron-forward" size={14} color={palette.blue600} />
+        </TouchableOpacity>
+      </View>
+      {loading ? (
+        <ActivityIndicator color={palette.blue500} style={{ marginVertical: 20 }} />
+      ) : (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.railContent}>
+          {trainers.map(trainer => (
+            <TrainerCard key={trainer.id} trainer={trainer} onPress={() => onPressTrainer(trainer)} />
+          ))}
+        </ScrollView>
+      )}
+    </View>
+  );
+}
+
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function FitnessScreen() {
@@ -156,6 +215,31 @@ export default function FitnessScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [today, scopeKey]);
 
+  // Beta #019 — trainers are marketplace supply too: geo-scope in-person
+  // coaches the same way Classes are scoped (a nearby venue link/offering, or
+  // an explicit online offering). Fails closed on a scope query error.
+  const [trainers, setTrainers] = useState<FitnessTrainer[]>([]);
+  const [trainersLoading, setTrainersLoading] = useState(true);
+  useEffect(() => {
+    (async () => {
+      if (scopeIds !== null && scopeIds.length === 0) { setTrainers([]); setTrainersLoading(false); return; }
+      setTrainersLoading(true);
+      const eligibility = await getEligiblePersonalTrainerIds(scopeIds);
+      if (!eligibility.ok || (eligibility.ids !== null && eligibility.ids.length === 0)) {
+        setTrainers([]); setTrainersLoading(false); return;
+      }
+      let q = supabase
+        .from('personal_trainers')
+        .select('id, full_name, professional_name, photo_url, specialisations')
+        .eq('status', 'approved');
+      if (eligibility.ids !== null) q = q.in('id', eligibility.ids);
+      const { data } = await q.order('created_at', { ascending: false }).limit(20);
+      setTrainers((data as unknown as FitnessTrainer[]) ?? []);
+      setTrainersLoading(false);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeKey]);
+
   const sessionDates = useMemo(() => new Set(sessions.map(sess => sess.date)), [sessions]);
   const workoutSessions = useMemo(() => sessions.filter(sess => isWorkoutCategory(sess.category)), [sessions]);
   const classSessions = useMemo(() => sessions.filter(sess => !isWorkoutCategory(sess.category)), [sessions]);
@@ -176,6 +260,10 @@ export default function FitnessScreen() {
 
   const openSession = (session: FitnessSession) => {
     router.push({ pathname: '/session-details', params: { sessionId: session.id, gymName: session.gyms?.name || 'Gym' } } as any);
+  };
+
+  const openTrainer = (trainer: FitnessTrainer) => {
+    router.push({ pathname: '/trainer-profile', params: { id: trainer.id } } as any);
   };
 
   return (
@@ -277,6 +365,13 @@ export default function FitnessScreen() {
           loading={loading}
           onSeeAll={() => router.push('/(tabs)/discover' as any)}
           onPressSession={openSession}
+        />
+        <TrainerRail
+          title="Personal Trainers"
+          trainers={trainers}
+          loading={trainersLoading}
+          onSeeAll={() => router.push('/(tabs)/trainers' as any)}
+          onPressTrainer={openTrainer}
         />
 
         <View style={{ height: 100 }} />

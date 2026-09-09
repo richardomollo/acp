@@ -323,6 +323,7 @@ export default function LogProgressScreen() {
             value={new Date(measurementDate + 'T00:00:00')}
             mode="date"
             display={Platform.OS === 'ios' ? 'inline' : 'default'}
+            themeVariant="light" // app is light-only; keep the iOS picker light
             maximumDate={new Date()}
             onChange={(_e, selected) => {
               setShowDatePicker(false);

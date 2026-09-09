@@ -29,7 +29,7 @@ export default function MyMealsScreen() {
   const [error, setError] = useState(false);
 
   useFocusEffect(useCallback(() => {
-    if (!isNutritionSavedMealsEnabled()) { router.replace('/log-food'); return; }
+    if (!isNutritionSavedMealsEnabled()) { router.replace('/today-nutrition'); return; }
     let active = true;
     setError(false);
     savedMealService.list()

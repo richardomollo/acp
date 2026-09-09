@@ -11,6 +11,7 @@ import { useOnboarding } from '@/contexts/onboarding-context';
 import {
   STRENGTH_EXPERIENCE_OPTIONS, HEALTH_FOCUS_OPTIONS,
 } from '@/lib/onboarding';
+import { validateCurrentWeight, validateGoalWeight } from '@/lib/onboarding-validation';
 import { palette, radii, fontSize } from '@/constants/theme';
 
 export default function OnboardingSuccessScreen() {
@@ -32,11 +33,22 @@ export default function OnboardingSuccessScreen() {
   const [currentWeight, setCurrentWeight] = useState(answers.startingWeightKg ? String(answers.startingWeightKg) : '');
   const [targetWeight, setTargetWeight] = useState(answers.goalWeightKg ? String(answers.goalWeightKg) : '');
 
+  // LH-01 — plausible-range validation at the input boundary. A blank field
+  // stays "required" (Continue disabled, no red error); a typed-but-invalid
+  // value shows an inline reason and blocks Continue.
+  const currentWeightNum = currentWeight.trim() ? Number(currentWeight) : null;
+  const targetWeightNum = targetWeight.trim() ? Number(targetWeight) : null;
+  const currentWeightV = validateCurrentWeight(currentWeightNum);
+  const targetWeightV = validateGoalWeight(targetWeightNum);
+  const currentWeightError = currentWeight.trim() && !currentWeightV.ok ? currentWeightV.error : null;
+  const targetWeightError = targetWeight.trim() && !targetWeightV.ok ? targetWeightV.error : null;
+
   useEffect(() => {
     if (!isWeightGoal) return;
-    const cw = currentWeight ? Number(currentWeight) : null;
-    const gw = targetWeight ? Number(targetWeight) : null;
-    setWeightGoal(cw as any, gw as any, answers.goalTargetDate as any);
+    // Only ever push a valid, in-range value into onboarding state — an
+    // out-of-range entry leaves the last good value (or null) so it can't
+    // ride through to the summary / persistence.
+    setWeightGoal(currentWeightV.value as any, targetWeightV.value as any, answers.goalTargetDate as any);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentWeight, targetWeight]);
 
@@ -51,9 +63,7 @@ export default function OnboardingSuccessScreen() {
       case 'lose_weight':
       case 'build_muscle':
       case 'maintain_weight': {
-        const cw = Number(currentWeight);
-        const gw = Number(targetWeight);
-        return !!currentWeight && !!targetWeight && cw > 0 && gw > 0
+        return currentWeightV.ok && targetWeightV.ok
           && !!answers.goalTargetDate && !!answers.strengthExperience;
       }
       case 'reduce_stress':
@@ -71,9 +81,10 @@ export default function OnboardingSuccessScreen() {
 
   const weightSummary = (() => {
     if (!isWeightGoal) return null;
-    const cw = Number(currentWeight);
-    const gw = Number(targetWeight);
-    if (!currentWeight || !targetWeight || !answers.goalTargetDate) return null;
+    // LH-18 — never render a goal line from out-of-range weights.
+    if (!currentWeightV.ok || !targetWeightV.ok || !answers.goalTargetDate) return null;
+    const cw = currentWeightV.value!;
+    const gw = targetWeightV.value!;
     const suffix = goal === 'build_muscle' ? ' while building muscle' : '';
     if (gw > cw) return `Gain ${Math.round((gw - cw) * 10) / 10} kg by ${formatMonthYear(answers.goalTargetDate)}${suffix}`;
     if (gw < cw) return `Lose ${Math.round((cw - gw) * 10) / 10} kg by ${formatMonthYear(answers.goalTargetDate)}${suffix}`;
@@ -91,8 +102,8 @@ export default function OnboardingSuccessScreen() {
         {isWeightGoal && (
           <>
             <View style={styles.row}>
-              <NumericGoalInput label="Current weight" unit="kg" value={currentWeight} onChangeText={setCurrentWeight} placeholder="e.g. 78" />
-              <NumericGoalInput label="Goal weight" unit="kg" value={targetWeight} onChangeText={setTargetWeight} placeholder={goal === 'lose_weight' ? 'e.g. 70' : 'e.g. 85'} />
+              <NumericGoalInput label="Current weight" unit="kg" value={currentWeight} onChangeText={setCurrentWeight} placeholder="e.g. 78" error={currentWeightError} />
+              <NumericGoalInput label="Goal weight" unit="kg" value={targetWeight} onChangeText={setTargetWeight} placeholder={goal === 'lose_weight' ? 'e.g. 70' : 'e.g. 85'} error={targetWeightError} />
             </View>
 
             <View style={{ height: 16 }} />

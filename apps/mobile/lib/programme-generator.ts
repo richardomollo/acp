@@ -11,6 +11,7 @@ import {
   type ProgrammeGoal, type GenerationContext, type TrainingStrategy,
   type WorkoutSlot, type DayOfWeek, type ExerciseRequirement,
 } from './programme-types.ts';
+import { toCalendarDate, parseCalendarDateOrNull, calendarDaysBetween } from './calendar-date.ts';
 
 // ─── Goal support ───────────────────────────────────────────────────────────
 
@@ -64,9 +65,12 @@ const MAX_DURATION_WEEKS = 16;
  */
 export function deriveDurationWeeks(goalTargetDate: string | null, startDate: Date): number {
   if (!goalTargetDate) return DEFAULT_DURATION_WEEKS;
-  const target = new Date(goalTargetDate);
-  if (Number.isNaN(target.getTime())) return DEFAULT_DURATION_WEEKS;
-  const weeks = Math.round((target.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000));
+  // LH-26 — `goal_target_date` is a calendar date. Measure the span in whole
+  // calendar days from the start day to the target day, both as local
+  // calendar dates — never `new Date(goalTargetDate)` (UTC-parsed date-only),
+  // which skews the span against a local `startDate` instant.
+  if (!parseCalendarDateOrNull(goalTargetDate)) return DEFAULT_DURATION_WEEKS;
+  const weeks = Math.round(calendarDaysBetween(toCalendarDate(startDate), goalTargetDate) / 7);
   if (weeks < MIN_DURATION_WEEKS || weeks > MAX_DURATION_WEEKS) return DEFAULT_DURATION_WEEKS;
   return weeks;
 }

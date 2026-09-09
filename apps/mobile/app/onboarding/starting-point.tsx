@@ -9,6 +9,7 @@ import { NumericGoalInput } from '@/components/onboarding/numeric-input';
 import { ActivitySlider } from '@/components/onboarding/activity-slider';
 import { useOnboarding } from '@/contexts/onboarding-context';
 import { deriveActivityLevel, describeWorkHours, describeSportHours, describeLeisureHours } from '@/lib/onboarding';
+import { validateWeeklyTimeBudget } from '@/lib/onboarding-validation';
 import { supabase } from '@/lib/supabase';
 import { palette, radii, fontSize } from '@/constants/theme';
 
@@ -47,11 +48,19 @@ export default function OnboardingStartingPointScreen() {
   const sleepNum = sleepHours.trim() ? Number(sleepHours) : null;
   const workNum = workHours.trim() ? Number(workHours) : null;
   const sportNum = sportHours.trim() ? Number(sportHours) : null;
-  const leisureHours = sleepNum !== null && workNum !== null && sportNum !== null
-    ? Math.max(0, Math.round((168 - sleepNum * 7 - workNum - sportNum) * 10) / 10)
-    : null;
 
-  const canContinue = !!sleepNum && sleepNum > 0 && workNum !== null && workNum >= 0 && sportNum !== null && sportNum >= 0;
+  // LH-03 — validate the whole 168-hour weekly budget. `remainingHours` is
+  // NOT clamped: an over-committed week surfaces as a blocking error that
+  // names the overage, never a silent "—" or 0 with Continue still enabled.
+  const budget = validateWeeklyTimeBudget({
+    sleepHoursPerNight: sleepNum,
+    workHoursPerWeek: workNum,
+    sportHoursPerWeek: sportNum,
+  });
+  const allEntered = sleepNum !== null && workNum !== null && sportNum !== null;
+  const leisureHours = budget.remainingHours;
+
+  const canContinue = allEntered && !!sleepNum && sleepNum > 0 && budget.ok;
 
   const handleAddMeasurements = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -77,6 +86,9 @@ export default function OnboardingStartingPointScreen() {
   };
 
   const handleContinue = async () => {
+    // LH-03 / LH-18 — never persist an impossible weekly schedule, even if
+    // the button somehow fires.
+    if (!canContinue) return;
     setActivityLevel(deriveActivityLevel(sportNum ?? 0));
 
     const { data: { session } } = await supabase.auth.getSession();
@@ -108,7 +120,10 @@ export default function OnboardingStartingPointScreen() {
         <ThemedText style={styles.sub}>Your plan should fit your life — not the other way around.</ThemedText>
 
         <ThemedText style={styles.fieldLabel}>Sleep</ThemedText>
-        <NumericGoalInput label="Hours per night" unit="hrs" value={sleepHours} onChangeText={setSleepHours} placeholder="e.g. 7" />
+        <NumericGoalInput
+          label="Hours per night" unit="hrs" value={sleepHours} onChangeText={setSleepHours} placeholder="e.g. 7"
+          error={sleepHours.trim() ? budget.fieldErrors.sleep : null}
+        />
 
         <View style={{ height: 16 }} />
         <ThemedText style={styles.fieldLabel}>Work</ThemedText>
@@ -121,7 +136,10 @@ export default function OnboardingStartingPointScreen() {
           describe={describeWorkHours}
         />
         <View style={{ height: 12 }} />
-        <NumericGoalInput label="Hours per week" unit="hrs" value={workHours} onChangeText={setWorkHours} placeholder="e.g. 40" />
+        <NumericGoalInput
+          label="Hours per week" unit="hrs" value={workHours} onChangeText={setWorkHours} placeholder="e.g. 40"
+          error={workHours.trim() ? budget.fieldErrors.work : null}
+        />
 
         <View style={{ height: 16 }} />
         <ThemedText style={styles.fieldLabel}>Sport / training</ThemedText>
@@ -134,12 +152,15 @@ export default function OnboardingStartingPointScreen() {
           describe={describeSportHours}
         />
         <View style={{ height: 12 }} />
-        <NumericGoalInput label="Hours per week" unit="hrs" value={sportHours} onChangeText={setSportHours} placeholder="e.g. 3" />
+        <NumericGoalInput
+          label="Hours per week" unit="hrs" value={sportHours} onChangeText={setSportHours} placeholder="e.g. 3"
+          error={sportHours.trim() ? budget.fieldErrors.sport : null}
+        />
 
         <View style={{ height: 16 }} />
         <ThemedText style={styles.fieldLabel}>Leisure</ThemedText>
         <ActivitySlider
-          value={leisureHours ?? 0}
+          value={Math.max(0, leisureHours ?? 0)}
           minimumValue={0}
           maximumValue={168}
           describe={describeLeisureHours}
@@ -154,6 +175,11 @@ export default function OnboardingStartingPointScreen() {
           placeholder="—"
           editable={false}
         />
+        {/* LH-03 — an over-committed week is a blocking error naming the
+            overage, shown here instead of a silent "—" / 0. */}
+        {!!budget.error && (
+          <ThemedText style={styles.budgetError}>{budget.error}</ThemedText>
+        )}
 
         <View style={{ height: 24 }} />
 
@@ -240,6 +266,16 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: palette.ink600,
     marginBottom: 8,
+  },
+  budgetError: {
+    marginTop: 12,
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+    color: palette.danger600,
+    backgroundColor: palette.danger50,
+    borderRadius: radii.md,
+    padding: 12,
+    lineHeight: 20,
   },
   row: { flexDirection: 'row', gap: 10 },
   bodyCompActions: {

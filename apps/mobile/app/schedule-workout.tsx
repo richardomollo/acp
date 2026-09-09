@@ -245,6 +245,7 @@ function ScheduleWorkoutForm() {
                 value={date}
                 mode="date"
                 display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                themeVariant="light" // app is light-only; keep the iOS picker light
                 minimumDate={new Date()}
                 onChange={onChangeDate}
               />
@@ -254,6 +255,7 @@ function ScheduleWorkoutForm() {
                 value={time}
                 mode="time"
                 display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                themeVariant="light"
                 onChange={onChangeTime}
               />
             )}

@@ -39,6 +39,7 @@ export function NumericGoalInput({
   onChangeText,
   placeholder,
   editable = true,
+  error,
 }: {
   label: string;
   unit?: string;
@@ -46,11 +47,18 @@ export function NumericGoalInput({
   onChangeText: (v: string) => void;
   placeholder?: string;
   editable?: boolean;
+  /** LH-01/LH-03 — inline validation reason. Red border + message below;
+   *  the field explains *why* it is blocking, not just a disabled button. */
+  error?: string | null;
 }) {
   return (
     <View style={styles.wrap}>
       <ThemedText style={styles.label}>{label}</ThemedText>
-      <View style={[styles.inputRow, !editable && styles.inputRowDisabled]}>
+      <View style={[
+        styles.inputRow,
+        !editable && styles.inputRowDisabled,
+        !!error && styles.inputRowError,
+      ]}>
         <TextInput
           style={styles.input}
           keyboardType="decimal-pad"
@@ -62,6 +70,7 @@ export function NumericGoalInput({
         />
         {unit && <ThemedText style={styles.unit}>{unit}</ThemedText>}
       </View>
+      {!!error && <ThemedText style={styles.errorText}>{error}</ThemedText>}
     </View>
   );
 }
@@ -84,6 +93,14 @@ const styles = StyleSheet.create({
   },
   inputRowDisabled: {
     backgroundColor: palette.surfaceMuted,
+  },
+  inputRowError: {
+    borderColor: palette.danger500,
+  },
+  errorText: {
+    fontSize: fontSize.xs,
+    fontWeight: '600',
+    color: palette.danger600,
   },
   input: {
     flex: 1,

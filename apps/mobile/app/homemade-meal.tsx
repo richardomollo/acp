@@ -4,12 +4,12 @@ import {
 import { ThemedText } from '@/components/themed-text';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { palette, radii } from '@/constants/theme';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { authService } from '@/services/auth';
 import { foodLogService } from '@/services/food-log-service';
-import { isNutritionSavedMealsEnabled } from '@/lib/flags';
+import { isNutritionSavedMealsEnabled, isManualFoodLoggingEnabled } from '@/lib/flags';
 import {
   MANUAL_MACRO_FIELDS, MANUAL_MACRO_LABEL, USER_PROVIDED_NUTRITION_DISCLOSURE,
   buildManualHomemadeMealInput, type ManualMacroField,
@@ -38,6 +38,14 @@ export default function HomemadeMealScreen() {
   const initialSlot = (['breakfast', 'lunch', 'dinner', 'snack'] as const).includes(params.slot as MealSlot)
     ? (params.slot as MealSlot)
     : null;
+
+  // Manual food logging is removed from the consumer app (product decision).
+  // Direct navigation returns to Today's nutrition rather than exposing the
+  // manual homemade-meal form. Re-enable via isManualFoodLoggingEnabled().
+  const manualLoggingEnabled = isManualFoodLoggingEnabled();
+  useEffect(() => {
+    if (!manualLoggingEnabled) router.replace('/today-nutrition');
+  }, [manualLoggingEnabled, router]);
 
   const [mode, setMode] = useState<'choose' | 'manual'>('choose');
 
@@ -86,6 +94,8 @@ export default function HomemadeMealScreen() {
       Alert.alert('Could not log meal', 'Please try again.');
     }
   };
+
+  if (!manualLoggingEnabled) return <Stack.Screen options={{ headerShown: false }} />;
 
   return (
     <>

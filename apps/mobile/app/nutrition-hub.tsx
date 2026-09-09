@@ -9,6 +9,7 @@ import { palette, radii, fontSize, shadows } from '@/constants/theme';
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { authService } from '@/services/auth';
+import { localISODate } from '@/lib/fulfilment';
 import { isNutritionSavedMealsEnabled } from '@/lib/flags';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -104,7 +105,7 @@ export default function NutritionHubScreen() {
       if (active) setTodayItems(items);
 
       if (items.length > 0) {
-        const todayStr = new Date().toISOString().slice(0, 10);
+        const todayStr = localISODate(new Date()); // LOCAL calendar day (never a UTC slice — LH-26)
         const { data: logsData } = await supabase
           .from('meal_logs')
           .select('meal_plan_item_id, status')
@@ -122,7 +123,7 @@ export default function NutritionHubScreen() {
   const toggleMeal = async (item: PlanItem) => {
     if (!userId || togglingId) return;
     setTogglingId(item.id);
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = localISODate(new Date()); // LOCAL calendar day (never a UTC slice — LH-26)
     const isEaten = loggedIds.has(item.id);
 
     if (isEaten) {
@@ -280,7 +281,7 @@ export default function NutritionHubScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <ThemedText style={s.createCtaTitle}>Today&apos;s nutrition</ThemedText>
-              <ThemedText style={s.createCtaSub}>Log food and see your actual calories, macros and nutrients</ThemedText>
+              <ThemedText style={s.createCtaSub}>Your meals for today, with calories, macros and nutrients</ThemedText>
             </View>
             <Ionicons name="chevron-forward" size={18} color={palette.gray300} />
           </TouchableOpacity>

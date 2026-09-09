@@ -74,6 +74,28 @@ describe('deriveDurationWeeks', () => {
   test('an invalid date string falls back to the default', () => {
     assert.equal(deriveDurationWeeks('not-a-date', start), 8);
   });
+
+  // LH-26 — the span is measured in whole CALENDAR DAYS from the start day to
+  // the target day: independent of the start instant's time-of-day, of DST
+  // transitions inside the span, and of the process timezone. No
+  // `new Date('YYYY-MM-DD')` UTC parse.
+  test('duration is calendar-day based and timezone-stable', () => {
+    const tz = process.env.TZ;
+    try {
+      for (const zone of ['UTC', 'Africa/Nairobi', 'America/New_York', 'Europe/Amsterdam']) {
+        process.env.TZ = zone;
+        const startDay = new Date(2026, 0, 1); // local midnight 2026-01-01 in `zone`
+        // 2026-01-01 → 2026-03-12 = 70 days = 10 weeks (span crosses US DST start).
+        assert.equal(deriveDurationWeeks('2026-03-12', startDay), 10, zone);
+        // 2026-01-01 → 2026-02-15 = 45 days → 6.43 → rounds to 6.
+        assert.equal(deriveDurationWeeks('2026-02-15', startDay), 6, zone);
+        // Time-of-day on the start instant must not move the result.
+        assert.equal(deriveDurationWeeks('2026-03-12', new Date(2026, 0, 1, 23, 30)), 10, zone);
+      }
+    } finally {
+      if (tz === undefined) delete process.env.TZ; else process.env.TZ = tz;
+    }
+  });
 });
 
 describe('buildGenerationContext', () => {

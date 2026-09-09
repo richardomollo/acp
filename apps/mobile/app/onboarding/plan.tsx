@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/themed-text';
 import { useOnboarding } from '@/contexts/onboarding-context';
 import { buildPlanSummary, buildFallbackWeekPlan } from '@/lib/onboarding';
+import { validateOnboardingHealthInputs } from '@/lib/onboarding-validation';
 import { supabase } from '@/lib/supabase';
 import { fetchOnboardingAssessment, isValidAssessment, deriveCategoryCounts, sortSupportOpportunities, type AIAssessment } from '@/lib/ai-assessment';
 import { palette, radii, fontSize } from '@/constants/theme';
@@ -61,7 +62,43 @@ export default function OnboardingPlanScreen() {
 
   useEffect(() => {
     Animated.timing(fade, { toValue: 1, duration: 500, useNativeDriver: true }).start();
-    save();
+    // LH-18 — the generation guard. Before completing onboarding OR asking
+    // Lana Intelligence for a plan, re-check the whole profile with the same
+    // shared validation the step screens use. If anything is out of range
+    // (a bypassed gate, a stale resumed value), send the user back to the
+    // step that owns it instead of persisting the profile / generating a
+    // plan from impossible numbers.
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      let weeklyTime = null;
+      if (userId) {
+        const { data: hp } = await supabase
+          .from('health_profile')
+          .select('sleep_hours_per_night, hours_working_per_week, hours_exercising_per_week')
+          .eq('user_id', userId)
+          .maybeSingle();
+        if (hp) {
+          weeklyTime = {
+            sleepHoursPerNight: hp.sleep_hours_per_night ?? null,
+            workHoursPerWeek: hp.hours_working_per_week ?? null,
+            sportHoursPerWeek: hp.hours_exercising_per_week ?? null,
+          };
+        }
+      }
+      const v = validateOnboardingHealthInputs({
+        goal: answers.goal,
+        startingWeightKg: answers.startingWeightKg,
+        goalWeightKg: answers.goalWeightKg,
+        weeklyTime,
+      });
+      if (!v.ok) {
+        const timeInvalid = !!weeklyTime && !!v.weeklyTime && !v.weeklyTime.ok;
+        router.replace(timeInvalid ? '/onboarding/starting-point' : '/onboarding/success');
+        return;
+      }
+      save();
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

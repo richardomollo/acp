@@ -11,7 +11,7 @@ import { authService } from '@/services/auth';
 import { foodLogService } from '@/services/food-log-service';
 import { resolveGrams, computeLogSnapshot, PortionError } from '@/lib/nutrition/food-nutrition';
 import { foodProvenanceDisclosure, foodProvenanceTag } from '@/lib/nutrition/food-provenance';
-import { isNutritionCameraEnabled, isNutritionSavedMealsEnabled } from '@/lib/flags';
+import { isNutritionCameraEnabled, isNutritionSavedMealsEnabled, isManualFoodLoggingEnabled } from '@/lib/flags';
 import type {
   CanonicalFood, FoodSearchResult, LogUnit, MealSlot,
 } from '@/lib/nutrition/food-types';
@@ -28,6 +28,14 @@ export default function LogFoodScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ slot?: string }>();
   const [userId, setUserId] = useState<string | null>(null);
+
+  // Manual food logging is removed from the consumer app (product decision).
+  // Direct navigation to this route returns to Today's nutrition rather than
+  // exposing the search-and-log UI. Re-enable via isManualFoodLoggingEnabled().
+  const manualLoggingEnabled = isManualFoodLoggingEnabled();
+  useEffect(() => {
+    if (!manualLoggingEnabled) router.replace('/today-nutrition');
+  }, [manualLoggingEnabled, router]);
 
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<FoodSearchResult[]>([]);
@@ -132,6 +140,8 @@ export default function LogFoodScreen() {
   const unitOptions: LogUnit[] = food
     ? ['g', ...(food.densityGPerMl != null ? ['ml' as LogUnit] : []), ...(food.servings.length > 0 ? ['serving' as LogUnit] : [])]
     : ['g'];
+
+  if (!manualLoggingEnabled) return <Stack.Screen options={{ headerShown: false }} />;
 
   return (
     <>

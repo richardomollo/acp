@@ -7,6 +7,9 @@ import {
   type Barrier, type PreferredActivity, type GoalDetails, type OnboardingStepRoute,
   type CanonicalWeekday,
 } from '@/lib/onboarding';
+import {
+  validateWeightKg, validateOnboardingHealthInputs, OnboardingValidationError,
+} from '@/lib/onboarding-validation';
 
 interface OnboardingCtx {
   answers: OnboardingAnswers;
@@ -181,8 +184,12 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     user_id: userId,
     goal: current.goal,
     goals: current.goal ? [current.goal] : [],
-    starting_weight_kg: current.startingWeightKg,
-    goal_weight_kg: current.goalWeightKg,
+    // LH-01 / LH-18 — a best-effort partial save must never persist an
+    // implausible weight. An out-of-range value is written as NULL ("not
+    // answered yet" — which is the truth), so it can't ride through to the
+    // summary, the assessment or the committed plan.
+    starting_weight_kg: validateWeightKg(current.startingWeightKg).ok ? current.startingWeightKg : null,
+    goal_weight_kg: validateWeightKg(current.goalWeightKg).ok ? current.goalWeightKg : null,
     goal_target_date: current.goalTargetDate,
     activity_level: current.activityLevel,
     experience_level: current.strengthExperience,
@@ -214,6 +221,31 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     const { data: { session } } = await supabase.auth.getSession();
     const userId = session?.user?.id;
     if (!userId) throw new Error('Not signed in');
+
+    // LH-18 — the persistence guard. Re-run the SAME shared validation on the
+    // whole profile before the final, must-succeed write. If impossible data
+    // somehow reached this boundary (a UI gate bypassed, a stale resumed
+    // value, a future API caller), reject the completion outright: no
+    // `onboarding_completed = true` row, no plan, a controlled error the
+    // caller can route on.
+    const { data: hp } = await supabase
+      .from('health_profile')
+      .select('sleep_hours_per_night, hours_working_per_week, hours_exercising_per_week')
+      .eq('user_id', userId)
+      .maybeSingle();
+    const validation = validateOnboardingHealthInputs({
+      goal: answers.goal,
+      startingWeightKg: answers.startingWeightKg,
+      goalWeightKg: answers.goalWeightKg,
+      weeklyTime: hp
+        ? {
+            sleepHoursPerNight: hp.sleep_hours_per_night ?? null,
+            workHoursPerWeek: hp.hours_working_per_week ?? null,
+            sportHoursPerWeek: hp.hours_exercising_per_week ?? null,
+          }
+        : null,
+    });
+    if (!validation.ok) throw new OnboardingValidationError(validation.errors);
 
     // Snapshot the starting-weight reference point exactly once — same rule
     // Personal Details' save handler follows — so the Profile tab's weight

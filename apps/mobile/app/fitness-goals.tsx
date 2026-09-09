@@ -33,6 +33,7 @@ import {
   type OnboardingAnswers, type CanonicalWeekday,
 } from '@/lib/onboarding';
 import { fetchOnboardingAssessment, type AIAssessment } from '@/lib/ai-assessment';
+import { validateWeightKg } from '@/lib/onboarding-validation';
 import { getScheduledNextPlan, scheduledPlanNeedsScheduleUpdate, type ScheduledNextPlan } from '@/lib/weekly-review';
 import { getCompletionProgress, type PlanActivityCompletion } from '@/lib/completion';
 import { pickHomeInsight, pickOutcomeInsight, type CoachingMemoryRow, type HomeCoachingInsight } from '@/lib/coaching-memory';
@@ -383,7 +384,17 @@ export default function FitnessGoalsScreen() {
       // assessment implementation.
       const { data: { session } } = await supabase.auth.getSession();
       const accessToken = session?.access_token;
-      if (accessToken) {
+      // LH-18 — never feed Lana Intelligence / plan regeneration an
+      // implausible stored weight. Absent weight is fine here (a mid-life
+      // goal change); only a PRESENT-but-out-of-range value blocks regen.
+      // (New writes are validated at their own boundary — this is defence
+      // for pre-existing rows, see section 10.)
+      const storedCw = startingWeight.trim() ? Number(startingWeight) : null;
+      const storedGw = goalWeight.trim() ? Number(goalWeight) : null;
+      const storedWeightsPlausible =
+        (storedCw == null || validateWeightKg(storedCw).ok) &&
+        (storedGw == null || validateWeightKg(storedGw).ok);
+      if (accessToken && storedWeightsPlausible) {
         const onboardingAnswers: OnboardingAnswers = {
           goal: newGoal as OnboardingAnswers['goal'],
           startingWeightKg: startingWeight.trim() ? Number(startingWeight) : null,

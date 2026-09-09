@@ -7,6 +7,8 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { supabase } from '@/lib/supabase';
 import { authService } from '@/services/auth';
 import { GOAL_OPTIONS } from '@/lib/onboarding';
+import { toCalendarDate, parseCalendarDateOrNull } from '@/lib/calendar-date';
+import { validateWeightKg, validateWeeklyTimeBudget } from '@/lib/onboarding-validation';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -44,8 +46,10 @@ const SEX_OPTIONS = [
 ];
 
 const fmtDate = (iso: string | null) => {
-  if (!iso) return '';
-  return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+  // LH-26 — a stored calendar date rendered at LOCAL midnight, never via
+  // `new Date(iso)` (UTC parse).
+  const d = parseCalendarDateOrNull(iso);
+  return d ? d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
 };
 
 export default function PersonalDetailsScreen() {
@@ -135,10 +139,26 @@ export default function PersonalDetailsScreen() {
     const parsedHoursWorking = hoursWorking.trim() ? Number(hoursWorking) : null;
     const parsedHoursExercising = hoursExercising.trim() ? Number(hoursExercising) : null;
 
-    if ([parsedHeight, parsedCurrentWeight, parsedTargetWeight, parsedHoursWorking, parsedHoursExercising].some(v => v != null && (isNaN(v) || v < 0))) {
+    if ([parsedHeight].some(v => v != null && (isNaN(v) || v < 0))) {
       Alert.alert('Error', 'Please enter valid positive numbers.');
       return;
     }
+    // LH-01 / LH-03 — the SAME shared plausibility gate onboarding uses.
+    const weightChecks = [
+      parsedCurrentWeight != null ? validateWeightKg(parsedCurrentWeight, 'current weight') : null,
+      parsedTargetWeight != null ? validateWeightKg(parsedTargetWeight, 'goal weight') : null,
+    ];
+    const weightError = weightChecks.find(c => c && !c.ok);
+    if (weightError?.error) { Alert.alert('Check your weight', weightError.error); return; }
+
+    const timeBudget = validateWeeklyTimeBudget({
+      sleepHoursPerNight: null, // no sleep field on this screen
+      workHoursPerWeek: parsedHoursWorking,
+      sportHoursPerWeek: parsedHoursExercising,
+    });
+    const timeFieldError = timeBudget.fieldErrors.work ?? timeBudget.fieldErrors.sport;
+    if (timeFieldError) { Alert.alert('Check your hours', timeFieldError); return; }
+
     if (goal === 'lose_weight' && parsedCurrentWeight != null && parsedTargetWeight != null && parsedTargetWeight > parsedCurrentWeight) {
       Alert.alert('Error', 'Target weight should not be greater than your current weight for a weight-loss goal.');
       return;
@@ -313,13 +333,15 @@ export default function PersonalDetailsScreen() {
             </DetailRow>
             {showDobPicker && (
               <DateTimePicker
-                value={dob ? new Date(dob + 'T00:00:00') : new Date(2000, 0, 1)}
+                value={parseCalendarDateOrNull(dob) ?? new Date(2000, 0, 1)}
                 mode="date"
                 display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                themeVariant="light" // app is light-only; keep the iOS picker light
                 maximumDate={new Date()}
                 onChange={(_e, selected) => {
                   setShowDobPicker(false);
-                  if (selected) setDob(selected.toISOString().slice(0, 10));
+                  // LH-26 — store the user's LOCAL calendar day, not the UTC slice.
+                  if (selected) setDob(toCalendarDate(selected));
                 }}
               />
             )}
@@ -419,13 +441,15 @@ export default function PersonalDetailsScreen() {
             </DetailRow>
             {showTargetDatePicker && (
               <DateTimePicker
-                value={targetDate ? new Date(targetDate + 'T00:00:00') : new Date()}
+                value={parseCalendarDateOrNull(targetDate) ?? new Date()}
                 mode="date"
                 display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                themeVariant="light" // app is light-only; keep the iOS picker light
                 minimumDate={new Date()}
                 onChange={(_e, selected) => {
                   setShowTargetDatePicker(false);
-                  if (selected) setTargetDate(selected.toISOString().slice(0, 10));
+                  // LH-26 — store the user's LOCAL calendar day, not the UTC slice.
+                  if (selected) setTargetDate(toCalendarDate(selected));
                 }}
               />
             )}

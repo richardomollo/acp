@@ -27,11 +27,28 @@ export function isNutritionCameraEnabled(): boolean {
   return process.env.EXPO_PUBLIC_ACP_NUTRITION_CAMERA_ENABLED === 'true';
 }
 
-// Nutrition N6 — saved meals ("My meals"). Off only when exactly "false".
-// When off, every "My meals" entry point is hidden and N1–N5 keep working;
-// any saved meals already created stay in the DB, just not reachable.
+// Lana Nutrition — manual food logging (the search-a-food / enter-a-homemade-
+// meal / "Log food" consumer flow: /log-food, /homemade-meal). Product
+// decision — REMOVED from the consumer app before release; on only if
+// explicitly set to exactly "true". When off: every "Log food" / "Log a meal"
+// CTA is hidden, /log-food and /homemade-meal redirect to /today-nutrition
+// rather than render, and the N7 "log today's food" card is suppressed.
+// Nothing is dropped — meal_logs, food_log_entries, the nutrition catalogue,
+// meal plans, RLS and all historical logs are untouched, and meal-plan /
+// suggested-meal completion (a separate mechanism) is unaffected. Reusable
+// later for meal completion, photo logging and Lana intelligence: flip the
+// env var (or the default back to `!== 'false'`) to re-enable.
+export function isManualFoodLoggingEnabled(): boolean {
+  return process.env.EXPO_PUBLIC_LANA_MANUAL_FOOD_LOGGING_ENABLED === 'true';
+}
+
+// Nutrition N6 — saved meals ("My meals"). Product decision — turned OFF by
+// default alongside manual food logging (a saved meal is logged as consumed
+// intake, i.e. manual meal logging); on only if explicitly set to exactly
+// "true". When off, every "My meals" entry point is hidden and N1–N5 keep
+// working; any saved meals already created stay in the DB, just not reachable.
 export function isNutritionSavedMealsEnabled(): boolean {
-  return process.env.EXPO_PUBLIC_ACP_NUTRITION_SAVED_MEALS_ENABLED !== 'false';
+  return process.env.EXPO_PUBLIC_ACP_NUTRITION_SAVED_MEALS_ENABLED === 'true';
 }
 
 // Nutrition N7 — fitness × nutrition context observations on Today Nutrition.

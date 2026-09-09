@@ -24,9 +24,14 @@ const ACTION_ROUTE: Record<CrossDomainAction, string> = {
   log_food: '/log-food',
 };
 
-export function NutritionActivityContext({ observations }: { observations: CrossDomainNutritionObservation[] }) {
+export function NutritionActivityContext({ observations: allObservations }: { observations: CrossDomainNutritionObservation[] }) {
   const router = useRouter();
   const [openId, setOpenId] = useState<string | null>(null);
+  // Manual food logging is removed from the consumer app (product decision),
+  // so any observation whose only call to action is "log today's food" has no
+  // usable action — drop it here. The deterministic engine model
+  // (training_logging_regularity) is left intact for future reuse.
+  const observations = allObservations.filter(o => o.action !== 'log_food');
   if (observations.length === 0) return null;
 
   return (
