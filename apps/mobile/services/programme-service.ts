@@ -59,6 +59,7 @@ async function selectExercisesByWorkoutType(
   slots: WorkoutSlot[],
   equipmentLocation: 'home' | 'gym',
   difficulty: 'beginner' | 'intermediate' | 'advanced',
+  goal: ProgrammeGoal,
 ): Promise<Map<string, SelectedExercise[]>> {
   const byType = new Map<string, WorkoutSlot>();
   for (const slot of slots) if (!byType.has(slot.workoutType)) byType.set(slot.workoutType, slot);
@@ -69,7 +70,7 @@ async function selectExercisesByWorkoutType(
     const alreadySelected = new Set<string>();
     const selected: SelectedExercise[] = [];
     for (const requirement of slot.requirements) {
-      const picked = await selectExerciseForRequirement(requirement, equipmentLocation, difficulty, alreadySelected);
+      const picked = await selectExerciseForRequirement(requirement, equipmentLocation, difficulty, alreadySelected, { goal });
       alreadySelected.add(picked.exercise.id);
       selected.push(picked);
     }
@@ -195,7 +196,7 @@ async function runGeneration(userId: string, createdFromProgramId: string | null
   // exercise provider had nothing suitable and a safe built-in exercise was
   // used instead) is recorded in generation_context, never silently treated
   // as a normal provider-backed success.
-  const exercisesByType = await selectExercisesByWorkoutType(slots, context.equipmentLocation, context.experience);
+  const exercisesByType = await selectExercisesByWorkoutType(slots, context.equipmentLocation, context.experience, context.goal);
   const allSelected = [...exercisesByType.values()].flat();
   const fallbackCount = allSelected.filter(s => s.fallbackUsed).length;
   if (fallbackCount > 0) {

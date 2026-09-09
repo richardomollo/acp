@@ -75,9 +75,13 @@ function gymAccessFor(
     .slice(0, 2);
 }
 
+/** The professional-support recommendation shape, surfaced to a parent that
+ *  renders it detached (Home). */
+export type ProfessionalSupport = NonNullable<ActivityRecommendation['professionalSupport']>;
+
 export function ActivityFulfilmentCard({
   userId, activity, fulfilment, onInfoPress, emptyFallback, onResolved, onDark = false,
-  gymAccessSlot = 'inline', planContext,
+  gymAccessSlot = 'inline', supportSlot = 'inline', planContext,
 }: {
   userId: string | null;
   activity: StartingPlanActivity;
@@ -95,11 +99,16 @@ export function ActivityFulfilmentCard({
     exerciseCount: number | null;
     durationMinutes: number | null;
     gymAccess: MarketplaceMatch[];
+    /** the "GET PROFESSIONAL SUPPORT" recommendation to render, or null when
+     *  it should not be shown — for `supportSlot="detached"` parents. */
+    professionalSupport: ProfessionalSupport | null;
   }) => void;
   /** Render text/dividers light and drop the redundant "YOUR WORKOUT" / count·duration line (the parent shows it), for placement over a dark media background (Home's Today's Plan card). Layout is otherwise unchanged. */
   onDark?: boolean;
   /** 'inline' (default) renders the "NEED A GYM?" block inside this card; 'detached' omits it and lets the parent render those matches (from onResolved) as its own card. */
   gymAccessSlot?: 'inline' | 'detached';
+  /** 'inline' (default) renders "GET PROFESSIONAL SUPPORT" inside this card; 'detached' omits it so a parent can render <ProfessionalSupportBlock> (from onResolved) outside the media background — e.g. Home, where the image should stop at the CTA. */
+  supportSlot?: 'inline' | 'detached';
 }) {
   const s = onDark ? sDark : sLight;
   const router = useRouter();
@@ -166,19 +175,30 @@ export function ActivityFulfilmentCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, activity.day, activity.activity]);
 
-  // Report the resolved session (id + summary) and gym-access matches up to a
-  // parent that renders its own header / "Need a gym?" card (Home). Separate
-  // from the fetch effect so it also covers EXISTING_PROGRAMME_SESSION, and
-  // doesn't depend on the callback's identity.
+  // Beta #019D — the support block shows only where Lana has bookable supply
+  // OR an explicitly-eligible online trainer. One computed value, shared by
+  // the inline render and the detached (parent-rendered) path.
+  const visibleSupport: ProfessionalSupport | null =
+    recommendation?.professionalSupport
+    && (marketAvailable || (recommendation.professionalSupport.trainers?.length ?? 0) > 0)
+      ? recommendation.professionalSupport
+      : null;
+
+  // Report the resolved session (id + summary), gym-access matches, and the
+  // support recommendation up to a parent that renders its own header /
+  // "Need a gym?" card / support block (Home). Separate from the fetch effect
+  // so it also covers EXISTING_PROGRAMME_SESSION, and doesn't depend on the
+  // callback's identity.
   useEffect(() => {
     onResolved?.({
       sessionId: recommendation?.selfGuided.sessionId ?? null,
       exerciseCount: recommendation?.selfGuided.exerciseCount ?? null,
       durationMinutes: recommendation?.durationMinutes ?? null,
       gymAccess: gymAccessFor(fulfilment, activity),
+      professionalSupport: visibleSupport,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recommendation, fulfilment, activity.day, activity.activity]);
+  }, [recommendation, fulfilment, activity.day, activity.activity, marketAvailable]);
 
   if (!fulfilment) return null;
 
@@ -326,37 +346,59 @@ export function ActivityFulfilmentCard({
           IS eligible purely through an explicit online offering (§2: online
           support may cross geography). `professionalSupport.trainers` is
           already the fully geo-filtered list (see getHumanSupportInsight/
-          mergeEligiblePtIds) — its presence alone is proof of eligibility. */}
-      {recommendation?.professionalSupport && (marketAvailable || (recommendation.professionalSupport.trainers?.length ?? 0) > 0) && (
-        <View style={s.block}>
-          <ThemedText style={s.header}>GET PROFESSIONAL SUPPORT</ThemedText>
-          <ThemedText style={s.title}>{recommendation.professionalSupport.headline}</ThemedText>
-          <ThemedText style={s.body}>{recommendation.professionalSupport.reason}</ThemedText>
-          {recommendation.professionalSupport.trainers && recommendation.professionalSupport.trainers.length > 0 && (
-            <View style={{ marginTop: 8 }}>
-              {recommendation.professionalSupport.trainers.map(m => (
-                <TouchableOpacity key={m.id} style={s.providerRow} onPress={() => router.push(m.navigationTarget as any)} activeOpacity={0.7}>
-                  {m.photoUrl ? (
-                    <Image source={{ uri: m.photoUrl }} style={s.trainerImage} />
-                  ) : (
-                    <View style={[s.trainerImage, s.trainerImageFallback]}>
-                      <Ionicons name="person-outline" size={20} color={palette.gray300} />
-                    </View>
-                  )}
-                  <View style={{ flex: 1 }}>
-                    <ThemedText style={s.title}>{m.name}</ThemedText>
-                    {m.matchReasons.length > 0 && (
-                      <ThemedText style={s.meta}>Good match for: {m.matchReasons.join(' · ')}</ThemedText>
-                    )}
-                  </View>
-                  <Ionicons name="chevron-forward" size={18} color={palette.gray300} />
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-        </View>
+          mergeEligiblePtIds) — its presence alone is proof of eligibility.
+          supportSlot='detached' (Home): omitted here; the parent renders
+          <ProfessionalSupportBlock> below the media so the image stops at
+          the CTA. */}
+      {supportSlot === 'inline' && visibleSupport && (
+        <ProfessionalSupportBlock support={visibleSupport} onDark={onDark} />
       )}
     </>
+  );
+}
+
+/**
+ * "GET PROFESSIONAL SUPPORT" — eyebrow + headline + reason + one row per
+ * matched trainer. Shared verbatim by the card's inline slot and Home's
+ * detached rendering (where it sits below the media so the workout image
+ * stops at the CTA). `onDark` picks the light/dark text+divider palette.
+ */
+export function ProfessionalSupportBlock({
+  support, onDark = false,
+}: {
+  support: ProfessionalSupport;
+  onDark?: boolean;
+}) {
+  const router = useRouter();
+  const st = onDark ? sDark : sLight;
+  return (
+    <View style={st.block}>
+      <ThemedText style={st.header}>GET PROFESSIONAL SUPPORT</ThemedText>
+      <ThemedText style={st.title}>{support.headline}</ThemedText>
+      <ThemedText style={st.body}>{support.reason}</ThemedText>
+      {support.trainers && support.trainers.length > 0 && (
+        <View style={{ marginTop: 8 }}>
+          {support.trainers.map(m => (
+            <TouchableOpacity key={m.id} style={st.providerRow} onPress={() => router.push(m.navigationTarget as any)} activeOpacity={0.7}>
+              {m.photoUrl ? (
+                <Image source={{ uri: m.photoUrl }} style={st.trainerImage} />
+              ) : (
+                <View style={[st.trainerImage, st.trainerImageFallback]}>
+                  <Ionicons name="person-outline" size={20} color={palette.gray300} />
+                </View>
+              )}
+              <View style={{ flex: 1 }}>
+                <ThemedText style={st.title}>{m.name}</ThemedText>
+                {m.matchReasons.length > 0 && (
+                  <ThemedText style={st.meta}>Good match for: {m.matchReasons.join(' · ')}</ThemedText>
+                )}
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={palette.gray300} />
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+    </View>
   );
 }
 

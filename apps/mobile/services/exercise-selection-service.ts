@@ -5,8 +5,8 @@
 // always comes from lib/programme-generator.ts.
 import { exerciseService } from './exercise-service.ts';
 import type { ACPExercise, ExerciseDifficulty } from '../lib/exercise-types.ts';
-import { REPS_BY_ROLE, type ExerciseRequirement } from '../lib/programme-types.ts';
-import { compoundPrescription } from '../lib/programme-generator.ts';
+import { type ExerciseRequirement, type ProgrammeGoal } from '../lib/programme-types.ts';
+import { prescribeSet } from '../lib/workout-prescription.ts';
 import { rankExerciseCandidates, isMobilityRequirement } from '../lib/exercise-fit-validator.ts';
 
 export interface SelectedExercise {
@@ -360,14 +360,24 @@ export async function selectExerciseForRequirement(
      *  fully backwards compatible: each call simply has no memory of any
      *  other, exactly like before this hardening existed. */
     providerHealth?: ProviderHealth;
+    /**
+     * LH-40 — the user's primary goal. Drives the goal-aware sets/reps/rest
+     * (lib/workout-prescription.ts). Omitting it yields the `general` bucket,
+     * which is byte-identical to the pre-LH-40 prescription — so every
+     * existing caller/test is unaffected until it opts in.
+     */
+    goal?: ProgrammeGoal | string | null;
   },
 ): Promise<SelectedExercise> {
-  // Beta #015B — a compound row's sets/reps/rest scale with experience so an
-  // advanced primary session's stored prescription matches its estimated
-  // (longer) duration. Accessory / core / mobility unchanged.
-  const rx = requirement.role === 'compound'
-    ? { ...REPS_BY_ROLE.compound, ...compoundPrescription(difficulty) } // keep the coaching note, scale sets/reps/rest
-    : REPS_BY_ROLE[requirement.role];
+  // LH-40 — the ONE canonical structured prescription. Goal + role + (for
+  // compounds) experience. Provider metadata never feeds this. The session
+  // description is derived from the same table so prose can't diverge.
+  const { sets, reps, restSeconds, notes } = prescribeSet({
+    role: requirement.role,
+    goal: opts?.goal ?? null,
+    experience: difficulty,
+  });
+  const rx = { sets, reps, restSeconds, notes };
   const primaryQuery = requirement.muscleHint ?? requirement.bodyPart;
 
   if (opts?.skipNetwork) {

@@ -27,7 +27,7 @@ import {
   type FoodCandidate, type DailyMealCandidates,
 } from '@/lib/nutrition-matching';
 import { getFulfilmentForActivity, nextDateForWeekday, type PlanActivityFulfilment, type MarketplaceInventoryItem, type MarketplaceMatch } from '@/lib/fulfilment';
-import { ActivityFulfilmentCard, GymAccessList } from '@/components/activity-fulfilment-card';
+import { ActivityFulfilmentCard, GymAccessList, ProfessionalSupportBlock, type ProfessionalSupport } from '@/components/activity-fulfilment-card';
 import { useMarketplaceLocation } from '@/contexts/marketplace-location-context';
 import { getEligiblePersonalTrainerIds } from '@/services/professional-eligibility-service';
 import { isMeasurementCheckinEnabled, isProfessionalContinuityEnabled } from '@/lib/flags';
@@ -560,6 +560,9 @@ export default function HomeScreen() {
   const [todayPlanMediaUrl, setTodayPlanMediaUrl] = useState<string | null>(null);
   const [todayWorkoutMeta, setTodayWorkoutMeta] = useState<{ exerciseCount: number | null; durationMinutes: number | null } | null>(null);
   const [todayGymAccess, setTodayGymAccess] = useState<MarketplaceMatch[]>([]);
+  // Rendered BELOW the workout media (not over it) so the image stops at the
+  // "View workout" CTA — the support block sits on the card's plain surface.
+  const [todaySupport, setTodaySupport] = useState<ProfessionalSupport | null>(null);
   // Beta #012 — same exercise-video background treatment for the "Up next" card;
   // its gym-access matches render as their own card BELOW, never over the video.
   const [upNextWorkoutId, setUpNextWorkoutId] = useState<string | null>(null);
@@ -2102,6 +2105,12 @@ export default function HomeScreen() {
               const hasPlanMedia = (!!todayPlanMediaUrl || !!planFallbackMedia) && !homePrimaryResolved;
               return (
               <View style={[styles.todayPlanCard, hasPlanMedia && styles.todayPlanCardMedia]}>
+                {/* LH — the workout media covers only the "hero" (eyebrow →
+                    "View workout" CTA). Wrapping it in this positioned view
+                    makes the absolutely-filled image/scrim stop at the hero's
+                    bottom edge; "GET PROFESSIONAL SUPPORT" renders below on
+                    the card's plain surface. */}
+                <View style={hasPlanMedia ? styles.todayPlanHero : undefined}>
                 {hasPlanMedia && (
                   <>
                     {todayPlanMediaUrl
@@ -2172,6 +2181,10 @@ export default function HomeScreen() {
                     onInfoPress={() => setShowIntelligenceInfo(true)}
                     onDark={hasPlanMedia}
                     gymAccessSlot="detached"
+                    // With media, render "GET PROFESSIONAL SUPPORT" below the
+                    // image (see the todaySupport block); without media it
+                    // stays inline in the card as before.
+                    supportSlot={hasPlanMedia ? 'detached' : 'inline'}
                     planContext={homePlanId ? {
                       planId: homePlanId,
                       activityIndex: homePrimaryRef.activityIndex,
@@ -2187,6 +2200,7 @@ export default function HomeScreen() {
                           : null,
                       );
                       setTodayGymAccess(r.gymAccess);
+                      setTodaySupport(r.professionalSupport);
                     }}
                     emptyFallback={
                       <TouchableOpacity onPress={() => router.push('/weekly-plan' as any)} activeOpacity={0.7} style={{ marginTop: 10 }}>
@@ -2196,6 +2210,12 @@ export default function HomeScreen() {
                   />
                 ) : null}
                 </View>
+                </View>
+                {hasPlanMedia && !homePrimaryResolved && todaySupport && (
+                  <View style={styles.todayPlanSupport}>
+                    <ProfessionalSupportBlock support={todaySupport} onDark={false} />
+                  </View>
+                )}
               </View>
               ); })()}
             </View>
@@ -2828,9 +2848,14 @@ const styles = StyleSheet.create({
   // video + scrim fill it edge-to-edge, and every row (title, "YOUR WORKOUT
   // · N min", "NEED A GYM?") sits on top in light text.
   todayPlanCardMedia: { padding: 0, overflow: 'hidden', position: 'relative' },
+  // The media hero: positioned + clipped so the absolutely-filled image/scrim
+  // stop at its bottom edge (i.e. at the "View workout" CTA), not the whole card.
+  todayPlanHero: { position: 'relative', overflow: 'hidden' },
   todayPlanMedia: { ...StyleSheet.absoluteFillObject },
   todayPlanScrim: { ...StyleSheet.absoluteFillObject },
   todayPlanContentMedia: { padding: 14, minHeight: 148 },
+  // "GET PROFESSIONAL SUPPORT" below the hero — on the card's plain surface.
+  todayPlanSupport: { paddingHorizontal: 14, paddingBottom: 14 },
   todayPlanCategoryOnMedia: { color: 'rgba(255,255,255,0.82)', marginBottom: 100 },
   todayPlanTitleOnMedia: { color: '#fff', fontSize: 16 },
   todayPlanMetaOnMedia: { color: 'rgba(255,255,255,0.82)' },

@@ -12,6 +12,7 @@ import {
   type WorkoutSlot, type DayOfWeek, type ExerciseRequirement,
 } from './programme-types.ts';
 import { toCalendarDate, parseCalendarDateOrNull, calendarDaysBetween } from './calendar-date.ts';
+import { prescribeSet } from './workout-prescription.ts';
 
 // ─── Goal support ───────────────────────────────────────────────────────────
 
@@ -280,12 +281,20 @@ export function compoundPrescription(experience: ExerciseDifficulty): SetPrescri
 }
 
 /** Concrete set prescription for each requirement — the exact rows exercise
- *  selection will persist. Compound rows scale with `experience` (#015B);
- *  omit `experience` for the legacy beginner-level prescription. */
+ *  selection will persist. Compound rows scale with `experience` (#015B).
+ *  LH-40 — when `goal` is given, the goal-aware canonical table
+ *  (lib/workout-prescription.ts) is used for EVERY role, so the stored
+ *  duration estimate matches the goal-aware rows exercise selection persists.
+ *  Omitting `goal` keeps the exact pre-LH-40 behaviour (the `general` bucket
+ *  is byte-identical). */
 export function prescriptionForRequirements(
-  reqs: ExerciseRequirement[], experience?: ExerciseDifficulty,
+  reqs: ExerciseRequirement[], experience?: ExerciseDifficulty, goal?: ProgrammeGoal | null,
 ): SetPrescription[] {
   return reqs.map(r => {
+    if (goal && experience) {
+      const { sets, reps, restSeconds } = prescribeSet({ role: r.role, goal, experience });
+      return { sets, reps, restSeconds };
+    }
     if (r.role === 'compound' && experience) return { ...COMPOUND_BY_EXPERIENCE[experience] };
     const { sets, reps, restSeconds } = REPS_BY_ROLE[r.role];
     return { sets, reps, restSeconds };
@@ -298,9 +307,11 @@ function countCompounds(reqs: ExerciseRequirement[]): number {
 /** The generator's own duration estimate for a requirement list at an
  *  experience tier — experience-scaled compound prescription + per-compound
  *  ramp time. The single number the stored workout duration is derived from
- *  (#015B). */
-export function estimateStrengthSessionMinutes(reqs: ExerciseRequirement[], experience: ExerciseDifficulty): number {
-  return estimateSessionMinutes(prescriptionForRequirements(reqs, experience), countCompounds(reqs));
+ *  (#015B). LH-40 — pass `goal` so the estimate tracks the goal-aware rows. */
+export function estimateStrengthSessionMinutes(
+  reqs: ExerciseRequirement[], experience: ExerciseDifficulty, goal?: ProgrammeGoal | null,
+): number {
+  return estimateSessionMinutes(prescriptionForRequirements(reqs, experience, goal), countCompounds(reqs));
 }
 const estimateForReqs = estimateStrengthSessionMinutes;
 
@@ -345,10 +356,13 @@ export function fitStrengthSession(
   // appropriate accessory volume toward its window. Omitted (support / tests)
   // → no growth, only the legacy trim-to-fit.
   fillStructure?: 'full_body' | 'upper' | 'lower',
+  // LH-40 — the user's goal, so the duration estimate tracks the goal-aware
+  // rows exercise selection will persist. Omitted → pre-LH-40 estimate.
+  goal?: ProgrammeGoal | null,
 ): { requirements: ExerciseRequirement[]; durationMinutes: number } {
   const ceiling = ceilingMinutes != null && ceilingMinutes > 0 ? ceilingMinutes : null;
   let requirements = buildStrengthRequirements(base, experience);
-  let estimate = estimateForReqs(requirements, experience);
+  let estimate = estimateForReqs(requirements, experience, goal);
 
   // Beta #015B — GROW toward the canonical window first (volume already came
   // from the experience-aware compound prescription; then structure-scoped
@@ -360,7 +374,7 @@ export function fitStrengthSession(
     for (let i = 0; i < PRIMARY_MAX_FILL && i < pool.length; i++) {
       if (estimate >= ceiling - PRIMARY_WINDOW_MARGIN_MIN) break;
       const next = [...requirements, pool[i]];
-      const nextEstimate = estimateForReqs(next, experience);
+      const nextEstimate = estimateForReqs(next, experience, goal);
       if (nextEstimate > ceiling) break; // adding this one overshoots — stop
       requirements = next;
       estimate = nextEstimate;
@@ -370,7 +384,7 @@ export function fitStrengthSession(
   // Then trim if still over a known ceiling (unchanged behaviour).
   while (ceiling != null && estimate > ceiling && requirements.length > base.length) {
     requirements = requirements.slice(0, -1);
-    estimate = estimateForReqs(requirements, experience);
+    estimate = estimateForReqs(requirements, experience, goal);
   }
 
   // Beta #016 — requirement-layer guard: no two requirements identical on
@@ -386,7 +400,7 @@ export function fitStrengthSession(
     seenReq.add(k);
     return true;
   });
-  estimate = estimateForReqs(requirements, experience);
+  estimate = estimateForReqs(requirements, experience, goal);
 
   const durationMinutes = ceiling != null ? Math.min(estimate, ceiling) : estimate;
   return { requirements, durationMinutes };
@@ -603,7 +617,7 @@ export function fitStrengthSessionForStructure(
   // Beta #016 §8 — when the canonical activity calls for a conditioning tail
   // ACP can't model, don't let #015B pad the strength portion to fill the
   // whole window with accessory strength work.
-  opts?: { skipPrimaryFill?: boolean },
+  opts?: { skipPrimaryFill?: boolean; goal?: ProgrammeGoal | null },
 ): { requirements: ExerciseRequirement[]; durationMinutes: number; structure: StrengthStructure } {
   const volumeExperience: ExerciseDifficulty = structure === 'support' ? 'beginner' : experience;
   let base = strengthRequirementBase(structure, seed);
@@ -612,7 +626,7 @@ export function fitStrengthSessionForStructure(
   // its canonical window (support is exempt — #015). #013's advanced floor
   // is now actually delivered by the generated content, not just the label.
   const fillStructure = structure === 'support' || opts?.skipPrimaryFill ? undefined : structure;
-  const fitted = fitStrengthSession(base, volumeExperience, ceilingMinutes, fillStructure);
+  const fitted = fitStrengthSession(base, volumeExperience, ceilingMinutes, fillStructure, opts?.goal ?? null);
   return { ...fitted, structure };
 }
 
@@ -749,7 +763,7 @@ export function buildWorkoutSlots(strategy: TrainingStrategy, context: Generatio
       // fitted under the prescribed minutes. Activity-block slots
       // (mobility/running/walking) keep the flat session default untouched.
       const strength = isStrength
-        ? fitStrengthSession(spec.requirements!, context.experience, context.prescribedStrengthMinutes)
+        ? fitStrengthSession(spec.requirements!, context.experience, context.prescribedStrengthMinutes, undefined, context.goal)
         : null;
       slots.push({
         weekNumber: week,

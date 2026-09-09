@@ -9,6 +9,7 @@
 // never read from any separately-generated count field — that's what
 // caused Day 1's "4 strength" vs 3-listed-sessions inconsistency.
 import type { OnboardingAnswers } from './onboarding';
+import { toCalendarDate } from './calendar-date.ts';
 
 export type ActivityCategory = 'strength' | 'cardio' | 'recovery' | 'mobility' | 'sport';
 export type ActivityIntensity = 'light' | 'moderate' | 'challenging';
@@ -283,13 +284,20 @@ export async function fetchOnboardingAssessment(
   // dependency injection for deterministic, fast tests) — production
   // call-sites never pass this and get REQUEST_TIMEOUT_MS.
   timeoutMs: number = REQUEST_TIMEOUT_MS,
+  // Test-only injectable "now" — production always gets the real local date.
+  now: Date = new Date(),
 ): Promise<FetchAssessmentResult | null> {
+  // LH-30 — the server has no reliable notion of the user's "today", so the
+  // plan's effective start date is the user's LOCAL calendar date, computed
+  // here with the LH-26 canonical helper (never a UTC slice) and sent
+  // alongside every generation / regeneration request.
+  const clientLocalDate = toCalendarDate(now);
   const request = (async (): Promise<FetchAssessmentResult | null> => {
     try {
       const res = await fetchImpl(ASSESSMENT_ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(params),
+        body: JSON.stringify({ ...params, clientLocalDate }),
       });
       if (!res.ok) return null;
       const json = await res.json();

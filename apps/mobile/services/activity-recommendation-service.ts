@@ -22,7 +22,9 @@ import {
   classifyStrengthStructure, fitStrengthSessionForStructure, titleImpliesConditioning, fullBodyOrdinalInPlan, type ProfileLike,
 } from '@/lib/programme-generator';
 import { sanitizeStrengthActivity } from '@/lib/plan-execution-capability';
-import type { ExerciseRequirement, GenerationContext } from '@/lib/programme-types';
+import type { ExerciseRequirement, GenerationContext, ProgrammeGoal } from '@/lib/programme-types';
+import type { ExerciseDifficulty } from '@/lib/exercise-types';
+import { describeStrengthPrescription } from '@/lib/workout-prescription';
 import { resolveWeekNumber, parseLocalDateOnly } from '@/lib/workout-execution';
 import { normalizeActivity, type NormalizedActivityKey } from '@/lib/fulfilment';
 import type { StartingPlanActivity } from '@/lib/ai-assessment';
@@ -50,8 +52,25 @@ const exerciseWorkoutDescription = (experience: string) =>
 function strengthHeadline(activity: StartingPlanActivity): string {
   return (activity.title || activity.activity || SESSION_HEADLINE.gym).trim();
 }
-function strengthDescription(activity: StartingPlanActivity, experience: string): string {
-  return (activity.description || '').trim() || exerciseWorkoutDescription(experience);
+/**
+ * LH-40 — a strength session's description is DERIVED from the same canonical
+ * prescription table that generates its workout_exercises rows
+ * (describeStrengthPrescription), so the prose can never contradict the
+ * structured sets/reps/rest again. It is NOT taken from the AI's free-text
+ * `activity.description` (that was the drift source: "3 sets of 6–10 reps"
+ * over an actual 3×12/60 workout).
+ */
+function strengthDescription(
+  goal: ProgrammeGoal | string | null | undefined,
+  experience: ExerciseDifficulty,
+  requirements: ExerciseRequirement[] | null | undefined,
+): string {
+  const roles = (requirements ?? []).map(r => r.role);
+  return describeStrengthPrescription(
+    roles.length > 0 ? roles : ['compound', 'compound', 'accessory', 'core'],
+    goal ?? null,
+    experience,
+  );
 }
 
 /** Beta Feedback #006 — the run/walk EXECUTION prescription must stay faithful to the planned activity (title, duration, instructions), not a generic per-key template. */
@@ -321,7 +340,7 @@ async function populateExerciseWorkout(
       : new Set<string>([...alreadySelected, ...weeklyAccessoryExclusions]);
 
     const skipNetwork = Date.now() - startedAt > GENERATION_TIME_BUDGET_MS;
-    const picked = await selectExerciseForRequirement(requirement, context.equipmentLocation, context.experience, exclude, { skipNetwork, providerHealth });
+    const picked = await selectExerciseForRequirement(requirement, context.equipmentLocation, context.experience, exclude, { skipNetwork, providerHealth, goal: context.goal });
 
     // Beta #016 invariant + Beta #017 §16/§17 — a requirement that can only
     // be satisfied by an exercise already in this session is DROPPED, not
@@ -674,8 +693,8 @@ async function generateSession(
         // Beta #016 §8 — a "…plus short conditioning" canonical activity must
         // not have its strength portion padded to fill the whole window with
         // extra accessory strength work (ACP can't model the conditioning
-        // block — documented gap).
-        { skipPrimaryFill: titleImpliesConditioning(activity.title, activity.description) },
+        // block — documented gap). LH-40 — goal drives the sets/reps/rest.
+        { skipPrimaryFill: titleImpliesConditioning(activity.title, activity.description), goal: context.goal },
       );
       // Beta #016 §9/§11 — accessories/core rotate off what the rest of this
       // week's strength sessions already prescribed; anchor compounds don't.
@@ -689,7 +708,7 @@ async function generateSession(
         userId, requirements, context, 'gym', strengthHeadline(activity), 'strength', durationMinutes,
         {
           workoutType: suggestedStrengthWorkoutType(structure),
-          description: strengthDescription(activity, context.experience),
+          description: strengthDescription(context.goal, context.experience, requirements),
           slotDate: activity.planned_date ?? undefined,
           weeklyExclusions,
         },
@@ -836,7 +855,7 @@ export async function getActivityRecommendation(
   const requirementsForKey: ExerciseRequirement[] | null =
     key === 'gym'
       ? fitStrengthSessionForStructure(strengthStructure!, context.experience, activity.duration_minutes, strengthSeed,
-          { skipPrimaryFill: titleImpliesConditioning(activity.title, activity.description) }).requirements
+          { skipPrimaryFill: titleImpliesConditioning(activity.title, activity.description), goal: context.goal }).requirements
     : key === 'mobility' ? MOBILITY_REQUIREMENTS : null;
 
   // Beta Feedback #006 (cardio) + #013 (strength) — the headline/title must
@@ -852,7 +871,7 @@ export async function getActivityRecommendation(
 
   const reusable = await findReusableSuggested(
     userId, key, requirementsForKey, context, activity, resolvedWorkoutType,
-    key === 'gym' ? { title: headline, description: strengthDescription(activity, context.experience) } : undefined,
+    key === 'gym' ? { title: headline, description: strengthDescription(context.goal, context.experience, requirementsForKey) } : undefined,
     strengthSlotDate,
   );
   const sessionType: SessionType = key === 'running' || key === 'walking' ? 'activity_block' : 'exercise_workout';

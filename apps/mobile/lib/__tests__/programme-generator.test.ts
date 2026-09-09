@@ -268,8 +268,8 @@ describe('buildWorkoutSlots — experience-aware Strength prescription (Chunk 4.
     // experience band — so it always matches "N exercises · M min" on the
     // workout screen. Advanced still lands longer purely because it carries
     // more volume.
-    assert.equal(beginnerSlot.durationMinutes, estimateStrengthSessionMinutes(beginnerSlot.requirements!, 'beginner'));
-    assert.equal(advancedSlot.durationMinutes, estimateStrengthSessionMinutes(advancedSlot.requirements!, 'advanced'));
+    assert.equal(beginnerSlot.durationMinutes, estimateStrengthSessionMinutes(beginnerSlot.requirements!, 'beginner', beginnerCtx.goal));
+    assert.equal(advancedSlot.durationMinutes, estimateStrengthSessionMinutes(advancedSlot.requirements!, 'advanced', advancedCtx.goal));
     assert.ok(advancedSlot.durationMinutes > beginnerSlot.durationMinutes);
     assert.ok(advancedSlot.requirements!.length > beginnerSlot.requirements!.length);
   });
@@ -284,7 +284,7 @@ describe('buildWorkoutSlots — experience-aware Strength prescription (Chunk 4.
     assert.ok(slot.durationMinutes <= 30, `expected <= 30, got ${slot.durationMinutes}`);
     // #015B: an advanced compound base can exceed a tight 30-min ceiling; the
     // label is then capped at the planned minutes (never claims more), per #013.
-    assert.equal(slot.durationMinutes, Math.min(estimateStrengthSessionMinutes(slot.requirements!, 'advanced'), 30));
+    assert.equal(slot.durationMinutes, Math.min(estimateStrengthSessionMinutes(slot.requirements!, 'advanced', ctx.goal), 30));
   });
 
   test('an activity-block slot (e.g. an easy run) keeps the flat session default regardless of experience — mobility/running/walking are out of scope for this chunk', () => {

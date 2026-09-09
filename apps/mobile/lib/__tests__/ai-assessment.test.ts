@@ -249,6 +249,29 @@ describe('fetchOnboardingAssessment', () => {
     await assert.doesNotReject(fetchOnboardingAssessment(baseParams, mockFetch as any, 200));
   });
 
+  test('LH-30 — sends clientLocalDate (the user\'s LOCAL calendar date, canonical YYYY-MM-DD) so the server never backfills a past session', async () => {
+    let sentBody: any;
+    const mockFetch = async (_url: string, init: any) => {
+      sentBody = JSON.parse(init.body);
+      return { ok: true, json: async () => ({ assessment: VALID_ASSESSMENT, generatedAt: '2026-09-08T22:30:00.000Z' }) } as any;
+    };
+    const tz = process.env.TZ;
+    try {
+      process.env.TZ = 'Africa/Nairobi'; // UTC+3
+      // 22:30 UTC on the 7th == 01:30 local on the 8th → the local calendar day is the 8th.
+      const localMidnightIsh = new Date('2026-09-07T22:30:00.000Z');
+      await fetchOnboardingAssessment(baseParams, mockFetch as any, 200, localMidnightIsh);
+      assert.equal(sentBody.clientLocalDate, '2026-09-08');
+      // a UTC slice would have sent '2026-09-07' — the exact LH-30 defect.
+      assert.notEqual(sentBody.clientLocalDate, localMidnightIsh.toISOString().slice(0, 10));
+      // the rest of the params are passed through untouched
+      assert.equal(sentBody.userId, baseParams.userId);
+      assert.equal(sentBody.accessToken, baseParams.accessToken);
+    } finally {
+      if (tz === undefined) delete process.env.TZ; else process.env.TZ = tz;
+    }
+  });
+
   test('timeout triggers the fallback signal (null) when the request is slower than the threshold', async () => {
     const neverResolves = () => new Promise(() => {}); // simulates a request slower than the UX timeout
     const start = Date.now();
