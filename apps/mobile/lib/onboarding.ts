@@ -4,7 +4,7 @@
 // future recommendation engine can import/replace pieces of it in
 // isolation. Supabase-backed helpers live in lib/onboarding-auth.ts.
 
-import { isPlausibleWeightKg } from './onboarding-validation.ts';
+import { isPlausibleWeightKg, validateGoalDirection } from './onboarding-validation.ts';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -282,6 +282,47 @@ export interface PlanSummary {
 }
 
 /**
+ * LH-04 — the one truthful description of a weight-bearing goal + the entered
+ * weights. It NEVER contradicts the stated goal and NEVER overclaims:
+ *
+ *   • lose_weight     — "Lose X kg[ by …]" only for a genuine loss; a
+ *                       non-loss is a contradiction the gates block, so this
+ *                       falls back to the plain goal label.
+ *   • build_muscle    — "Build strength" is a PERFORMANCE goal. The scale
+ *     ("Build strength")  direction is the user's own intent, stated
+ *                       literally alongside it ("Build strength while
+ *                       gaining/losing X kg"), never fused into a
+ *                       muscle-gain claim and never "building muscle".
+ *   • maintain_weight — goal-focused wording; no directional delta line.
+ *
+ * Returns null when it can't form a line (weights missing / not in range /
+ * not a weight-bearing goal) — the caller falls back to the goal label.
+ */
+export function describeWeightGoalLine(args: {
+  goal: PrimaryGoal | null;
+  currentWeightKg: number | null;
+  goalWeightKg: number | null;
+  /** already-formatted, e.g. "December 2026"; omit for no date */
+  byLabel?: string | null;
+}): string | null {
+  const { goal, currentWeightKg: cw, goalWeightKg: gw } = args;
+  if (!isPlausibleWeightKg(cw) || !isPlausibleWeightKg(gw)) return null;
+  const by = args.byLabel ? ` by ${args.byLabel}` : '';
+  const delta = Math.round((gw - cw) * 10) / 10;
+  const amount = Math.abs(delta);
+
+  if (goal === 'lose_weight') {
+    return delta < 0 ? `Lose ${amount} kg${by}` : (GOAL_OPTIONS.find(g => g.key === 'lose_weight')?.label ?? 'Lose weight');
+  }
+  if (goal === 'build_muscle') {
+    if (delta > 0) return `Build strength while gaining ${amount} kg${by}`;
+    if (delta < 0) return `Build strength while losing ${amount} kg${by}`;
+    return GOAL_OPTIONS.find(g => g.key === 'build_muscle')?.label ?? 'Build strength';
+  }
+  return null; // maintain_weight / reduce_stress handled by the caller
+}
+
+/**
  * Builds a plain, structured MVP plan summary directly from the onboarding
  * answers — no AI, no external recommendation service. Kept as a pure
  * function (rather than inline in the Plan screen) so a future
@@ -292,22 +333,35 @@ export function buildPlanSummary(answers: OnboardingAnswers): PlanSummary {
   const goalOpt = GOAL_OPTIONS.find(g => g.key === answers.goal);
 
   let goalLine = goalOpt?.label ?? 'Your fitness goal';
-  // LH-18 — only build a numeric weight goal line from plausible, in-range
-  // weights. Out-of-range values fall back to the plain goal label rather
-  // than producing "Lose 998 kg by …".
-  if ((answers.goal === 'lose_weight' || answers.goal === 'build_muscle' || answers.goal === 'maintain_weight')
-    && isPlausibleWeightKg(answers.startingWeightKg) && isPlausibleWeightKg(answers.goalWeightKg)) {
-    const diff = Math.round((answers.goalWeightKg - answers.startingWeightKg) * 10) / 10;
-    if (diff > 0) {
-      goalLine = answers.goalTargetDate ? `Gain ${diff} kg by ${monthYear(answers.goalTargetDate)}` : `Gain ${diff} kg`;
-    } else if (diff < 0) {
-      goalLine = answers.goalTargetDate ? `Lose ${Math.abs(diff)} kg by ${monthYear(answers.goalTargetDate)}` : `Lose ${Math.abs(diff)} kg`;
-    } else {
-      goalLine = answers.goal === 'build_muscle' ? 'Build muscle while maintaining your current weight' : 'Maintain your current weight';
-    }
+  // LH-18 — only from plausible weights. LH-04 — describeWeightGoalLine keeps
+  // the wording consistent with the stated goal (never "Gain X" for a
+  // lose_weight goal, never "building muscle" for build_muscle).
+  const directionOk = validateGoalDirection({
+    goal: answers.goal,
+    currentWeightKg: answers.startingWeightKg,
+    goalWeightKg: answers.goalWeightKg,
+  }).ok;
+  const weightLine = directionOk
+    ? describeWeightGoalLine({
+        goal: answers.goal,
+        currentWeightKg: answers.startingWeightKg,
+        goalWeightKg: answers.goalWeightKg,
+        byLabel: answers.goalTargetDate ? monthYear(answers.goalTargetDate) : null,
+      })
+    : null;
+
+  if (weightLine && (answers.goal === 'lose_weight' || answers.goal === 'build_muscle')) {
+    goalLine = weightLine;
   } else if (answers.goal === 'maintain_weight') {
     const focus = joinFocusLabels(answers.goalDetails.health_focus);
-    goalLine = focus ? `Maintain a healthy weight — focus on ${focus}` : 'Maintain a healthy weight';
+    // A maintain goal with equal weights keeps its established wording; any
+    // other case is described by the goal, never as "Lose/Gain X kg".
+    if (isPlausibleWeightKg(answers.startingWeightKg) && isPlausibleWeightKg(answers.goalWeightKg)
+      && answers.goalWeightKg === answers.startingWeightKg) {
+      goalLine = 'Maintain your current weight';
+    } else {
+      goalLine = focus ? `Maintain a healthy weight — focus on ${focus}` : 'Maintain a healthy weight';
+    }
   } else if (answers.goal === 'reduce_stress') {
     const focus = joinFocusLabels(answers.goalDetails.health_focus);
     goalLine = focus ? `Reduce stress — focus on ${focus}` : 'Reduce stress & improve wellbeing';
@@ -385,8 +439,14 @@ export function isStep2Complete(answers: OnboardingAnswers): boolean {
     case 'lose_weight':
     case 'build_muscle':
     case 'maintain_weight':
-      // LH-01 — "complete" means the weights are present AND plausible.
+      // LH-01 — weights present AND plausible. LH-04 — and not contradicting
+      // the stated goal's direction (a no-op for build_muscle / maintain).
       return isPlausibleWeightKg(answers.startingWeightKg) && isPlausibleWeightKg(answers.goalWeightKg)
+        && validateGoalDirection({
+          goal: answers.goal,
+          currentWeightKg: answers.startingWeightKg,
+          goalWeightKg: answers.goalWeightKg,
+        }).ok
         && !!answers.goalTargetDate && !!answers.strengthExperience;
     case 'reduce_stress':
       return (answers.goalDetails.health_focus ?? []).length > 0;

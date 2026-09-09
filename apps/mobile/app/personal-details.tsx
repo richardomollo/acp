@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { authService } from '@/services/auth';
 import { GOAL_OPTIONS } from '@/lib/onboarding';
 import { toCalendarDate, parseCalendarDateOrNull } from '@/lib/calendar-date';
-import { validateWeightKg, validateWeeklyTimeBudget } from '@/lib/onboarding-validation';
+import { validateWeightKg, validateWeeklyTimeBudget, validateGoalDirection } from '@/lib/onboarding-validation';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -159,10 +159,13 @@ export default function PersonalDetailsScreen() {
     const timeFieldError = timeBudget.fieldErrors.work ?? timeBudget.fieldErrors.sport;
     if (timeFieldError) { Alert.alert('Check your hours', timeFieldError); return; }
 
-    if (goal === 'lose_weight' && parsedCurrentWeight != null && parsedTargetWeight != null && parsedTargetWeight > parsedCurrentWeight) {
-      Alert.alert('Error', 'Target weight should not be greater than your current weight for a weight-loss goal.');
-      return;
-    }
+    // LH-04 — the stored goal's direction must agree with the entered
+    // weights (shared validator; covers "above" and "equal" for a
+    // lose_weight goal; a no-op for build_muscle / maintain).
+    const dir = validateGoalDirection({
+      goal, currentWeightKg: parsedCurrentWeight, goalWeightKg: parsedTargetWeight,
+    });
+    if (!dir.ok && dir.error) { Alert.alert('Check your goal weight', dir.error); return; }
 
     // Snapshot the starting point for progress tracking exactly once — the
     // first time a current weight is ever saved. Never touched again after

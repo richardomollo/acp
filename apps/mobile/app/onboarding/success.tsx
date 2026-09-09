@@ -9,9 +9,9 @@ import { NumericGoalInput } from '@/components/onboarding/numeric-input';
 import { DateSelector, formatMonthYear } from '@/components/onboarding/date-selector';
 import { useOnboarding } from '@/contexts/onboarding-context';
 import {
-  STRENGTH_EXPERIENCE_OPTIONS, HEALTH_FOCUS_OPTIONS,
+  STRENGTH_EXPERIENCE_OPTIONS, HEALTH_FOCUS_OPTIONS, describeWeightGoalLine,
 } from '@/lib/onboarding';
-import { validateCurrentWeight, validateGoalWeight } from '@/lib/onboarding-validation';
+import { validateCurrentWeight, validateGoalWeight, validateGoalDirection } from '@/lib/onboarding-validation';
 import { palette, radii, fontSize } from '@/constants/theme';
 
 export default function OnboardingSuccessScreen() {
@@ -41,7 +41,15 @@ export default function OnboardingSuccessScreen() {
   const currentWeightV = validateCurrentWeight(currentWeightNum);
   const targetWeightV = validateGoalWeight(targetWeightNum);
   const currentWeightError = currentWeight.trim() && !currentWeightV.ok ? currentWeightV.error : null;
-  const targetWeightError = targetWeight.trim() && !targetWeightV.ok ? targetWeightV.error : null;
+  const rangeTargetError = targetWeight.trim() && !targetWeightV.ok ? targetWeightV.error : null;
+
+  // LH-04 — the stated goal's direction must agree with the entered weights.
+  // Only meaningful once both are in range; a contradiction shows inline on
+  // the goal-weight field and blocks Continue (goal is never silently flipped
+  // and weights are never silently swapped).
+  const directionV = validateGoalDirection({ goal, currentWeightKg: currentWeightV.value, goalWeightKg: targetWeightV.value });
+  const targetWeightError = rangeTargetError
+    ?? (currentWeightV.ok && targetWeightV.ok && !directionV.ok ? directionV.error : null);
 
   useEffect(() => {
     if (!isWeightGoal) return;
@@ -63,7 +71,7 @@ export default function OnboardingSuccessScreen() {
       case 'lose_weight':
       case 'build_muscle':
       case 'maintain_weight': {
-        return currentWeightV.ok && targetWeightV.ok
+        return currentWeightV.ok && targetWeightV.ok && directionV.ok
           && !!answers.goalTargetDate && !!answers.strengthExperience;
       }
       case 'reduce_stress':
@@ -81,14 +89,23 @@ export default function OnboardingSuccessScreen() {
 
   const weightSummary = (() => {
     if (!isWeightGoal) return null;
-    // LH-18 — never render a goal line from out-of-range weights.
-    if (!currentWeightV.ok || !targetWeightV.ok || !answers.goalTargetDate) return null;
-    const cw = currentWeightV.value!;
-    const gw = targetWeightV.value!;
-    const suffix = goal === 'build_muscle' ? ' while building muscle' : '';
-    if (gw > cw) return `Gain ${Math.round((gw - cw) * 10) / 10} kg by ${formatMonthYear(answers.goalTargetDate)}${suffix}`;
-    if (gw < cw) return `Lose ${Math.round((cw - gw) * 10) / 10} kg by ${formatMonthYear(answers.goalTargetDate)}${suffix}`;
-    return goal === 'build_muscle' ? `Maintain your current weight while building muscle` : `Maintain your current weight`;
+    // LH-18 — only from in-range weights. LH-04 — never render a line that
+    // contradicts the stated goal (a contradiction is blocked above, so the
+    // card is simply hidden until it is resolved).
+    if (!currentWeightV.ok || !targetWeightV.ok || !directionV.ok || !answers.goalTargetDate) return null;
+    if (goal === 'maintain_weight') {
+      return currentWeightV.value === targetWeightV.value
+        ? 'Maintain your current weight'
+        : 'Maintain a healthy weight';
+    }
+    // lose_weight / build_muscle — truthful, goal-consistent wording, never
+    // "building muscle" and never a delta line that fights the goal.
+    return describeWeightGoalLine({
+      goal,
+      currentWeightKg: currentWeightV.value,
+      goalWeightKg: targetWeightV.value,
+      byLabel: formatMonthYear(answers.goalTargetDate),
+    });
   })();
 
   return (

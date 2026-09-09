@@ -33,7 +33,7 @@ import {
   type OnboardingAnswers, type CanonicalWeekday,
 } from '@/lib/onboarding';
 import { fetchOnboardingAssessment, type AIAssessment } from '@/lib/ai-assessment';
-import { validateWeightKg } from '@/lib/onboarding-validation';
+import { validateWeightKg, validateGoalDirection } from '@/lib/onboarding-validation';
 import { getScheduledNextPlan, scheduledPlanNeedsScheduleUpdate, type ScheduledNextPlan } from '@/lib/weekly-review';
 import { getCompletionProgress, type PlanActivityCompletion } from '@/lib/completion';
 import { pickHomeInsight, pickOutcomeInsight, type CoachingMemoryRow, type HomeCoachingInsight } from '@/lib/coaching-memory';
@@ -364,6 +364,24 @@ export default function FitnessGoalsScreen() {
   const confirmGoalChange = async () => {
     if (!userId || !pendingGoal) return;
     const newGoal = pendingGoal.key;
+
+    // LH-04 — the new goal's direction must not contradict the user's
+    // already-stored weights (e.g. switching to "Lose weight" while goal
+    // weight ≥ current weight). Block the change and point them at the fix;
+    // never silently flip the goal or swap the weights. Absent weights →
+    // nothing to contradict, allowed.
+    const cwForDir = startingWeight.trim() ? Number(startingWeight) : null;
+    const gwForDir = goalWeight.trim() ? Number(goalWeight) : null;
+    const dir = validateGoalDirection({ goal: newGoal, currentWeightKg: cwForDir, goalWeightKg: gwForDir });
+    if (!dir.ok) {
+      Alert.alert(
+        'Update your weights first',
+        `${dir.error}\n\nYou can change your current and goal weight in Personal details.`,
+      );
+      setPendingGoal(null);
+      return;
+    }
+
     setChangingGoal(true);
     try {
       // Only the goal itself changes here — deliberately NOT resetting

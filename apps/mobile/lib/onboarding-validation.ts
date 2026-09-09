@@ -165,6 +165,87 @@ export function validateWeeklyTimeBudget(input: WeeklyTimeBudgetInput): WeeklyTi
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// Goal direction (LH-04) — semantic consistency between the stated goal and
+// the direction the entered weights imply.
+// ─────────────────────────────────────────────────────────────────────────
+//
+// Goal taxonomy (PrimaryGoal in lib/onboarding.ts, unchanged here):
+//   • lose_weight     — displayed "Lose weight"            → WEIGHT-LOSS (directional)
+//   • build_muscle    — displayed "Build strength"         → PERFORMANCE  (no required direction)
+//   • maintain_weight — displayed "Maintain a healthy weight" → WEIGHT-NEUTRAL (no direction block)
+//   • reduce_stress   — wellbeing; collects no weight       → not applicable
+//
+// There is NO explicit "gain weight" goal in the taxonomy. `build_muscle`
+// ("Build strength") is a performance goal — the system must NOT infer that
+// it means "gain weight". The `weight_gain` branch below is kept only so the
+// rule is complete if such a goal is ever added.
+
+export type GoalDirectionClass = 'weight_loss' | 'weight_gain' | 'performance' | 'weight_neutral';
+
+export function goalDirectionClass(goal: string | null | undefined): GoalDirectionClass {
+  switch (goal) {
+    case 'lose_weight': return 'weight_loss';
+    case 'build_muscle': return 'performance';
+    case 'maintain_weight': return 'weight_neutral';
+    default: return 'performance'; // reduce_stress / unknown — no weight direction imposed
+  }
+}
+
+export interface GoalDirectionResult {
+  ok: boolean;
+  /** the direction the entered weights actually imply */
+  weightDirection: 'loss' | 'gain' | 'none' | 'unknown';
+  /** inline message for the goal-weight field when a directional goal is
+   *  contradicted; otherwise null */
+  error: string | null;
+}
+
+/**
+ * A directional goal (lose / gain) must agree with the sign of
+ * goalWeight − currentWeight. A performance or neutral goal imposes no
+ * direction. Presence and plausible range are LH-01's job — when either
+ * weight is missing/out-of-range this returns `ok: true` (nothing to check
+ * yet) and lets those validators speak.
+ */
+export function validateGoalDirection(args: {
+  goal: string | null | undefined;
+  currentWeightKg: number | null | undefined;
+  goalWeightKg: number | null | undefined;
+}): GoalDirectionResult {
+  const cw = validateWeightKg(args.currentWeightKg).value;
+  const gw = validateWeightKg(args.goalWeightKg).value;
+  if (cw == null || gw == null) return { ok: true, weightDirection: 'unknown', error: null };
+
+  const delta = Math.round((gw - cw) * 10) / 10;
+  const weightDirection: GoalDirectionResult['weightDirection'] =
+    delta > 0 ? 'gain' : delta < 0 ? 'loss' : 'none';
+  const cls = goalDirectionClass(args.goal);
+
+  if (cls === 'weight_loss') {
+    if (weightDirection === 'gain') {
+      return { ok: false, weightDirection, error: 'Your goal weight is above your current weight. Choose a lower goal weight, or change your goal.' };
+    }
+    if (weightDirection === 'none') {
+      return { ok: false, weightDirection, error: 'Your goal weight is the same as your current weight. Choose a lower goal weight, or change your goal.' };
+    }
+    return { ok: true, weightDirection, error: null };
+  }
+
+  if (cls === 'weight_gain') {
+    if (weightDirection === 'loss') {
+      return { ok: false, weightDirection, error: 'Your goal weight is below your current weight. Choose a higher goal weight, or change your goal.' };
+    }
+    if (weightDirection === 'none') {
+      return { ok: false, weightDirection, error: 'Your goal weight is the same as your current weight. Choose a higher goal weight, or change your goal.' };
+    }
+    return { ok: true, weightDirection, error: null };
+  }
+
+  // performance / weight_neutral — any scale direction is the user's own intent
+  return { ok: true, weightDirection, error: null };
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // Aggregate — the persistence / generation guard (LH-18)
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -174,6 +255,7 @@ export interface OnboardingHealthValidation {
   errors: string[];
   weight: { current: FieldValidation; goal: FieldValidation };
   weeklyTime: WeeklyTimeBudgetResult | null;
+  goalDirection: GoalDirectionResult;
 }
 
 const WEIGHT_GOALS = new Set(['lose_weight', 'build_muscle', 'maintain_weight']);
@@ -190,18 +272,27 @@ export function validateOnboardingHealthInputs(args: {
   const current = validateCurrentWeight(args.startingWeightKg);
   const goal = validateGoalWeight(args.goalWeightKg);
   const weeklyTime = args.weeklyTime ? validateWeeklyTimeBudget(args.weeklyTime) : null;
+  const goalDirection = validateGoalDirection({
+    goal: args.goal,
+    currentWeightKg: args.startingWeightKg,
+    goalWeightKg: args.goalWeightKg,
+  });
 
   const errors: string[] = [];
   if (isWeightGoal) {
     if (!current.ok && current.error) errors.push(`Current weight — ${current.error}`);
     if (!goal.ok && goal.error) errors.push(`Goal weight — ${goal.error}`);
+    // LH-04 — only meaningful once both weights are in range (otherwise
+    // goalDirection is a no-op); a directional goal contradicted by the
+    // entered weights is rejected here too.
+    if (!goalDirection.ok && goalDirection.error) errors.push(`Goal direction — ${goalDirection.error}`);
   }
   if (weeklyTime && !weeklyTime.ok) {
     if (weeklyTime.error) errors.push(weeklyTime.error);
     for (const fe of Object.values(weeklyTime.fieldErrors)) if (fe) errors.push(fe);
   }
 
-  return { ok: errors.length === 0, errors, weight: { current, goal }, weeklyTime };
+  return { ok: errors.length === 0, errors, weight: { current, goal }, weeklyTime, goalDirection };
 }
 
 /** Thrown by the persistence / generation guard when invalid onboarding data

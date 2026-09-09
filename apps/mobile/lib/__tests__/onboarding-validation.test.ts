@@ -6,6 +6,7 @@ import {
   WEIGHT_MIN_KG, WEIGHT_MAX_KG, HOURS_PER_WEEK, MAX_SLEEP_HOURS_PER_NIGHT,
   validateWeightKg, validateCurrentWeight, validateGoalWeight, isPlausibleWeightKg,
   validateWeeklyTimeBudget, validateOnboardingHealthInputs, OnboardingValidationError,
+  validateGoalDirection, goalDirectionClass,
 } from '../onboarding-validation.ts';
 
 describe('validateWeightKg — boundaries (LH-01, §9 A–D)', () => {
@@ -118,6 +119,57 @@ describe('validateWeeklyTimeBudget (LH-03, §9 E–G)', () => {
   });
 });
 
+describe('validateGoalDirection — goal ⇄ weight semantics (LH-04, §9)', () => {
+  test('goalDirectionClass reflects the real taxonomy', () => {
+    assert.equal(goalDirectionClass('lose_weight'), 'weight_loss');
+    assert.equal(goalDirectionClass('build_muscle'), 'performance');   // "Build strength"
+    assert.equal(goalDirectionClass('maintain_weight'), 'weight_neutral');
+    assert.equal(goalDirectionClass('reduce_stress'), 'performance');
+    assert.equal(goalDirectionClass(null), 'performance');
+  });
+
+  test('A. lose_weight 90 → 80 is compatible', () => {
+    const r = validateGoalDirection({ goal: 'lose_weight', currentWeightKg: 90, goalWeightKg: 80 });
+    assert.equal(r.ok, true);
+    assert.equal(r.weightDirection, 'loss');
+    assert.equal(r.error, null);
+  });
+  test('B. lose_weight 90 → 95 is blocked with a goal-weight message', () => {
+    const r = validateGoalDirection({ goal: 'lose_weight', currentWeightKg: 90, goalWeightKg: 95 });
+    assert.equal(r.ok, false);
+    assert.equal(r.weightDirection, 'gain');
+    assert.match(r.error!, /goal weight is above your current weight/i);
+  });
+  test('C. lose_weight 90 → 90 is blocked (no meaningful loss target)', () => {
+    const r = validateGoalDirection({ goal: 'lose_weight', currentWeightKg: 90, goalWeightKg: 90 });
+    assert.equal(r.ok, false);
+    assert.equal(r.weightDirection, 'none');
+    assert.match(r.error!, /same as your current weight/i);
+  });
+  test('D/E/F. build_muscle ("Build strength") imposes NO weight direction', () => {
+    for (const [cw, gw, dir] of [[80, 85, 'gain'], [85, 80, 'loss'], [80, 80, 'none']] as const) {
+      const r = validateGoalDirection({ goal: 'build_muscle', currentWeightKg: cw, goalWeightKg: gw });
+      assert.equal(r.ok, true, `${cw}->${gw}`);
+      assert.equal(r.weightDirection, dir);
+      assert.equal(r.error, null);
+    }
+  });
+  test('maintain_weight imposes no direction block', () => {
+    assert.equal(validateGoalDirection({ goal: 'maintain_weight', currentWeightKg: 80, goalWeightKg: 72 }).ok, true);
+  });
+  test('G. missing / out-of-range weight → nothing to check yet (LH-01 owns it)', () => {
+    assert.equal(validateGoalDirection({ goal: 'lose_weight', currentWeightKg: null, goalWeightKg: 80 }).ok, true);
+    assert.equal(validateGoalDirection({ goal: 'lose_weight', currentWeightKg: 999, goalWeightKg: 80 }).ok, true);
+    assert.equal(validateGoalDirection({ goal: 'lose_weight', currentWeightKg: null, goalWeightKg: 80 }).weightDirection, 'unknown');
+  });
+  test('the completed "weight_gain" rule is symmetric (kept for a future goal)', () => {
+    // no goal maps to it today, but the branch must be correct if one is added
+    // (exercised indirectly): a hypothetical gain goal + loss direction fails.
+    // We assert the class function does not currently produce it.
+    assert.notEqual(goalDirectionClass('build_muscle'), 'weight_gain');
+  });
+});
+
 describe('validateOnboardingHealthInputs — the persistence/generation guard (LH-18)', () => {
   test('a weight goal with a 999 kg current weight is rejected with a reason', () => {
     const v = validateOnboardingHealthInputs({ goal: 'lose_weight', startingWeightKg: 999, goalWeightKg: 70 });
@@ -132,6 +184,18 @@ describe('validateOnboardingHealthInputs — the persistence/generation guard (L
     assert.equal(v.ok, false);
     assert.ok(v.errors.some(e => /exceeds 168 hours/.test(e)));
   });
+  test('LH-04: a lose_weight goal contradicted by the weights is rejected with a reason', () => {
+    const v = validateOnboardingHealthInputs({ goal: 'lose_weight', startingWeightKg: 80, goalWeightKg: 88 });
+    assert.equal(v.ok, false);
+    assert.equal(v.goalDirection.ok, false);
+    assert.ok(v.errors.some(e => /Goal direction/.test(e)));
+  });
+  test('LH-04: build_muscle + weight loss passes the guard (performance goal, no direction rule)', () => {
+    const v = validateOnboardingHealthInputs({ goal: 'build_muscle', startingWeightKg: 85, goalWeightKg: 80 });
+    assert.equal(v.ok, true);
+    assert.equal(v.goalDirection.ok, true);
+  });
+
   test('a valid weight goal + valid schedule passes (§9 J — unchanged)', () => {
     const v = validateOnboardingHealthInputs({
       goal: 'lose_weight', startingWeightKg: 80, goalWeightKg: 72,

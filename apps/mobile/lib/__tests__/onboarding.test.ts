@@ -95,7 +95,10 @@ describe('buildPlanSummary', () => {
     assert.equal(buildPlanSummary(answers).goalLine, 'Lose 8.3 kg by December 2026');
   });
 
-  test('weight loss: goal weight can be higher than current weight, same as build strength', () => {
+  // LH-04 — a lose_weight goal whose goal weight is ABOVE current weight is a
+  // direction contradiction: no "Gain X" line, no "Lose X" line — the plain
+  // goal label (and the onboarding gate blocks it anyway).
+  test('LH-04: lose_weight with goal weight above current falls back to the plain goal label', () => {
     const answers: OnboardingAnswers = {
       ...base,
       goal: 'lose_weight',
@@ -103,10 +106,12 @@ describe('buildPlanSummary', () => {
       goalWeightKg: 70,
       goalTargetDate: '2026-12-15',
     };
-    assert.equal(buildPlanSummary(answers).goalLine, 'Gain 5 kg by December 2026');
+    assert.equal(buildPlanSummary(answers).goalLine, 'Lose weight');
   });
 
-  test('gain weight: computes the kg difference (target minus current) and formats the date', () => {
+  // LH-04 — "Build strength" is a PERFORMANCE goal: the scale direction is
+  // stated literally alongside it, never fused into a muscle-gain claim.
+  test('LH-04: build_muscle + weight gain → "Build strength while gaining X kg"', () => {
     const answers: OnboardingAnswers = {
       ...base,
       goal: 'build_muscle',
@@ -114,7 +119,7 @@ describe('buildPlanSummary', () => {
       goalWeightKg: 78,
       goalTargetDate: '2026-11-01',
     };
-    assert.equal(buildPlanSummary(answers).goalLine, 'Gain 8 kg by November 2026');
+    assert.equal(buildPlanSummary(answers).goalLine, 'Build strength while gaining 8 kg by November 2026');
   });
 
   test('gain weight: falls back to the goal label when no weights were set', () => {
@@ -139,7 +144,9 @@ describe('buildPlanSummary', () => {
     assert.equal(buildPlanSummary(answers).goalLine, 'Build strength');
   });
 
-  test('gain weight: goal weight equal to current weight is allowed (build muscle without gaining)', () => {
+  // LH-04 §5F — build_muscle with equal weights is just "Build strength"
+  // (never "Build muscle …" — the user only chose Build strength).
+  test('LH-04: build_muscle + equal weights → "Build strength"', () => {
     const answers: OnboardingAnswers = {
       ...base,
       goal: 'build_muscle',
@@ -147,10 +154,12 @@ describe('buildPlanSummary', () => {
       goalWeightKg: 75,
       goalTargetDate: '2026-11-01',
     };
-    assert.equal(buildPlanSummary(answers).goalLine, 'Build muscle while maintaining your current weight');
+    assert.equal(buildPlanSummary(answers).goalLine, 'Build strength');
   });
 
-  test('gain weight: goal weight can be lower than current weight (recomposition)', () => {
+  // LH-04 §5 — build_muscle can coexist with weight loss (recomposition);
+  // the wording keeps the goal and the direction separate.
+  test('LH-04: build_muscle + weight loss → "Build strength while losing X kg"', () => {
     const answers: OnboardingAnswers = {
       ...base,
       goal: 'build_muscle',
@@ -158,7 +167,7 @@ describe('buildPlanSummary', () => {
       goalWeightKg: 80,
       goalTargetDate: '2026-11-01',
     };
-    assert.equal(buildPlanSummary(answers).goalLine, 'Lose 5 kg by November 2026');
+    assert.equal(buildPlanSummary(answers).goalLine, 'Build strength while losing 5 kg by November 2026');
   });
 
   test('maintain weight: derives the goal line from a single chosen focus area', () => {
