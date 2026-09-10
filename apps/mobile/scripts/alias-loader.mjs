@@ -15,10 +15,11 @@
 //      only recognises `.ts`/`.mts`/`.cts` by extension; none of this app's
 //      `.tsx` files under lib/services actually contain JSX — the
 //      extension is a Metro/RN convention, not a real syntax signal),
-//   4. stubs two React-Native-only side-effect/storage imports that have no
-//      meaning under plain Node and aren't needed by a short-lived script/
-//      test (Node has a native URL implementation; AsyncStorage is only for
-//      persisting an auth session across app restarts).
+//   4. stubs the React-Native-only imports lib/supabase.tsx pulls in that
+//      have no meaning under plain Node and aren't needed by a short-lived
+//      script/test (Node has a native URL implementation; AsyncStorage is
+//      only for persisting an auth session across app restarts; `react-native`
+//      is used only for AppState, which has no app lifecycle under Node).
 // Nothing here changes what any of this code actually DOES — purely module
 // resolution/loading plumbing so real app modules can run under plain node.
 import { pathToFileURL, fileURLToPath } from 'node:url';
@@ -28,7 +29,7 @@ import { stripTypeScriptTypes } from 'node:module';
 
 const ROOT = pathToFileURL(path.resolve(import.meta.dirname, '..') + '/').href;
 const STUB = pathToFileURL(path.resolve(import.meta.dirname, 'rn-stub.mjs')).href;
-const STUBBED_SPECIFIERS = new Set(['react-native-url-polyfill/auto', '@react-native-async-storage/async-storage']);
+const STUBBED_SPECIFIERS = new Set(['react-native-url-polyfill/auto', '@react-native-async-storage/async-storage', 'react-native']);
 
 async function resolveWithExtensionFallback(base, context, nextResolve) {
   if (path.extname(base)) return nextResolve(base, context);

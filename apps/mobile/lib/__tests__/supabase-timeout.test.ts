@@ -1,14 +1,20 @@
 // LANA IOS — Shared Supabase Request Timeout.
 //
 // Proves the shared bounded-fetch fix in lib/supabase.tsx: a stalled
-// Supabase request rejects within a short bound (never hangs indefinitely
-// on device), preserves request contents exactly, and — critically —
-// rejects with an AbortError-shaped error so postgrest-js's own internal
-// retry logic doesn't silently multiply the wait. Also proves the two
-// concrete screens this fixes (Nutrition, Workout) genuinely cannot be
-// left in a permanent loading state once this fix is in place, using the
-// SAME plain supabase.from(...) / service calls those screens make,
-// against real local Postgres with a stalled fetch injected.
+// Supabase request rejects within a bound (never hangs indefinitely on
+// device), preserves request contents exactly, and — critically — rejects
+// with an AbortError-shaped error so postgrest-js's own internal retry
+// logic doesn't silently multiply the wait. Also proves the two concrete
+// screens this fixes (Nutrition, Workout) genuinely cannot be left in a
+// permanent loading state once this fix is in place, using the SAME plain
+// supabase.from(...) / service calls those screens make, against real
+// local Postgres with a stalled fetch injected.
+//
+// The bound is NOT uniform: auth/v1/* (token refresh) gets a looser
+// ceiling than DB/RPC — aborting a token refresh mid-flight is how the
+// server ends up having rotated the refresh token while the client never
+// saw the new one, which then signs the user out (the iOS "keeps logging
+// me out" bug). timeoutForLabel is asserted directly below.
 import { register } from 'node:module';
 
 process.env.EXPO_PUBLIC_SUPABASE_URL = 'http://127.0.0.1:54321';
@@ -21,7 +27,15 @@ register('../../scripts/alias-loader.mjs', import.meta.url);
 
 const { test, describe, after } = await import('node:test');
 const assert = (await import('node:assert/strict')).default;
-const { supabase, createBoundedFetch, requestLabel, SUPABASE_REQUEST_TIMEOUT_MS } = await import('../supabase.tsx');
+const {
+  supabase,
+  createBoundedFetch,
+  requestLabel,
+  timeoutForLabel,
+  SUPABASE_REQUEST_TIMEOUT_MS,
+  SUPABASE_STORAGE_TIMEOUT_MS,
+  SUPABASE_AUTH_TIMEOUT_MS,
+} = await import('../supabase.tsx');
 
 const TEST_USER_ID = '99999999-0000-0000-0000-000000000001';
 const realFetch = globalThis.fetch;
@@ -32,6 +46,25 @@ describe('requestLabel', () => {
     assert.equal(requestLabel('https://x.supabase.co/rest/v1/meals?select=id&user_id=eq.abc-123'), 'rest/v1/meals');
     assert.equal(requestLabel('https://x.supabase.co/auth/v1/token?grant_type=refresh_token'), 'auth/v1/token');
     assert.equal(requestLabel('https://x.supabase.co/storage/v1/object/avatars/foo.jpg'), 'storage/v1/object');
+  });
+});
+
+describe('timeoutForLabel — the production label → request-timeout mapping', () => {
+  test('auth/* gets a deliberately LOOSER ceiling than DB/RPC — a mid-flight abort of a token refresh is what signs iOS users out', () => {
+    assert.equal(timeoutForLabel('auth/v1/token'), SUPABASE_AUTH_TIMEOUT_MS);
+    assert.ok(
+      SUPABASE_AUTH_TIMEOUT_MS > SUPABASE_REQUEST_TIMEOUT_MS,
+      'auth bound must exceed the DB/RPC bound',
+    );
+    // must still be under gotrue-js's own retry-loop window (AUTO_REFRESH_TICK_DURATION_MS = 30s)
+    assert.ok(SUPABASE_AUTH_TIMEOUT_MS < 30_000, 'auth bound must stay under the 30s auto-refresh tick');
+  });
+  test('storage/* keeps the longer upload bound', () => {
+    assert.equal(timeoutForLabel('storage/v1/object'), SUPABASE_STORAGE_TIMEOUT_MS);
+  });
+  test('everything else gets the default DB/RPC bound', () => {
+    assert.equal(timeoutForLabel('rest/v1/meals'), SUPABASE_REQUEST_TIMEOUT_MS);
+    assert.equal(timeoutForLabel('rpc/whatever'), SUPABASE_REQUEST_TIMEOUT_MS);
   });
 });
 
@@ -65,7 +98,7 @@ describe('createBoundedFetch — unit tests (short custom timeouts, no real 10s 
     }
   });
 
-  test('D. auth-path requests are bounded identically (no special-casing that would break auth)', async () => {
+  test('D. a stalled auth request still cannot hang forever (it is bounded, just by a looser ceiling — see timeoutForLabel below)', async () => {
     globalThis.fetch = (async () => new Promise(() => {})) as any;
     const bounded = createBoundedFetch(() => 150);
     const start = Date.now();

@@ -1,4 +1,5 @@
 import 'react-native-url-polyfill/auto';
+import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 
@@ -22,14 +23,30 @@ const supabaseAnonKey =
 // bottom out). This is the single shared fix for both — no per-screen
 // timeout wrapper exists or should exist elsewhere.
 //
-// Normal DB/RPC/auth requests get SUPABASE_REQUEST_TIMEOUT_MS. Storage is
-// the one identified exception (§9) — a real photo upload
-// (app/(tabs)/profile.tsx's avatar upload) can legitimately take longer
-// than that on a slow connection and has no safe "curated fallback"
-// substitute the way a DB read does, so it gets a longer, separately-named
-// bound instead of weakening the bound everyone else relies on.
+// Normal DB/RPC requests get SUPABASE_REQUEST_TIMEOUT_MS. Storage and auth
+// are the two identified exceptions.
+//
+// Storage (§9) — a real photo upload (app/(tabs)/profile.tsx's avatar
+// upload) can legitimately take longer than that on a slow connection and
+// has no safe "curated fallback" substitute the way a DB read does.
+//
+// Auth (auth/v1/*) — the iOS "keeps logging me out" bug. A token refresh
+// (POST auth/v1/token?grant_type=refresh_token) that stalls past a short
+// bound and gets aborted mid-flight can leave the SERVER having already
+// rotated the refresh token while the client never persisted the new one;
+// gotrue-js then retries with the now-consumed token, the server answers
+// `refresh_token_not_found` (a NON-retryable AuthApiError), and gotrue-js
+// calls _removeSession() → emits SIGNED_OUT → app/_layout.tsx bounces the
+// user to /login. On iOS the refresh very often runs right after foreground
+// on a cold radio, exactly when a 10s ceiling is too tight. gotrue-js
+// already bounds its OWN retry loop to AUTO_REFRESH_TICK_DURATION_MS (30s)
+// and backs off between attempts, so a looser single-request ceiling here
+// is safe — it just gives a slow-but-successful refresh room to land — while
+// still capping a genuinely dead connection (the "endless loading" class of
+// bug this whole file exists for).
 export const SUPABASE_REQUEST_TIMEOUT_MS = 10_000;
 export const SUPABASE_STORAGE_TIMEOUT_MS = 30_000;
+export const SUPABASE_AUTH_TIMEOUT_MS = 20_000;
 
 /** A short, non-identifying label for diagnostics — request path only
  *  (e.g. "rest/v1/meals", "auth/v1/token"), never the query string (row
@@ -89,9 +106,17 @@ export function createBoundedFetch(getTimeoutMs: (label: string) => number): typ
   };
 }
 
-const boundedFetch = createBoundedFetch(label =>
-  label.startsWith('storage/') ? SUPABASE_STORAGE_TIMEOUT_MS : SUPABASE_REQUEST_TIMEOUT_MS,
-);
+/** The production label → request-timeout mapping. `storage/` and `auth/`
+ *  are the deliberate exceptions to the default DB/RPC bound — see the
+ *  SUPABASE_*_TIMEOUT_MS comment above. Exported so a test can assert the
+ *  mapping directly without a real multi-second wait. */
+export function timeoutForLabel(label: string): number {
+  if (label.startsWith('storage/')) return SUPABASE_STORAGE_TIMEOUT_MS;
+  if (label.startsWith('auth/')) return SUPABASE_AUTH_TIMEOUT_MS;
+  return SUPABASE_REQUEST_TIMEOUT_MS;
+}
+
+const boundedFetch = createBoundedFetch(timeoutForLabel);
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
@@ -115,3 +140,25 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     fetch: boundedFetch,
   },
 });
+
+// LANA iOS — drive the background token refresh from app foreground state
+// (2026-09). This is Supabase's documented React-Native requirement. Without
+// it, gotrue-js's own auto-refresh ticker keeps firing every 30s while the
+// app is backgrounded / the JS runtime is suspended by iOS, so the first
+// tick after a resume runs on a cold radio and is the one most likely to
+// stall — which (see SUPABASE_AUTH_TIMEOUT_MS above) is how a refresh-token
+// rotation gets half-applied and the user is signed out. Pausing the ticker
+// while backgrounded and running a single clean refresh on `active` (in the
+// foreground, with ~90s / 3 ticks of runway before the access token truly
+// expires) removes that cold-resume race.
+AppState.addEventListener('change', (state) => {
+  if (state === 'active') {
+    supabase.auth.startAutoRefresh();
+  } else {
+    supabase.auth.stopAutoRefresh();
+  }
+});
+// AppState only emits on transitions — prime it for the launch state.
+if (AppState.currentState === 'active') {
+  supabase.auth.startAutoRefresh();
+}
