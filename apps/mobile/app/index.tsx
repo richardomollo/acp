@@ -7,9 +7,14 @@ import { getPostAuthDestination } from '@/lib/onboarding-auth';
 import { WALKTHROUGH_KEY } from './walkthrough';
 import { palette } from '@/constants/theme';
 
-// TEMP: forces the walkthrough to show on every launch while we're
-// iterating on its redesign today. Set back to false when done.
-const FORCE_WALKTHROUGH = true;
+// TEMP flag for iterating on the walkthrough redesign — forces it to show on
+// every cold launch, which also means every launch dead-ends at /login
+// (walkthrough.tsx's `finish()` unconditionally routes there, session or
+// not) regardless of whether the user is already signed in. Left on in a
+// build shipped to TestFlight, this reads exactly like "the app keeps
+// logging me out" even though no sign-out ever happens. Off by default now;
+// flip to true only for local walkthrough-design iteration, never commit it on.
+const FORCE_WALKTHROUGH = false;
 
 // Root Layout mount race — imperative router.replace() inside a useEffect
 // can fire before Expo Router's root navigator has actually finished
