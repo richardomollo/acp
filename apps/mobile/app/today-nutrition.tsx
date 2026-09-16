@@ -1,9 +1,10 @@
 import {
   StyleSheet, View, ScrollView, TouchableOpacity, Image,
-  ActivityIndicator, Alert,
+  ActivityIndicator, Alert, TextInput,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ThemedText } from '@/components/themed-text';
+import { Button } from '@/components/ui/Button';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { palette, radii, fontSize } from '@/constants/theme';
 import { useState, useCallback, useEffect, useRef } from 'react';
@@ -11,7 +12,6 @@ import { supabase } from '@/lib/supabase';
 import { authService } from '@/services/auth';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { isValidAssessment, sortSupportOpportunities, type AIAssessment } from '@/lib/ai-assessment';
 import { matchProfessionalProviders, resolveProfessionalSupportAvailability, type ProviderMatch, type ProfessionalSupportAvailability } from '@/lib/professional-support';
 import { getEligiblePersonalTrainerIds } from '@/services/professional-eligibility-service';
 import { useMarketplaceLocation } from '@/contexts/marketplace-location-context';
@@ -19,26 +19,28 @@ import { ProfessionalSupportUnavailableNotice } from '@/components/marketplace/m
 import { AdaptiveTodayMeals } from '@/components/nutrition/adaptive-today-meals';
 import { isAdaptiveNutritionEnabled } from '@/lib/flags';
 import { selectDailyMeals } from '@/lib/nutrition-matching';
-import { getMealCandidates } from '@/lib/meal-ranking';
+import { getMealCandidates, type ReasonCode } from '@/lib/meal-ranking';
+import { recipeService } from '@/services/recipe-service';
+import { slotsForRecipeCategory, mealRowFromRecipe, classifySuggestionSource, isSuggestionEligible, type SuggestionSource } from '@/lib/nutrition/recipe-model';
 import { validateGoalDirection } from '@/lib/onboarding-validation';
 import { localISODate } from '@/lib/fulfilment';
 import { foodLogService } from '@/services/food-log-service';
 import type { FoodLogEntry, DailyNutritionSummary } from '@/lib/nutrition/food-types';
 import { summariseDay, type DayNutrition } from '@/lib/nutrition/nutrition-history';
 import { buildNutritionPatterns, type NutritionPatternEvidence } from '@/lib/nutrition/nutrition-patterns';
-import { KEY_NUTRIENTS } from '@/lib/nutrition/nutrient-display';
-import { NutrientList } from '@/components/nutrition/nutrient-list';
-import { ObservedPanel, DayEnergyStrip } from '@/components/nutrition/nutrition-observed';
+import { ObservedPanel, DayProteinStrip } from '@/components/nutrition/nutrition-observed';
 // "Your nutrition references" section hidden per product decision (2026-09-04) — see render site below.
 // import { NutritionReferenceSection } from '@/components/nutrition/nutrition-references';
 import { nutritionReferenceService } from '@/services/nutrition-reference-service';
 import { buildNutritionReferenceComparisons, type UserReferenceContext, type NutritionReferenceComparison } from '@/lib/nutrition/nutrition-reference-engine';
+import { resolveDailyMacroTargets, macroProgressFraction, formatMacroWithTarget, type MacroTargetRange } from '@/lib/nutrition/daily-macro-targets';
 import { NutritionCoachingSection } from '@/components/nutrition/nutrition-coaching-section';
 import { getNutritionCoaching } from '@/lib/nutrition/nutrition-coaching';
 import type { CoachingValidationResult } from '@/lib/nutrition/nutrition-coaching-safety';
-import { isNutritionSavedMealsEnabled, isManualFoodLoggingEnabled } from '@/lib/flags';
+import { isNutritionSavedMealsEnabled, isManualFoodLoggingEnabled, isNutritionPlanningEnabled } from '@/lib/flags';
+import { nutritionPlanningService, type PlannedMealRow } from '@/services/nutrition-planning-service';
 import { prefillFromEntries } from '@/lib/nutrition/saved-meal';
-import { followMealKey, followMealGroupId, FOLLOWED_MEAL_CAPTURE_METHOD, FOLLOWED_MEAL_SOURCE_TYPE } from '@/lib/nutrition/followed-meal';
+import { followMealKey, followMealGroupId, FOLLOWED_MEAL_CAPTURE_METHOD } from '@/lib/nutrition/followed-meal';
 import { NutritionActivityContext } from '@/components/nutrition/nutrition-activity-context';
 import { nutritionFitnessContextService } from '@/services/nutrition-fitness-context-service';
 import type { CrossDomainNutritionObservation } from '@/lib/nutrition/nutrition-fitness-context';
@@ -60,6 +62,22 @@ interface TodayMealItem {
   fat_g: number;
   fibre_g: number | null;
   prep_time_minutes: number | null;
+  /** Recipes V1 (§12/§14) — set only when this suggestion is a canonical
+   *  KFCT recipe candidate; carries the real foodId so "View recipe" and
+   *  the ✓ toggle route through the SAME evidence a normal food-search log
+   *  would produce (§9/§22), never a second calculation. `null` for a
+   *  legacy `meals`-sourced suggestion or a real meal-plan item. */
+  recipeFoodId?: string | null;
+  /** §20/§21/§24 — whether this suggestion resolves to a canonical, openable
+   *  recipe. Only set for SUGGESTED (isSuggested) items, never a real
+   *  meal-plan row (those aren't suggestions and carry no such claim
+   *  either way). Drives the card's "verified recipe" badge/CTA so a
+   *  fallback suggestion is never presented as equivalent to a real recipe. */
+  suggestionSource?: SuggestionSource;
+  /** Simple UX Redesign V1 — the deterministic reason codes behind this
+   *  suggestion (already computed by getMealCandidates); used only to write
+   *  one factual line under "Lana suggests" on the redesigned Today page. */
+  reasons?: ReasonCode[];
 }
 
 const SLOT_ORDER: TodayMealItem['slot'][] = ['breakfast', 'lunch', 'dinner', 'snack', 'smoothie'];
@@ -69,14 +87,70 @@ const SLOT_LABEL: Record<string, string> = {
 
 const GRID_GAP = 14;
 
-// Nutrition N2 — factual logged total for one macro. NOT "X / Y": ACP has no
-// validated personalised nutrition target engine (N2 §6), so nothing is shown
-// as a goal/denominator.
-function MacroStat({ label, value, unit }: { label: string; value: number; unit: string }) {
+// Simple UX Redesign V1 — one factual, evidence-grounded line for the "Lana
+// suggests" card. Fixed text per deterministic reason code (never an LLM,
+// never invented) — the SAME codes getMealCandidates already computes;
+// this only decides which fixed sentence to show, first-match-wins in a
+// stable priority order.
+const REASON_TEXT: Record<ReasonCode, string> = {
+  high_protein: 'A protein-rich option for today.',
+  high_fibre: 'A fibre-rich option for today.',
+  balanced_meal: 'A balanced option that fits your day.',
+  goal_supportive: 'Fits your current nutrition goal.',
+  preferred_cuisine: 'Matches your cuisine preference.',
+};
+const REASON_PRIORITY: ReasonCode[] = ['high_protein', 'high_fibre', 'balanced_meal', 'goal_supportive', 'preferred_cuisine'];
+function suggestionReasonText(reasons: ReasonCode[] | undefined): string {
+  const hit = REASON_PRIORITY.find(r => reasons?.includes(r));
+  return hit ? REASON_TEXT[hit] : 'A recipe from the verified Kenya Food Composition Tables catalogue.';
+}
+
+// Daily Macro Targets V1 — factual logged total for one macro, optionally
+// compared against Lana's existing N3 reference range (see
+// lib/nutrition/daily-macro-targets.ts for why only protein can ever carry
+// one today). No target → the plain consumed-only form, unchanged from
+// before. A target → "consumed / min–maxg" + a thin reference bar, capped
+// at 100% (§16/§17 — exceeding it is not an error state, never styled red).
+function MacroStat({ label, value, unit, target }: { label: string; value: number; unit: string; target?: MacroTargetRange | null }) {
+  const pct = macroProgressFraction(value, target ?? null);
   return (
     <View style={s.macroCol}>
-      <ThemedText style={s.macroValue}>{Math.round(value)}<ThemedText style={s.macroUnit}> {unit}</ThemedText></ThemedText>
+      <ThemedText style={s.macroValue}>{formatMacroWithTarget(value, target ?? null, '')}<ThemedText style={s.macroUnit}> {unit}</ThemedText></ThemedText>
       <ThemedText style={s.macroLabel}>{label}</ThemedText>
+      {pct != null && (
+        <View style={s.macroBarTrack}>
+          <View style={[s.macroBarFill, { width: `${pct * 100}%` }]} />
+        </View>
+      )}
+    </View>
+  );
+}
+
+/**
+ * A clearer, dedicated "today's protein vs target" graph — a wider bar than
+ * MacroStat's thin inline line, with tick marks at the target range's min
+ * and max so the range itself is legible, not just implied by a fill
+ * percentage. Shown only when a real target exists (never fabricated); the
+ * consumed fill is never visually clipped even past the max tick — it just
+ * keeps growing across the track, so an over-target day is still shown
+ * honestly rather than looking identical to "exactly at target" (§16/§17).
+ */
+function TodayTargetGraph({ label, value, unit, target }: { label: string; value: number; unit: string; target: MacroTargetRange }) {
+  const scale = Math.max(target.max, value) * 1.05; // small headroom so a max/over-target fill never touches the track's edge
+  const fillPct = Math.min(100, (value / scale) * 100);
+  const minPct = (target.min / scale) * 100;
+  const maxPct = (target.max / scale) * 100;
+  return (
+    <View style={s.targetGraph}>
+      <View style={s.targetGraphHeader}>
+        <ThemedText style={s.targetGraphLabel}>{label}</ThemedText>
+        <ThemedText style={s.targetGraphValue}>{formatMacroWithTarget(value, target, unit)}</ThemedText>
+      </View>
+      <View style={s.targetGraphTrack}>
+        <View style={[s.targetGraphFill, { width: `${fillPct}%` }]} />
+        <View style={[s.targetGraphTick, { left: `${minPct}%` }]} />
+        <View style={[s.targetGraphTick, { left: `${maxPct}%` }]} />
+      </View>
     </View>
   );
 }
@@ -91,12 +165,18 @@ export default function TodayNutritionScreen() {
   // Nutrition N1 — the actual food log (source of truth for consumed intake),
   // kept entirely separate from the planned-meal list / eaten toggle above.
   const [foodLog, setFoodLog] = useState<FoodLogEntry[]>([]);
+  // §29 — inline quantity edit for a logged entry. One row editable at a
+  // time; the existing foodLogService.updateFoodLogQuantity does the actual
+  // re-resolve + re-freeze from the canonical food (never a manual field
+  // patch) — this is only the UI entry point that was missing.
+  const [editingLogId, setEditingLogId] = useState<string | null>(null);
+  const [editQuantityValue, setEditQuantityValue] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
   const [foodTotals, setFoodTotals] = useState<DailyNutritionSummary | null>(null);
   // Nutrition N2 — today's per-nutrient completeness + recent-day evidence.
   const [todayDay, setTodayDay] = useState<DayNutrition | null>(null);
   const [recentDays, setRecentDays] = useState<DayNutrition[]>([]);
   const [patterns, setPatterns] = useState<NutritionPatternEvidence | null>(null);
-  const [showAllNutrients, setShowAllNutrients] = useState(false);
   // Nutrition N3 — reference comparison (deterministic, non-coaching).
   const [refContext, setRefContext] = useState<UserReferenceContext | null>(null);
   const [refComparisons, setRefComparisons] = useState<NutritionReferenceComparison[] | null>(null);
@@ -107,8 +187,13 @@ export default function TodayNutritionScreen() {
   // Nutrition N8 — deterministic advice-effectiveness ("What's changed").
   const [n8Observations, setN8Observations] = useState<NutritionAdviceEffectiveness[]>([]);
   const [loading, setLoading] = useState(true);
-  const [assessment, setAssessment] = useState<AIAssessment | null>(null);
   const [supportExpanded, setSupportExpanded] = useState(false);
+  // Monthly → Weekly → Daily Planning V1 (flagged, off by default — §60).
+  // Independent of everything above: today's PLANNED meals (from
+  // nutrition_planned_meals), keyed by slot, merged into the existing
+  // "what I ate" diary per §47's own merged-mental-model decision.
+  const [plannedMealsBySlot, setPlannedMealsBySlot] = useState<Partial<Record<'breakfast' | 'lunch' | 'dinner' | 'snack', PlannedMealRow>>>({});
+  const [weeklyObjective, setWeeklyObjective] = useState<string | null>(null);
   const [supportLoading, setSupportLoading] = useState(false);
   const [supportMatches, setSupportMatches] = useState<ProviderMatch[] | null>(null);
   // Beta Feedback #019E — WHY the list is empty (geography vs. error vs.
@@ -143,24 +228,16 @@ export default function TodayNutritionScreen() {
       try {
       const session = await authService.getSession();
       if (!session?.user.id) {
-        if (active) { setUserId(null); setItems([]); setAssessment(null); }
+        if (active) { setUserId(null); setItems([]); }
         return;
       }
       if (active) setUserId(session.user.id);
 
-      // "Want extra support?" — same gating as My Plan: only shown when ACP
-      // Intelligence's current assessment actually names a nutrition support
-      // opportunity, never a generic always-on ad, and never coupled to
-      // whether today's meals loaded successfully.
       const { data: profileData } = await supabase
         .from('fitness_profile')
-        .select('ai_assessment, goal, cuisine_preferences, starting_weight_kg, goal_weight_kg')
+        .select('goal, cuisine_preferences, starting_weight_kg, goal_weight_kg')
         .eq('user_id', session.user.id)
         .maybeSingle();
-      const validAssessment = profileData?.ai_assessment && isValidAssessment(profileData.ai_assessment)
-        ? profileData.ai_assessment
-        : null;
-      if (active) setAssessment(validAssessment);
       const goal = profileData?.goal ?? null;
       const cuisinePreferences = profileData?.cuisine_preferences ?? [];
       // LH-39 — the scale direction the user's own current-vs-goal weight
@@ -334,22 +411,69 @@ export default function TodayNutritionScreen() {
         // same way — never Math.random()), applied only among the top-ranked
         // ties so a stronger candidate can never lose to a weaker one.
         const categories = ['breakfast', 'lunch', 'dinner'] as const;
-        const categoryResults = await Promise.all(
-          categories.map(category =>
-            supabase.from('meals')
-              .select('id, name, image_url, calories, protein_g, carbs_g, fat_g, fibre_g, prep_time_minutes, category, cuisine, tags')
-              .eq('is_active', true)
-              .eq('category', category)
-              .limit(20),
-          ),
-        );
+        // Suggested Meals V1 recipe-only policy — every user-facing
+        // suggestion must be recipe_backed (fallback_no_recipe and
+        // superseded are INELIGIBLE, never merely relabelled). The legacy
+        // `meals` catalogue is therefore no longer queried here at all —
+        // its data/table is untouched (requirement 1), it simply never
+        // becomes a Suggested Meal candidate. Legacy meal-plan rows and
+        // meal-detail routes elsewhere in the app are completely unaffected.
+        const recipeCandidates = await recipeService.listActiveForSuggestions().catch(() => []);
         interface SuggestedMealRow {
           id: string; name: string; image_url: string | null; category: string;
           calories: number | null; protein_g: number | null; carbs_g: number | null; fat_g: number | null;
           fibre_g: number | null; prep_time_minutes: number | null; cuisine: string; tags: string[] | null;
+          /** Recipes V1 — set only for a canonical-recipe candidate; routes
+           *  "View recipe" / the ✓ toggle through the real food_id, never a
+           *  second calculation (§9/§22). */
+          recipeFoodId?: string | null;
+          /** Simple UX Redesign V1 — the SAME deterministic reason codes
+           *  getMealCandidates already computes (lib/meal-ranking.ts), never
+           *  surfaced in the UI before now. Used only to write one factual,
+           *  evidence-grounded line under "Lana suggests" — never a new
+           *  ranking/explanation system. */
+          reasons?: ReasonCode[];
         }
-        const mealsBySlot = categories.map((category, i) => {
-          const rows = (categoryResults[i].data ?? []) as SuggestedMealRow[];
+        // Suggested Meals V1 recipe-only policy — eligibility is filtered
+        // BEFORE ranking (requirement 5), never inside getMealCandidates
+        // (the deterministic ranker itself is unchanged, requirement 4).
+        // Only recipe_backed candidates are ever built here: a legacy
+        // `meals` row (fallback_no_recipe) or a superseded one never enters
+        // `rows`, so they can never win the ranking, never reach
+        // `dailySelections`, and never render as a Suggested Meal.
+        const mealsBySlot = categories.map((category) => {
+          // §22 — reuse the ONE tested adapter into the live ranker
+          // (lib/nutrition/recipe-model.ts's mealRowFromRecipe) rather than
+          // re-deriving the same per-100g→MealRow mapping here; only the
+          // screen-display-only fields (image, prep time, the real foodId
+          // for routing) are added on top, never re-computed.
+          const rows: SuggestedMealRow[] = recipeCandidates
+            .filter(({ recipe }) => slotsForRecipeCategory(recipe.category).includes(category))
+            .map(({ food, recipe }) => {
+              const row = mealRowFromRecipe(food, recipe, category);
+              return {
+                id: row.id,
+                name: row.name,
+                image_url: null, // §5 — no fake food imagery when no real, licensed image exists
+                category,
+                calories: row.calories,
+                protein_g: row.protein_g,
+                carbs_g: row.carbs_g,
+                fat_g: row.fat_g,
+                fibre_g: row.fibre_g,
+                prep_time_minutes: null,
+                cuisine: row.cuisine,
+                tags: row.tags,
+                recipeFoodId: food.id,
+              };
+            })
+            // requirement 5 — eligibility filtered explicitly, BEFORE
+            // getMealCandidates ever runs. Every row here already has a
+            // real recipeFoodId by construction (only recipe candidates are
+            // mapped above), so this is a defense-in-depth assertion of the
+            // recipe-only policy, not currently a no-op-vs-active
+            // distinction — see isSuggestionEligible's own doc comment.
+            .filter(row => isSuggestionEligible(classifySuggestionSource({ recipeFoodId: row.recipeFoodId, isActive: true })));
           const candidates = getMealCandidates({
             meals: rows.map(r => ({
               id: r.id, name: r.name, category: r.category, cuisine: r.cuisine, tags: r.tags ?? [],
@@ -360,7 +484,18 @@ export default function TodayNutritionScreen() {
           });
           const topScore = candidates[0]?.scoring.overall;
           const tiedTopIds = new Set(candidates.filter(c => c.scoring.overall === topScore).map(c => c.mealId));
-          return { category, foods: rows.filter(r => tiedTopIds.has(r.id)) };
+          const reasonsById = new Map(candidates.map(c => [c.mealId, c.reasons]));
+          // requirement 10 — a slot with zero eligible recipe candidates
+          // produces an EMPTY `foods` array here; selectDailyMeals already
+          // omits an empty slot entirely ("empty slot — omitted, never
+          // substituted from another slot") rather than substituting
+          // anything, so this naturally falls through to the existing
+          // honest "No planned meals for today." state when nothing
+          // survives across all three slots — no new empty-state UI needed.
+          return {
+            category,
+            foods: rows.filter(r => tiedTopIds.has(r.id)).map(r => ({ ...r, reasons: reasonsById.get(r.id) })),
+          };
         });
         const dailySelections = selectDailyMeals(session.user.id, todayLocal, mealsBySlot);
         const suggested: TodayMealItem[] = dailySelections.map(({ category, food: meal }) => ({
@@ -375,6 +510,20 @@ export default function TodayNutritionScreen() {
           fat_g: meal.fat_g ?? 0,
           fibre_g: meal.fibre_g ?? null,
           prep_time_minutes: meal.prep_time_minutes,
+          recipeFoodId: (meal as SuggestedMealRow).recipeFoodId ?? null,
+          // Suggested Meals V1 recipe-only policy — `mealsBySlot` above is
+          // built exclusively from recipeService.listActiveForSuggestions()
+          // rows, so every item reaching `suggested` always has a real
+          // recipeFoodId and classifies as 'recipe_backed'. Kept as a real
+          // (not hardcoded) classification call — a defensive invariant: if
+          // a future change ever reintroduces a non-recipe candidate here,
+          // this immediately reports 'fallback_no_recipe'/'superseded'
+          // instead of silently mislabelling it 'recipe_backed'.
+          suggestionSource: classifySuggestionSource({
+            recipeFoodId: (meal as SuggestedMealRow).recipeFoodId ?? null,
+            isActive: true,
+          }),
+          reasons: (meal as SuggestedMealRow).reasons,
         }));
         if (!active) return;
         setItems(suggested);
@@ -427,6 +576,32 @@ export default function TodayNutritionScreen() {
     }
   }, [userId, refContext]);
 
+  // Monthly → Weekly → Daily Planning V1 (flagged, §60) — Today's execution
+  // surface. Establishes the user's first cycle/week on first load
+  // (§51 — no forced onboarding, reuses existing profile evidence only),
+  // then reads today's already-generated planned meals. Never creates
+  // nutrition evidence itself (§23) — purely a read + the one-time
+  // idempotent generation nutritionPlanningService already guards.
+  const reloadPlannedMeals = useCallback(async () => {
+    if (!userId || !isNutritionPlanningEnabled()) return;
+    try {
+      const plan = await nutritionPlanningService.ensureFirstCycle(userId);
+      setWeeklyObjective(plan.week.objective);
+      const today = localISODate(new Date());
+      const rows = await nutritionPlanningService.getTodayPlannedMeals(userId, today);
+      const bySlot: Partial<Record<'breakfast' | 'lunch' | 'dinner' | 'snack', PlannedMealRow>> = {};
+      for (const r of rows) bySlot[r.mealSlot as 'breakfast' | 'lunch' | 'dinner' | 'snack'] = r;
+      setPlannedMealsBySlot(bySlot);
+    } catch {
+      // Fails safe — Today's actual food log/diary is completely unaffected
+      // either way (§14/§34 — a planning failure never breaks Nutrition).
+      setWeeklyObjective(null);
+      setPlannedMealsBySlot({});
+    }
+  }, [userId]);
+
+  useEffect(() => { reloadPlannedMeals(); }, [reloadPlannedMeals]);
+
   // Tapping ✓ on a SUGGESTED or PLANNED meal = "I actually ate this" → a real
   // consumption record (food_log_entries, the meal's own curated macros frozen
   // verbatim). SUGGESTED alone never counts. Reversible, idempotent, local-date
@@ -463,6 +638,26 @@ export default function TodayNutritionScreen() {
         if (!isSuggested) {
           await supabase.from('meal_logs').delete()
             .eq('user_id', userId).eq('meal_plan_item_id', item.id).eq('log_date', localDate);
+        }
+      } else if (item.recipeFoodId) {
+        // Recipes V1 §9/§22 — the ✓ toggle for a canonical-recipe suggestion
+        // logs through the REAL foodId (100g — the reference portion shown
+        // on the card), the exact same deterministic path Recipe Detail's
+        // "Add to today" and normal food search use. Never the macro-copy
+        // path below, which would be an independent calculation.
+        const logGroupId = followMealGroupId(userId, followKey, localDate);
+        const { data: existing } = await supabase
+          .from('food_log_entries').select('id').eq('user_id', userId).eq('log_group_id', logGroupId).limit(1);
+        if (!(existing as any[])?.length) {
+          await foodLogService.logFood(userId, {
+            foodId: item.recipeFoodId,
+            displayName: item.name,
+            quantity: 100,
+            unit: 'g',
+            mealSlot: item.slot === 'breakfast' || item.slot === 'lunch' || item.slot === 'dinner' || item.slot === 'snack' ? item.slot : null,
+            captureMethod: FOLLOWED_MEAL_CAPTURE_METHOD,
+            logGroupId,
+          }, now);
         }
       } else {
         await foodLogService.markMealFollowed(userId, {
@@ -552,16 +747,6 @@ export default function TodayNutritionScreen() {
     }
   };
 
-  // "Planned" = the sum of today's plan/suggested meals. Nutrition N0 found
-  // this was mislabelled "goal" — it is NOT a nutrition target (no TDEE/macro
-  // engine exists). It stays a reference only.
-  const planned = items.reduce((acc, i) => ({
-    calories: acc.calories + i.calories,
-    protein: acc.protein + i.protein_g,
-    carbs: acc.carbs + i.carbs_g,
-    fat: acc.fat + i.fat_g,
-  }), { calories: 0, protein: 0, carbs: 0, fat: 0 });
-
   // "Logged" = what the user actually ate, from food_log_entries (Nutrition
   // N1). This now includes suggested/planned meals the user explicitly
   // ✓-followed (a real consumption row with the meal's frozen macros) — never
@@ -575,17 +760,26 @@ export default function TodayNutritionScreen() {
 
   // Followed-meal rows are shown by the checked ✓ meal card (with its kcal),
   // not as separate deletable log lines — excluded here, still counted above.
-  const manualFoodLog = foodLog.filter(
-    e => !(e.foodId == null
-      && e.captureMethod === FOLLOWED_MEAL_CAPTURE_METHOD
-      && e.sourceType === FOLLOWED_MEAL_SOURCE_TYPE),
-  );
+  // capture_method='plan' alone is the signal (matches
+  // foodLogService.getFollowedMealGroupIds — Recipes V1 widened this the
+  // same way): a followed LEGACY meal has foodId null + sourceType
+  // 'acp_curated', but a followed CANONICAL RECIPE logs via its real
+  // foodId, so sourceType is truthfully the food's own (e.g.
+  // 'trusted_food_database' for KFCT) — checking sourceType here would
+  // have let a followed recipe appear twice (as its ✓ card AND as a
+  // "logged today" line).
+  const manualFoodLog = foodLog.filter(e => e.captureMethod !== FOLLOWED_MEAL_CAPTURE_METHOD);
 
+  // Simple UX Redesign V1 (§9/§10) — the meal diary. The 4 canonical slots
+  // ALWAYS render (even with 0 entries — an empty slot is still an
+  // actionable "+ Add {slot}" row, never hidden); "other" (a log with no
+  // slot) only renders when it actually has entries, since it isn't a real
+  // slot a user can "add to".
+  const CANONICAL_SLOTS = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
   const foodLogBySlot: { slot: 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'other'; entries: FoodLogEntry[] }[] = [
-    ...(['breakfast', 'lunch', 'dinner', 'snack'] as const)
-      .map(slot => ({ slot, entries: manualFoodLog.filter(e => e.mealSlot === slot) })),
+    ...CANONICAL_SLOTS.map(slot => ({ slot, entries: manualFoodLog.filter(e => e.mealSlot === slot) })),
     { slot: 'other' as const, entries: manualFoodLog.filter(e => !e.mealSlot) },
-  ].filter(g => g.entries.length > 0);
+  ].filter(g => g.slot !== 'other' || g.entries.length > 0);
 
   const deleteEntry = async (id: string) => {
     setFoodLog(prev => prev.filter(e => e.id !== id));
@@ -597,13 +791,63 @@ export default function TodayNutritionScreen() {
       await reloadNutrition();
     }
   };
+
+  const startEditEntry = (e: FoodLogEntry) => {
+    setEditingLogId(e.id);
+    setEditQuantityValue(String(e.quantity));
+  };
+
+  // §29 — quantity change recalculates the ENTIRE frozen snapshot from the
+  // canonical food (foodLogService.updateFoodLogQuantity), never a manual
+  // patch of individual nutrient fields. A homemade/user-provided entry has
+  // no canonical food to re-scale from; the service itself refuses that case
+  // (throws), surfaced here as an honest error rather than a silent no-op.
+  const saveEditEntry = async (e: FoodLogEntry) => {
+    const q = Number(editQuantityValue);
+    if (!Number.isFinite(q) || q <= 0) {
+      Alert.alert('Enter a valid amount', 'Amount must be a number greater than 0.');
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      await foodLogService.updateFoodLogQuantity(e.id, q, e.unit, e.servingLabel);
+      setEditingLogId(null);
+      await reloadNutrition(); // §17 — Today reflects the new snapshot immediately, no reload/navigation needed
+    } catch (err) {
+      Alert.alert('Could not update this entry', err instanceof Error ? err.message : 'Please try again.');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+  // Monthly → Weekly → Daily Planning V1 — "Log this": logs the planned
+  // recipe at its planned grams through the SAME canonical logFood path
+  // (nutritionPlanningService.logPlannedMeal -> foodLogService.logFood).
+  // Idempotent (a repeated tap on an already-consumed slot is a no-op).
+  const [loggingPlannedSlot, setLoggingPlannedSlot] = useState<string | null>(null);
+  const logPlanned = async (planned: PlannedMealRow) => {
+    if (!userId || loggingPlannedSlot) return;
+    setLoggingPlannedSlot(planned.id);
+    try {
+      await nutritionPlanningService.logPlannedMeal(userId, planned);
+      await Promise.all([reloadNutrition(), reloadPlannedMeals()]);
+    } catch {
+      Alert.alert('Could not log this meal', 'Please try again.');
+    } finally {
+      setLoggingPlannedSlot(null);
+    }
+  };
+
   const todayLabel = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
 
-  const orderedItems = SLOT_ORDER.flatMap(slot => items.filter(i => i.slot === slot));
+  // Daily Macro Targets V1 — derive-on-read from the SAME refContext already
+  // resolved once per load for N3 (no new fetch, §31). §19 — this recomputes
+  // on every render from current profile state, so a weight/DOB change is
+  // reflected the next time Today loads; nothing here is persisted or cached
+  // stale. See lib/nutrition/daily-macro-targets.ts for why only protein can
+  // ever carry a target today.
+  const dailyMacroTargets = refContext ? resolveDailyMacroTargets(refContext) : null;
 
-  const supportOpportunities = sortSupportOpportunities(assessment?.support_opportunities ?? []);
-  const nutritionSupport = supportOpportunities.find(o => o.type === 'nutrition');
-  const showSupportCard = !!assessment && !!nutritionSupport;
+  const orderedItems = SLOT_ORDER.flatMap(slot => items.filter(i => i.slot === slot));
 
   return (
     <View style={s.root}>
@@ -613,27 +857,59 @@ export default function TodayNutritionScreen() {
         <ScrollView showsVerticalScrollIndicator={false}>
           <LinearGradient colors={[palette.blue100, palette.white]} style={s.header}>
             <SafeAreaView edges={['top']}>
+              {/* Simple UX Redesign V1 (§6) — "Nutrition" (the screen) is
+                  separate from "Today" (the date control). No day-back/
+                  forward pager here: today-nutrition.tsx has only ever shown
+                  today; a real ‹ › pager would be new date-fetching state,
+                  out of this task's "redesign presentation, not architecture"
+                  scope (§30/§38) — historical days stay reachable via the
+                  existing "Last 7 days →" link and /nutrition-history below,
+                  unchanged. */}
               <View style={s.headerRow}>
                 <TouchableOpacity style={s.backBtn} onPress={() => router.back()} hitSlop={12}>
                   <Ionicons name="arrow-back" size={20} color={palette.ink900} />
                 </TouchableOpacity>
-                <ThemedText style={s.headerTitle}>Today, {todayLabel}</ThemedText>
-                <View style={{ width: 36 }} />
+                <ThemedText style={s.headerTitle}>Nutrition</ThemedText>
+                <TouchableOpacity
+                  style={s.backBtn}
+                  onPress={() => router.push('/recipes' as any)}
+                  hitSlop={12}
+                  accessibilityRole="button"
+                  accessibilityLabel="Browse recipes"
+                >
+                  <Ionicons name="restaurant" size={18} color={palette.ink900} />
+                </TouchableOpacity>
               </View>
+              <ThemedText style={s.heroEyebrow}>{todayLabel}</ThemedText>
 
-              {/* Nutrition N2 — the canonical answer to "what have I eaten today?".
-                  Factual logged totals only; no target/goal denominator (§5/§6). */}
-              <ThemedText style={s.heroEyebrow}>Logged today</ThemedText>
+              {/* §7/§8 — "how am I doing today?" Calories primary, three
+                  macros secondary. Energy has categorically no Lana target
+                  (no BMR/TDEE engine — N3's own deliberate decision), so it
+                  always stays consumed-only, never "X / Y kcal" (§7). Protein
+                  compares against Lana's existing personalised reference
+                  range when the profile supports it (daily-macro-targets.ts);
+                  carbs/fat stay consumed-only — no reference exists for them
+                  either. No calories-as-health framing. Fibre and every
+                  other micronutrient live behind "Nutrition details →" (§20/§24). */}
               <ThemedText style={s.heroValue}>
                 {Math.round(logged.calories)}<ThemedText style={s.heroUnit}> kcal</ThemedText>
               </ThemedText>
 
               <View style={s.macroRow}>
-                <MacroStat label="Protein" value={logged.protein} unit="g" />
+                <MacroStat label="Protein" value={logged.protein} unit="g" target={dailyMacroTargets?.proteinTargetG} />
                 <MacroStat label="Carbs" value={logged.carbs} unit="g" />
                 <MacroStat label="Fat" value={logged.fat} unit="g" />
-                <MacroStat label="Fibre" value={foodTotals?.fibreG ?? 0} unit="g" />
               </View>
+              {/* Daily Macro Targets V1 — a clearer, dedicated graph (tick
+                  marks at min/max, so the range itself is legible) below the
+                  compact row's thin inline line. Only ever shown when a real
+                  target exists — never fabricated. */}
+              {dailyMacroTargets?.proteinTargetG && (
+                <>
+                  <TodayTargetGraph label="Protein" value={logged.protein} unit="g" target={dailyMacroTargets.proteinTargetG} />
+                  <ThemedText style={s.targetsCaption}>Targets suggested by Lana</ThemedText>
+                </>
+              )}
               {foodLog.length === 0 && (
                 <ThemedText style={s.heroEmpty}>No food recorded for today.</ThemedText>
               )}
@@ -641,78 +917,20 @@ export default function TodayNutritionScreen() {
           </LinearGradient>
 
           <View style={s.content}>
-            {/* Nutrition N1 — the actual food log. Separate from the planned
-                meals below; this is the record of what was really eaten.
-                Manual "Log food" entry point removed from the consumer app
-                (product decision) — this list now shows only pre-existing /
-                automated entries. Re-enable via isManualFoodLoggingEnabled(). */}
-            {isManualFoodLoggingEnabled() && (
-              <TouchableOpacity
-                style={s.logFoodCta}
-                onPress={() => router.push('/log-food' as any)}
-                activeOpacity={0.85}
-              >
-                <Ionicons name="add-circle" size={20} color={palette.success700} />
-                <ThemedText style={s.logFoodCtaText}>Log food</ThemedText>
-                <ThemedText style={s.logFoodCtaSub}>What did you eat?</ThemedText>
-              </TouchableOpacity>
-            )}
-
-            {manualFoodLog.length > 0 && (
-              <View style={s.loggedWrap}>
-                <ThemedText style={s.sourceNote}>Logged today</ThemedText>
-                {foodLogBySlot.map(({ slot, entries }) => (
-                  <View key={slot} style={{ marginBottom: 6 }}>
-                    <ThemedText style={s.loggedSlotLabel}>
-                      {slot === 'other' ? 'Other' : SLOT_LABEL[slot]}
-                    </ThemedText>
-                    {entries.map(e => (
-                      <View key={e.id} style={s.loggedRow}>
-                        <View style={{ flex: 1 }}>
-                          <ThemedText style={s.loggedName} numberOfLines={1}>{e.displayName}</ThemedText>
-                          <ThemedText style={s.loggedMeta}>
-                            {e.unit === 'serving' ? (e.servingLabel ?? `${e.quantity} serving`) : `${e.quantity} ${e.unit}`}
-                            {e.nutrients.energyKcal != null ? ` · ${Math.round(e.nutrients.energyKcal)} kcal` : ''}
-                          </ThemedText>
-                        </View>
-                        <TouchableOpacity onPress={() => deleteEntry(e.id)} hitSlop={10}>
-                          <Ionicons name="trash-outline" size={16} color={palette.gray300} />
-                        </TouchableOpacity>
-                      </View>
-                    ))}
-                    {SAVED_MEALS_ENABLED && prefillFromEntries(entries).length >= 2 && (
-                      <TouchableOpacity
-                        style={s.saveAsMealBtn}
-                        onPress={() => router.push({
-                          pathname: '/saved-meal-edit' as any,
-                          params: { prefill: JSON.stringify(prefillFromEntries(entries)) },
-                        })}
-                      >
-                        <Ionicons name="bookmark-outline" size={13} color={palette.success700} />
-                        <ThemedText style={s.saveAsMealText}>Save these as a meal</ThemedText>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {/* Nutrition N2 — nutrients for what was logged today, with data
-                completeness. Progressive disclosure (§16); quiet by default. */}
+            {/* §20 — micronutrients are NOT on Today; one secondary link into
+                the existing detailed-nutrient screen (app/nutrition-day-
+                detail.tsx), reused as-is rather than duplicating NutrientList
+                inline here. Positioned right above "+ Log food" per user
+                request. */}
             {todayDay && todayDay.hasLogs && (
-              <View style={s.section}>
-                <ThemedText style={s.sectionTitle}>Nutrients</ThemedText>
-                <NutrientList
-                  keys={showAllNutrients ? [...KEY_NUTRIENTS] : KEY_NUTRIENTS.slice(0, 6)}
-                  micros={todayDay.micros}
-                  completeness={todayDay.completeness}
-                />
-                <TouchableOpacity onPress={() => setShowAllNutrients(v => !v)} style={{ paddingVertical: 8 }}>
-                  <ThemedText style={s.link}>
-                    {showAllNutrients ? 'Show fewer' : 'View more nutrients'}
-                  </ThemedText>
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity
+                onPress={() => router.push({ pathname: '/nutrition-day-detail', params: { date: localISODate(new Date()) } } as any)}
+                style={s.secondaryLink}
+                accessibilityRole="button"
+                accessibilityLabel="Nutrition details"
+              >
+                <ThemedText style={s.secondaryLinkText}>Nutrition details →</ThemedText>
+              </TouchableOpacity>
             )}
 
             {/* Nutrition N2 — recent nutrition entry point + evidence. */}
@@ -726,9 +944,352 @@ export default function TodayNutritionScreen() {
                   <ThemedText style={s.sectionTitle}>Recent nutrition</ThemedText>
                   <ThemedText style={s.link}>Last 7 days →</ThemedText>
                 </TouchableOpacity>
-                <DayEnergyStrip days={recentDays} />
+                <DayProteinStrip days={recentDays} target={dailyMacroTargets?.proteinTargetG} />
               </View>
             )}
+
+            {/* Simple UX Redesign V1 (§11) — one obvious primary action, the
+                shared Lana Button component (primary = filled ink900 pill),
+                never a second competing CTA of equal weight. Manual "Log
+                food" stays behind its existing flag — see
+                isManualFoodLoggingEnabled's own doc comment. */}
+            {isManualFoodLoggingEnabled() && (
+              <Button
+                variant="primary"
+                size="lg"
+                block
+                label="+ Log food"
+                onPress={() => router.push('/log-food' as any)}
+                accessibilityLabel="Log food"
+                style={{ marginBottom: 14 }}
+              />
+            )}
+
+            {/* §9/§10/§31 — the meal diary: what was actually logged
+                (food_log_entries via manualFoodLog), the core of the page.
+                All 4 canonical slots always render — an empty slot is a
+                lightweight "Nothing logged yet" + add action, never hidden
+                and never a large empty-state illustration (§10). Simple
+                grouped rows, not a card-in-a-card per slot (§24). */}
+            <View style={s.loggedWrap}>
+              {foodLogBySlot.map(({ slot, entries }) => (
+                <View key={slot} style={{ marginBottom: 18 }}>
+                  <ThemedText style={s.loggedSlotLabel}>
+                    {slot === 'other' ? 'Other' : SLOT_LABEL[slot]}
+                  </ThemedText>
+                  {/* Monthly → Weekly → Daily Planning V1 (§22/§47, flagged) —
+                      PLANNED merges into the same slot as CONSUMED (one
+                      mental model per slot, not two stacked sections). Only
+                      shown while genuinely still pending — once logged or
+                      replaced, the row below already shows it, so this
+                      would just duplicate information (§29). Planning
+                      itself contributes ZERO nutrition evidence (§23) —
+                      "Log this" is the one action that does, via the exact
+                      same canonical logFood path as everywhere else. */}
+                  {isNutritionPlanningEnabled() && slot !== 'other' && plannedMealsBySlot[slot] && (plannedMealsBySlot[slot]!.status === 'recommended' || plannedMealsBySlot[slot]!.status === 'planned') && (
+                    <View style={s.plannedRow}>
+                      <TouchableOpacity
+                        style={{ flex: 1 }}
+                        onPress={() => router.push({ pathname: '/recipe-detail', params: { foodId: plannedMealsBySlot[slot]!.plannedFoodId, slot } } as any)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`View planned ${slot}: ${plannedMealsBySlot[slot]!.plannedLabel}`}
+                      >
+                        <ThemedText style={s.plannedLabel}>Planned</ThemedText>
+                        <ThemedText style={s.plannedName} numberOfLines={1}>
+                          {plannedMealsBySlot[slot]!.plannedLabel} · {plannedMealsBySlot[slot]!.plannedGrams}g
+                        </ThemedText>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => logPlanned(plannedMealsBySlot[slot]!)}
+                        disabled={loggingPlannedSlot === plannedMealsBySlot[slot]!.id}
+                        style={s.logThisBtn}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Log this ${slot}`}
+                      >
+                        {loggingPlannedSlot === plannedMealsBySlot[slot]!.id
+                          ? <ActivityIndicator size="small" color={palette.ink900} />
+                          : <ThemedText style={s.logThisBtnText}>Log this</ThemedText>}
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                  {entries.length === 0 ? (
+                    <View style={s.diaryEmptyRow}>
+                      <ThemedText style={s.diaryEmptyText}>Nothing logged yet</ThemedText>
+                      {isManualFoodLoggingEnabled() && (
+                        <TouchableOpacity
+                          onPress={() => router.push({ pathname: '/log-food', params: { slot } } as any)}
+                          hitSlop={10}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Add ${slot}`}
+                        >
+                          <Ionicons name="add-circle-outline" size={22} color={palette.ink900} />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  ) : (
+                    <>
+                      {entries.map(e => (
+                        <View key={e.id} style={s.loggedRow}>
+                          <View style={{ flex: 1 }}>
+                            <ThemedText style={s.loggedName} numberOfLines={1}>{e.displayName}</ThemedText>
+                            {editingLogId === e.id ? (
+                              <View style={s.editRow}>
+                                <TextInput
+                                  style={s.editInput}
+                                  value={editQuantityValue}
+                                  onChangeText={setEditQuantityValue}
+                                  keyboardType="decimal-pad"
+                                  autoFocus
+                                  selectTextOnFocus
+                                  accessibilityLabel={`Edit amount for ${e.displayName}`}
+                                />
+                                <ThemedText style={s.editUnit}>{e.unit === 'serving' ? (e.servingLabel ?? 'serving') : e.unit}</ThemedText>
+                              </View>
+                            ) : (
+                              <ThemedText style={s.loggedMeta}>
+                                {e.unit === 'serving' ? (e.servingLabel ?? `${e.quantity} serving`) : `${e.quantity} ${e.unit}`}
+                                {e.nutrients.energyKcal != null ? ` · ${Math.round(e.nutrients.energyKcal)} kcal` : ''}
+                                {e.nutrients.proteinG != null ? ` · ${Math.round(e.nutrients.proteinG)}g protein` : ''}
+                              </ThemedText>
+                            )}
+                          </View>
+                          {editingLogId === e.id ? (
+                            <>
+                              <TouchableOpacity onPress={() => saveEditEntry(e)} disabled={savingEdit} hitSlop={10} accessibilityLabel="Save amount" accessibilityRole="button">
+                                {savingEdit ? <ActivityIndicator size="small" color={palette.success700} /> : <Ionicons name="checkmark-circle" size={20} color={palette.success700} />}
+                              </TouchableOpacity>
+                              <TouchableOpacity onPress={() => setEditingLogId(null)} hitSlop={10} accessibilityLabel="Cancel edit" accessibilityRole="button" style={{ marginLeft: 8 }}>
+                                <Ionicons name="close-circle-outline" size={20} color={palette.gray300} />
+                              </TouchableOpacity>
+                            </>
+                          ) : (
+                            <>
+                              {/* §29 — only offered when there's a canonical food to
+                                  re-scale from; a homemade/user-provided entry's
+                                  numbers describe a specific eaten portion and can't
+                                  be reinterpreted by quantity (the service itself
+                                  refuses that case). */}
+                              {e.foodId != null && (
+                                <TouchableOpacity onPress={() => startEditEntry(e)} hitSlop={10} accessibilityLabel={`Edit amount for ${e.displayName}`} accessibilityRole="button" style={{ marginRight: 12 }}>
+                                  <Ionicons name="pencil-outline" size={16} color={palette.gray300} />
+                                </TouchableOpacity>
+                              )}
+                              <TouchableOpacity onPress={() => deleteEntry(e.id)} hitSlop={10} accessibilityLabel={`Delete ${e.displayName}`} accessibilityRole="button">
+                                <Ionicons name="trash-outline" size={16} color={palette.gray300} />
+                              </TouchableOpacity>
+                            </>
+                          )}
+                        </View>
+                      ))}
+                      {isManualFoodLoggingEnabled() && slot !== 'other' && (
+                        <TouchableOpacity
+                          onPress={() => router.push({ pathname: '/log-food', params: { slot } } as any)}
+                          style={s.diaryAddMore}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Add another ${slot} item`}
+                        >
+                          <ThemedText style={s.diaryAddMoreText}>+ Add {slot}</ThemedText>
+                        </TouchableOpacity>
+                      )}
+                      {SAVED_MEALS_ENABLED && prefillFromEntries(entries).length >= 2 && (
+                        <TouchableOpacity
+                          style={s.saveAsMealBtn}
+                          onPress={() => router.push({
+                            pathname: '/saved-meal-edit' as any,
+                            params: { prefill: JSON.stringify(prefillFromEntries(entries)) },
+                          })}
+                        >
+                          <Ionicons name="bookmark-outline" size={13} color={palette.success700} />
+                          <ThemedText style={s.saveAsMealText}>Save these as a meal</ThemedText>
+                        </TouchableOpacity>
+                      )}
+                    </>
+                  )}
+                </View>
+              ))}
+            </View>
+
+            {isNutritionPlanningEnabled() && weeklyObjective && (
+              <TouchableOpacity
+                onPress={() => router.push('/nutrition-weekly-plan' as any)}
+                style={s.secondaryLink}
+                accessibilityRole="button"
+                accessibilityLabel="View weekly plan"
+              >
+                <ThemedText style={s.secondaryLinkText}>View weekly plan →</ThemedText>
+              </TouchableOpacity>
+            )}
+
+            {isSuggested && isAdaptiveNutritionEnabled() && userId ? (
+              // Beta Feedback #022 — adaptive daily plan. Only ever replaces
+              // the "no active meal plan → suggested meals" branch (isSuggested);
+              // a real nutritionist-assigned meal_plans row always renders via
+              // the unchanged branch below, flag on or off.
+              <AdaptiveTodayMeals userId={userId} date={localISODate(new Date())} todayFoodLog={foodLog} />
+            ) : isSuggested && isNutritionPlanningEnabled() && weeklyObjective ? (
+              // §19 — WITH an active nutrition plan, the planned next meal is
+              // primary; Lana Suggests must never show an unrelated recipe
+              // recommendation competing with it. This surfaces a
+              // plan-related observation instead — the next not-yet-resolved
+              // planned meal today, or an honest "plan followed" note —
+              // built entirely from data already on this page
+              // (plannedMealsBySlot), never a new recommendation/ranking.
+              (() => {
+                const next = (['breakfast', 'lunch', 'dinner', 'snack'] as const)
+                  .map(slot => plannedMealsBySlot[slot])
+                  .find(m => m && (m.status === 'recommended' || m.status === 'planned'));
+                return (
+                  <View style={s.suggestCard}>
+                    <ThemedText style={s.suggestEyebrow}>Your plan</ThemedText>
+                    {next ? (
+                      <>
+                        <ThemedText style={s.suggestName}>{next.plannedLabel}</ThemedText>
+                        <ThemedText style={s.suggestReason}>{weeklyObjective}</ThemedText>
+                        <TouchableOpacity
+                          onPress={() => router.push({ pathname: '/recipe-detail', params: { foodId: next.plannedFoodId, slot: next.mealSlot } } as any)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`View recipe for ${next.plannedLabel}`}
+                        >
+                          <ThemedText style={s.suggestCta}>View recipe →</ThemedText>
+                        </TouchableOpacity>
+                      </>
+                    ) : (
+                      <ThemedText style={s.suggestReason}>You&apos;ve followed your plan for today.</ThemedText>
+                    )}
+                  </View>
+                );
+              })()
+            ) : isSuggested ? (
+              // §18/§19/§31 — WITHOUT an active plan, "Lana suggests" never
+              // competes with the food diary above: at most ONE card, placed
+              // below it, one factual evidence-grounded line, "View recipe"
+              // only (no inline ✓ — logging a suggestion goes through the
+              // SAME Recipe Detail → Add to today path as any other recipe,
+              // §16). The underlying capability (recipe-backed,
+              // deterministically ranked suggestions, still fully loggable)
+              // is unchanged — only the presentation collapses from "up to 3
+              // rows with checkmarks" to one card. `orderedItems[0]` is the
+              // same slot-ordered pick already computed above (SLOT_ORDER),
+              // not a new ranking.
+              orderedItems.length > 0 && (
+                <View style={s.suggestCard}>
+                  <ThemedText style={s.suggestEyebrow}>Lana suggests</ThemedText>
+                  <ThemedText style={s.suggestName}>{orderedItems[0].name}</ThemedText>
+                  <ThemedText style={s.suggestReason}>{suggestionReasonText(orderedItems[0].reasons)}</ThemedText>
+                  <TouchableOpacity
+                    onPress={() => router.push(
+                      orderedItems[0].recipeFoodId
+                        ? { pathname: '/recipe-detail', params: { foodId: orderedItems[0].recipeFoodId, slot: orderedItems[0].slot } } as any
+                        : { pathname: '/meal-detail', params: { mealId: orderedItems[0].mealId } } as any,
+                    )}
+                    accessibilityRole="button"
+                    accessibilityLabel={`View recipe for ${orderedItems[0].name}`}
+                  >
+                    <ThemedText style={s.suggestCta}>View recipe →</ThemedText>
+                  </TouchableOpacity>
+                </View>
+              )
+            ) : items.length === 0 ? (
+              <ThemedText style={s.emptyText}>No planned meals for today.</ThemedText>
+            ) : (
+              // A real, nutritionist-assigned meal plan (isSuggested=false) —
+              // distinct, pre-existing functionality untouched by the
+              // Suggested Meals redesign above.
+              <>
+                <ThemedText style={s.sourceNote}>From your meal plan</ThemedText>
+                <View style={s.mealsList}>
+                  {orderedItems.map(item => {
+                    const done = loggedIds.has(item.id);
+                    return (
+                      <TouchableOpacity
+                        key={item.id}
+                        style={s.mealRow}
+                        onPress={() => router.push({ pathname: '/meal-detail', params: { mealId: item.mealId } } as any)}
+                        activeOpacity={0.85}
+                      >
+                        <View style={s.mealRowBody}>
+                          <ThemedText style={s.mealTypeTag}>{SLOT_LABEL[item.slot]}</ThemedText>
+                          <ThemedText style={[s.mealName, done && s.mealNameDone]} numberOfLines={2}>{item.name}</ThemedText>
+                          <ThemedText style={s.mealMeta}>{item.calories} kcal</ThemedText>
+                        </View>
+                        <TouchableOpacity
+                          style={[s.checkBtn, done && s.checkBtnDone]}
+                          onPress={() => toggleMeal(item)}
+                          disabled={togglingId === item.id}
+                          hitSlop={8}
+                        >
+                          <Ionicons name="checkmark" size={16} color={done ? '#fff' : palette.gray300} />
+                        </TouchableOpacity>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </>
+            )}
+
+            {/* Nutritionist Support Extension — §4/§9.A/§18: this is
+                DISCOVERY (the user voluntarily taps in), not a Lana
+                RECOMMENDATION — always visible where the underlying
+                marketplace exists, never gated on an assessment/inference
+                claiming the user needs it (§10/§11/Q5). Static, neutral
+                copy; no medical/clinical claim. Reuses the EXISTING
+                provider/matching architecture end to end: same
+                `personal_trainers` table, same lib/professional-support.ts
+                deterministic "specialisations includes Nutrition" filter
+                (no LLM, no commission ranking — see that file's own header),
+                same handleExploreSupport query, same ProviderMatch →
+                navigationTarget booking-flow routing, same
+                ProfessionalSupportUnavailableNotice honest no-supply state.
+                Secondary visual treatment (palette.surfaceMuted card, white
+                pill CTA) — never the primary filled-ink900 button (§5/§6). */}
+            <View style={s.card}>
+              <ThemedText style={s.cardEyebrow}>Need more support?</ThemedText>
+              <ThemedText style={s.aiBody}>Get personalised nutrition guidance from a professional.</ThemedText>
+
+              {!supportExpanded ? (
+                <TouchableOpacity style={s.exploreSupportBtn} onPress={handleExploreSupport} activeOpacity={0.85} accessibilityRole="button" accessibilityLabel="Find a nutrition professional">
+                  <ThemedText style={s.exploreSupportBtnText}>Find a nutrition professional →</ThemedText>
+                </TouchableOpacity>
+              ) : supportLoading ? (
+                <ActivityIndicator style={{ marginTop: 12 }} color={palette.ink700} />
+              ) : supportMatches && supportMatches.length > 0 ? (
+                <View style={{ marginTop: 12 }}>
+                  {supportMatches.map(m => (
+                    <TouchableOpacity key={m.id} style={s.providerRow} onPress={() => router.push(m.navigationTarget as any)} activeOpacity={0.7}>
+                      {m.photoUrl ? (
+                        <Image source={{ uri: m.photoUrl }} style={s.providerAvatar} />
+                      ) : (
+                        <View style={[s.providerAvatar, s.providerAvatarFallback]}>
+                          <Ionicons name="person-outline" size={18} color={palette.gray300} />
+                        </View>
+                      )}
+                      <View style={{ flex: 1 }}>
+                        <ThemedText style={s.dayTitle}>{m.name}</ThemedText>
+                        {m.matchReasons.length > 0 && (
+                          <ThemedText style={s.dayMeta}>Good match for: {m.matchReasons.join(' · ')}</ThemedText>
+                        )}
+                      </View>
+                      <ThemedText style={s.fulfilmentLink}>View profile →</ThemedText>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ) : (
+                // Beta Feedback #019E — WHY there's nothing to show:
+                // geography, an unresolved location, or a genuine failure —
+                // never one generic "no matching professionals" message.
+                // §14 — Nutrition itself keeps working regardless; this is
+                // the ONLY thing that changes when supply is zero.
+                <View style={{ marginTop: 12 }}>
+                  <ProfessionalSupportUnavailableNotice
+                    availability={supportAvailability && supportAvailability !== 'available' ? supportAvailability : 'no_local_or_online_support'}
+                    professionalNoun="nutrition professionals"
+                    continueWithNoun="Lana's nutrition guidance and meal tracking"
+                  />
+                </View>
+              )}
+            </View>
+
+            {/* Everything below is secondary intelligence/history (§18). */}
 
             {patterns && (
               <View style={s.section}>
@@ -775,108 +1336,6 @@ export default function TodayNutritionScreen() {
               </View>
             )}
 
-            {isSuggested && isAdaptiveNutritionEnabled() && userId ? (
-              // Beta Feedback #022 — adaptive daily plan. Only ever replaces
-              // the "no active meal plan → suggested meals" branch (isSuggested);
-              // a real nutritionist-assigned meal_plans row always renders via
-              // the unchanged branch below, flag on or off.
-              <AdaptiveTodayMeals userId={userId} date={localISODate(new Date())} todayFoodLog={foodLog} />
-            ) : items.length === 0 ? (
-              <ThemedText style={s.emptyText}>No planned meals for today.</ThemedText>
-            ) : (
-              <>
-                <ThemedText style={s.sourceNote}>
-                  {isSuggested
-                    ? `Suggested meals shown${planned.calories > 0 ? `: ~${Math.round(planned.calories)} kcal` : ''} · reference, not a target`
-                    : 'From your meal plan'}
-                </ThemedText>
-                {isSuggested && (
-                  <ThemedText style={s.suggestionCaption}>
-                    Tap ✓ on a meal you actually ate to log it. Meal suggestions are
-                    examples and may not add up to your full daily energy needs.
-                  </ThemedText>
-                )}
-                <View style={s.mealsList}>
-                  {orderedItems.map(item => {
-                    const done = loggedIds.has(item.id);
-                    return (
-                      <TouchableOpacity
-                        key={item.id}
-                        style={s.mealRow}
-                        onPress={() => router.push({ pathname: '/meal-detail', params: { mealId: item.mealId } } as any)}
-                        activeOpacity={0.85}
-                      >
-                        <View style={s.mealRowBody}>
-                          <ThemedText style={s.mealTypeTag}>{SLOT_LABEL[item.slot]}</ThemedText>
-                          <ThemedText style={[s.mealName, done && s.mealNameDone]} numberOfLines={2}>{item.name}</ThemedText>
-                          <ThemedText style={s.mealMeta}>
-                            {item.calories} kcal{item.prep_time_minutes ? ` · ${item.prep_time_minutes} min` : ''}
-                          </ThemedText>
-                        </View>
-                        <TouchableOpacity
-                          style={[s.checkBtn, done && s.checkBtnDone]}
-                          onPress={() => toggleMeal(item)}
-                          disabled={togglingId === item.id}
-                          hitSlop={8}
-                        >
-                          <Ionicons name="checkmark" size={16} color={done ? '#fff' : palette.gray300} />
-                        </TouchableOpacity>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </>
-            )}
-
-            {showSupportCard && (
-              <View style={s.card}>
-                <ThemedText style={s.cardEyebrow}>Want extra support?</ThemedText>
-                <View style={{ marginBottom: 10 }}>
-                  <ThemedText style={s.rowValue}>Nutrition support</ThemedText>
-                  <ThemedText style={s.aiBody}>{nutritionSupport?.reason}</ThemedText>
-                </View>
-
-                {!supportExpanded ? (
-                  <TouchableOpacity style={s.exploreSupportBtn} onPress={handleExploreSupport} activeOpacity={0.85}>
-                    <ThemedText style={s.exploreSupportBtnText}>Explore support →</ThemedText>
-                  </TouchableOpacity>
-                ) : supportLoading ? (
-                  <ActivityIndicator style={{ marginTop: 12 }} color={palette.ink700} />
-                ) : supportMatches && supportMatches.length > 0 ? (
-                  <View style={{ marginTop: 12 }}>
-                    {supportMatches.map(m => (
-                      <TouchableOpacity key={m.id} style={s.providerRow} onPress={() => router.push(m.navigationTarget as any)} activeOpacity={0.7}>
-                        {m.photoUrl ? (
-                          <Image source={{ uri: m.photoUrl }} style={s.providerAvatar} />
-                        ) : (
-                          <View style={[s.providerAvatar, s.providerAvatarFallback]}>
-                            <Ionicons name="person-outline" size={18} color={palette.gray300} />
-                          </View>
-                        )}
-                        <View style={{ flex: 1 }}>
-                          <ThemedText style={s.dayTitle}>{m.name}</ThemedText>
-                          {m.matchReasons.length > 0 && (
-                            <ThemedText style={s.dayMeta}>Good match for: {m.matchReasons.join(' · ')}</ThemedText>
-                          )}
-                        </View>
-                        <ThemedText style={s.fulfilmentLink}>View profile →</ThemedText>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                ) : (
-                  // Beta Feedback #019E — WHY there's nothing to show:
-                  // geography, an unresolved location, or a genuine failure —
-                  // never one generic "no matching professionals" message.
-                  <View style={{ marginTop: 12 }}>
-                    <ProfessionalSupportUnavailableNotice
-                      availability={supportAvailability && supportAvailability !== 'available' ? supportAvailability : 'no_local_or_online_support'}
-                      professionalNoun="nutrition professionals"
-                      continueWithNoun="Lana's nutrition guidance and meal tracking"
-                    />
-                  </View>
-                )}
-              </View>
-            )}
             <View style={{ height: 60 }} />
           </View>
         </ScrollView>
@@ -918,11 +1377,53 @@ const s = StyleSheet.create({
   macroValue: { fontSize: 16, fontWeight: '800', color: palette.ink900 },
   macroUnit: { fontSize: 11, fontWeight: '600', color: palette.gray450 },
   macroLabel: { fontSize: 11.5, color: palette.gray450 },
+  // Daily Macro Targets V1 — thin reference bar, monochrome brand-accent
+  // fill only (§30 — no macro-specific colors), capped visually at 100%
+  // even when the text shows an over-target value (§17).
+  macroBarTrack: {
+    width: '100%', height: 3, borderRadius: 2, backgroundColor: palette.surfaceMuted,
+    overflow: 'hidden', marginTop: 2,
+  },
+  macroBarFill: { height: '100%', backgroundColor: palette.blue500, borderRadius: 2 },
+  targetsCaption: { fontSize: 11, color: palette.gray300, textAlign: 'center', marginTop: 8 },
+  targetGraph: { marginTop: 16, paddingHorizontal: 4 },
+  targetGraphHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 },
+  targetGraphLabel: { fontSize: 12, fontWeight: '700', color: palette.ink700 },
+  targetGraphValue: { fontSize: 12, fontWeight: '700', color: palette.ink900 },
+  targetGraphTrack: {
+    height: 8, borderRadius: 4, backgroundColor: palette.surfaceMuted,
+    overflow: 'visible', position: 'relative', justifyContent: 'center',
+  },
+  targetGraphFill: {
+    position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 4, backgroundColor: palette.ink900,
+  },
+  // Tick marks at the target range's min/max — monochrome brand accent,
+  // taller than the track so the range boundary reads clearly against the
+  // consumed fill underneath it (§30 — no macro-specific colors).
+  targetGraphTick: {
+    position: 'absolute', top: -3, bottom: -3, width: 2, backgroundColor: palette.blue500, borderRadius: 1,
+  },
 
   content: { paddingHorizontal: 20, paddingTop: 24 },
   emptyText: { fontSize: 13, color: palette.gray300, textAlign: 'center', marginTop: 40 },
   sourceNote: { fontSize: 12, color: palette.gray300, marginBottom: 16 },
-  suggestionCaption: { fontSize: 11.5, color: palette.gray450, lineHeight: 16, marginTop: -8, marginBottom: 16 },
+
+  // §18/§19/§31 — "Lana suggests", a single card, positioned below the food
+  // diary. Uses Card-equivalent surface/border tokens (palette.white /
+  // palette.hairline — the same pair components/ui/Card.tsx uses) rather
+  // than a colored panel (§25 — brand color marks action/verified/progress,
+  // not a whole tinted section).
+  suggestCard: {
+    backgroundColor: palette.white, borderRadius: radii.xl,
+    borderWidth: 1, borderColor: palette.hairline, padding: 16, marginBottom: 20,
+  },
+  suggestEyebrow: {
+    fontSize: 11, fontWeight: '800', color: palette.blue600,
+    textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6,
+  },
+  suggestName: { fontSize: 16, fontWeight: '800', color: palette.ink900, marginBottom: 4 },
+  suggestReason: { fontSize: 13, color: palette.gray450, lineHeight: 18, marginBottom: 10 },
+  suggestCta: { fontSize: 13.5, fontWeight: '700', color: palette.blue600 },
 
   section: { marginBottom: 22 },
   sectionTitle: {
@@ -932,15 +1433,32 @@ const s = StyleSheet.create({
   recentHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   link: { fontSize: 12.5, fontWeight: '700', color: palette.blue600 },
 
-  // Nutrition N1 — food log
-  logFoodCta: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: palette.success50, borderRadius: radii.xl,
-    paddingHorizontal: 16, paddingVertical: 14, marginBottom: 18,
+  // Simple UX Redesign V1 — a plain text link, never a bordered/filled
+  // button, so Recipes/Nutrition-details never visually compete with the
+  // one primary "+ Log food" button (§11/§22/§25).
+  secondaryLink: { paddingVertical: 10, marginBottom: 4 },
+  secondaryLinkText: { fontSize: 13.5, fontWeight: '700', color: palette.blue600 },
+  diaryEmptyRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 10,
   },
-  logFoodCtaText: { fontSize: 15, fontWeight: '800', color: palette.success700 },
-  logFoodCtaSub: { fontSize: 12.5, color: palette.gray450, marginLeft: 'auto' },
-  loggedWrap: { marginBottom: 22 },
+  diaryEmptyText: { fontSize: 13.5, color: palette.gray300 },
+  // Monthly → Weekly → Daily Planning V1 — the PLANNED row within a slot.
+  // Reuses the same border/spacing language as loggedRow (no new card).
+  plannedRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: palette.hairline,
+    backgroundColor: palette.blue25 ?? palette.surfaceMuted,
+  },
+  plannedLabel: { fontSize: 10, fontWeight: '800', color: palette.blue600, textTransform: 'uppercase', letterSpacing: 0.5 },
+  plannedName: { fontSize: 13.5, fontWeight: '700', color: palette.ink900, marginTop: 2 },
+  logThisBtn: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: radii.pill, backgroundColor: palette.white, borderWidth: 1, borderColor: palette.hairline },
+  logThisBtnText: { fontSize: 12, fontWeight: '700', color: palette.ink900 },
+  diaryAddMore: { paddingVertical: 8 },
+  diaryAddMoreText: { fontSize: 13, fontWeight: '700', color: palette.ink700 },
+
+  // Nutrition N1 — food log
+  loggedWrap: { marginBottom: 8 },
   loggedSlotLabel: {
     fontSize: 11, fontWeight: '800', color: palette.gray300,
     textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 8, marginBottom: 4,
@@ -951,6 +1469,12 @@ const s = StyleSheet.create({
   },
   loggedName: { fontSize: 14, fontWeight: '700', color: palette.ink900 },
   loggedMeta: { fontSize: 12, color: palette.gray450, marginTop: 2 },
+  editRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+  editInput: {
+    width: 64, height: 32, borderRadius: radii.md, borderWidth: 1, borderColor: palette.hairline,
+    paddingHorizontal: 8, fontSize: 13, fontWeight: '700', color: palette.ink900,
+  },
+  editUnit: { fontSize: 12, color: palette.gray450 },
   saveAsMealBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 8, paddingHorizontal: 2 },
   saveAsMealText: { fontSize: 12, fontWeight: '700', color: palette.success700 },
 
@@ -991,11 +1515,6 @@ const s = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1,
     marginBottom: 16,
-  },
-  rowValue: {
-    fontSize: fontSize.lg,
-    fontWeight: '700',
-    color: palette.ink700,
   },
   aiBody: {
     fontSize: fontSize.sm,

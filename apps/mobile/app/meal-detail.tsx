@@ -10,6 +10,8 @@ import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { matchedRecipeFamilies } from '@/lib/nutrition/recipe-model';
+import { recipeService, type RecipeSummary } from '@/services/recipe-service';
 
 interface Meal {
   id: string;
@@ -39,18 +41,36 @@ export default function MealDetailScreen() {
   const { mealId } = useLocalSearchParams<{ mealId: string }>();
   const [meal, setMeal] = useState<Meal | null>(null);
   const [loading, setLoading] = useState(true);
+  // A defensible canonical-recipe match for this legacy meal, if any (§16 —
+  // "RECIPE_BACKED: prefer canonical recipe identity"). Never forces a
+  // single pick when more than one KFCT variant matches (§8 of the KFCT V1
+  // task — distinct dish variants are never collapsed): one match links
+  // straight to Recipe Detail, more than one links to Recipes search.
+  const [recipeMatches, setRecipeMatches] = useState<RecipeSummary[] | null>(null);
 
   useFocusEffect(useCallback(() => {
     if (!mealId) return;
     let active = true;
     (async () => {
       setLoading(true);
+      setRecipeMatches(null);
       const { data } = await supabase
         .from('meals')
         .select('id, name, category, description, ingredients, calories, protein_g, carbs_g, fat_g, fibre_g, prep_time_minutes, difficulty, tags, cuisine')
         .eq('id', mealId)
         .single();
-      if (active) { setMeal((data as Meal) ?? null); setLoading(false); }
+      const m = (data as Meal) ?? null;
+      if (active) { setMeal(m); setLoading(false); }
+      if (!m) return;
+      const families = matchedRecipeFamilies(m.name);
+      if (families.length === 0) return;
+      try {
+        const all = await recipeService.listRecipes();
+        const matches = all.filter(r => matchedRecipeFamilies(r.name).some(f => families.includes(f)));
+        if (active) setRecipeMatches(matches);
+      } catch {
+        // Non-critical — the legacy meal page still works without the link.
+      }
     })();
     return () => { active = false; };
   }, [mealId]));
@@ -103,6 +123,35 @@ export default function MealDetailScreen() {
           </View>
 
           {meal.description && <ThemedText style={s.description}>{meal.description}</ThemedText>}
+
+          {/* §16 — a defensible canonical-recipe match for this legacy
+              dish, when one exists. Never a duplicate detail UI (§18): both
+              routes below land on the SAME Recipe Detail screen used by
+              Recipes browse/search. */}
+          {recipeMatches != null && recipeMatches.length > 0 && (
+            <TouchableOpacity
+              style={s.recipeCard}
+              activeOpacity={0.85}
+              onPress={() => router.push(
+                recipeMatches.length === 1
+                  ? { pathname: '/recipe-detail', params: { foodId: recipeMatches[0].foodId } } as any
+                  : { pathname: '/recipes', params: { search: meal.name.split('+')[0].trim() } } as any,
+              )}
+            >
+              <Ionicons name="checkmark-circle" size={18} color={palette.success700} />
+              <View style={{ flex: 1 }}>
+                <ThemedText style={s.recipeCardTitle}>
+                  {recipeMatches.length === 1 ? 'Verified recipe available' : 'Verified recipes available'}
+                </ThemedText>
+                <ThemedText style={s.recipeCardSub}>
+                  {recipeMatches.length === 1
+                    ? recipeMatches[0].name
+                    : `${recipeMatches.length} Kenya Food Composition Tables recipes for this dish`}
+                </ThemedText>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={palette.gray300} />
+            </TouchableOpacity>
+          )}
 
           {/* Macros */}
           <View style={s.macroCard}>
@@ -198,6 +247,14 @@ const s = StyleSheet.create({
   prepBadgeText: { fontSize: 11.5, fontWeight: '600', color: palette.gray450 },
 
   description: { fontSize: 14, color: palette.gray450, lineHeight: 20, marginBottom: 20 },
+
+  recipeCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: palette.success50, borderRadius: radii.lg,
+    paddingHorizontal: 14, paddingVertical: 12, marginBottom: 20,
+  },
+  recipeCardTitle: { fontSize: 13, fontWeight: '700', color: palette.ink900 },
+  recipeCardSub: { fontSize: 12, color: palette.gray450, marginTop: 1 },
 
   macroCard: {
     flexDirection: 'row', backgroundColor: palette.surfaceMuted, borderRadius: radii.xl,

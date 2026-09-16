@@ -15,7 +15,7 @@ import {
 import { normaliseUserNutrients, HOMEMADE_MEAL_SOURCE } from '@/lib/nutrition/homemade-meal';
 import {
   followMealGroupId, buildFollowedMealLogInput,
-  FOLLOWED_MEAL_CAPTURE_METHOD, FOLLOWED_MEAL_SOURCE_TYPE,
+  FOLLOWED_MEAL_CAPTURE_METHOD,
 } from '@/lib/nutrition/followed-meal';
 import { buildHistory, addLocalDays, type DayNutrition } from '@/lib/nutrition/nutrition-history';
 import {
@@ -433,6 +433,17 @@ export const foodLogService = {
    * — used to seed the ✓ state on load so a reload keeps checked meals
    * checked. The caller recomputes each visible meal's deterministic id and
    * tests membership.
+   *
+   * Filters on capture_method alone (not also source_type as before
+   * Recipes V1): a followed LEGACY catalogue meal is truthfully attributed
+   * `acp_curated` (buildFollowedMealLogInput), but a followed CANONICAL
+   * RECIPE suggestion logs via its real foodId (app/today-nutrition.tsx),
+   * so `logFood` truthfully attributes the food's own sourceType (e.g.
+   * 'trusted_food_database' for a KFCT dish) — never forced to
+   * 'acp_curated' just to match this filter. capture_method='plan' alone is
+   * already sufficient to distinguish a followed/planned row from a
+   * manually/search/camera-logged one (see FOLLOWED_MEAL_CAPTURE_METHOD's
+   * own doc comment).
    */
   async getFollowedMealGroupIds(userId: string, localDate: string): Promise<Set<string>> {
     const { data } = await supabase
@@ -441,7 +452,6 @@ export const foodLogService = {
       .eq('user_id', userId)
       .eq('local_date', localDate)
       .eq('capture_method', FOLLOWED_MEAL_CAPTURE_METHOD)
-      .eq('source_type', FOLLOWED_MEAL_SOURCE_TYPE)
       .not('log_group_id', 'is', null);
     return new Set(((data as any[]) ?? []).map(r => String(r.log_group_id)));
   },

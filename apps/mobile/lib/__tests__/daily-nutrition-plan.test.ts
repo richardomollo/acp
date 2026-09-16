@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildDailyNutritionPlan, swapSlotCandidate, type DailyNutritionPlanInput } from '../nutrition/daily-nutrition-plan.ts';
+import { buildDailyNutritionPlan, swapSlotCandidate, DEFAULT_RANKING_WEIGHTS, type DailyNutritionPlanInput } from '../nutrition/daily-nutrition-plan.ts';
 import { mealCandidateFromCatalogueRow, mealCandidateKey, type CatalogueMealRow, type MealCandidate } from '../nutrition/nutrition-meal-model.ts';
 import { computeMealPreferenceScores, type MealPreferenceEvent } from '../nutrition/meal-preference-learning.ts';
 import type { MealSlot } from '../nutrition/food-types.ts';
@@ -348,5 +348,47 @@ describe('§6 — the day is the unit of optimisation, not independent per-slot 
     // same lunch candidates, same budget — but breakfast already nearly
     // covers the budget, so lunch's protein-fit pressure relaxes.
     assert.notEqual(withHighProteinBreakfast.slots[1].recommended?.id, undefined);
+  });
+});
+
+describe('Closing the Loop §14 — optional weights parameter leans the SAME ranker, no second engine', () => {
+  test('omitting `weights` behaves identically to the tested default constants', () => {
+    const candidates = [
+      mealCandidateFromCatalogueRow(row({ id: 'a', name: 'A', category: 'lunch', protein_g: 20, tags: ['pref-a'] })),
+      mealCandidateFromCatalogueRow(row({ id: 'b', name: 'B', category: 'lunch', protein_g: 20, tags: ['pref-b'] })),
+    ];
+    const withoutWeights = buildDailyNutritionPlan(baseInput({ slots: ['lunch'], candidatesBySlot: { lunch: candidates } }));
+    const withDefaultWeights = buildDailyNutritionPlan(baseInput({ slots: ['lunch'], candidatesBySlot: { lunch: candidates }, weights: DEFAULT_RANKING_WEIGHTS }));
+    assert.deepEqual(withoutWeights, withDefaultWeights);
+  });
+
+  test('a genuinely different weight set can change which candidate wins — proves the objective->ranking connection is real, not cosmetic', () => {
+    // Two candidates: one clearly wins on protein-budget fit, the other on
+    // cuisine fit — with the default weights cuisine (0.15) can't outweigh
+    // a strong protein-budget signal (0.20) by much, but a weight set that
+    // zeroes protein-budget and maximises cuisine flips the winner.
+    const highProteinLowCuisineFit = mealCandidateFromCatalogueRow(row({ id: 'protein-pick', name: 'Protein pick', category: 'lunch', protein_g: 60, cuisine: 'other' }));
+    const lowProteinHighCuisineFit = mealCandidateFromCatalogueRow(row({ id: 'cuisine-pick', name: 'Cuisine pick', category: 'lunch', protein_g: 5, cuisine: 'kenyan' }));
+    const input = baseInput({
+      slots: ['lunch'],
+      candidatesBySlot: { lunch: [highProteinLowCuisineFit, lowProteinHighCuisineFit] },
+      cuisinePreferences: ['kenyan'],
+      proteinBudget: { minG: 100, maxG: 130 }, consumedProteinSoFarG: 0,
+    });
+    const proteinFocused = buildDailyNutritionPlan({ ...input, weights: { preference: 0, goalFit: 0, cuisineFit: 0, proteinBudget: 1 } });
+    const cuisineFocused = buildDailyNutritionPlan({ ...input, weights: { preference: 0, goalFit: 0, cuisineFit: 1, proteinBudget: 0 } });
+    assert.equal(proteinFocused.slots[0].recommended?.id, 'protein-pick');
+    assert.equal(cuisineFocused.slots[0].recommended?.id, 'cuisine-pick');
+  });
+
+  test('deterministic — the same weights always produce the same ranking', () => {
+    const candidates = [
+      mealCandidateFromCatalogueRow(row({ id: 'x', name: 'X', category: 'dinner', protein_g: 30 })),
+      mealCandidateFromCatalogueRow(row({ id: 'y', name: 'Y', category: 'dinner', protein_g: 25 })),
+    ];
+    const weights = { preference: 0.3, goalFit: 0.2, cuisineFit: 0.1, proteinBudget: 0.4 };
+    const a = buildDailyNutritionPlan(baseInput({ slots: ['dinner'], candidatesBySlot: { dinner: candidates }, weights }));
+    const b = buildDailyNutritionPlan(baseInput({ slots: ['dinner'], candidatesBySlot: { dinner: candidates }, weights }));
+    assert.deepEqual(a, b);
   });
 });

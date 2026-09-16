@@ -2,6 +2,7 @@ import {
   StyleSheet, View, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Alert,
 } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
+import { Button } from '@/components/ui/Button';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { palette, radii, fontSize } from '@/constants/theme';
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -181,59 +182,70 @@ export default function LogFoodScreen() {
             </View>
 
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={s.listPad}>
-              {CAMERA_ENABLED && query.trim().length < 2 && (
-                <View style={s.cameraRow}>
-                  <TouchableOpacity
-                    style={s.cameraBtn}
-                    activeOpacity={0.8}
-                    onPress={() => router.push({
-                      pathname: '/photo-meal',
-                      params: { source: 'camera', ...(slot ? { slot } : {}) },
-                    })}
-                  >
-                    <Ionicons name="camera" size={16} color={palette.ink900} />
-                    <ThemedText style={s.cameraBtnText}>Take a photo</ThemedText>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={s.cameraBtn}
-                    activeOpacity={0.8}
-                    onPress={() => router.push({
-                      pathname: '/photo-meal',
-                      params: { source: 'library', ...(slot ? { slot } : {}) },
-                    })}
-                  >
-                    <Ionicons name="images-outline" size={16} color={palette.ink900} />
-                    <ThemedText style={s.cameraBtnText}>Choose photo</ThemedText>
-                  </TouchableOpacity>
+              {/* §13 — Search is primary; Recent/Saved/Camera are lightweight
+                  shortcuts, never giant feature cards competing with it. One
+                  compact row of chips (not 2-3 stacked full-width rows). */}
+              {query.trim().length < 2 && (SAVED_MEALS_ENABLED || CAMERA_ENABLED) && (
+                <View style={s.shortcutRow}>
+                  {SAVED_MEALS_ENABLED && (
+                    <TouchableOpacity
+                      style={s.shortcutChip}
+                      activeOpacity={0.8}
+                      onPress={() => router.push('/my-meals')}
+                      accessibilityRole="button"
+                      accessibilityLabel="Saved meals"
+                    >
+                      <Ionicons name="albums-outline" size={15} color={palette.ink900} />
+                      <ThemedText style={s.shortcutChipText}>Saved</ThemedText>
+                    </TouchableOpacity>
+                  )}
+                  {CAMERA_ENABLED && (
+                    <>
+                      <TouchableOpacity
+                        style={s.shortcutChip}
+                        activeOpacity={0.8}
+                        onPress={() => router.push({
+                          pathname: '/photo-meal',
+                          params: { source: 'camera', ...(slot ? { slot } : {}) },
+                        })}
+                        accessibilityRole="button"
+                        accessibilityLabel="Scan with camera"
+                      >
+                        <Ionicons name="camera" size={15} color={palette.ink900} />
+                        <ThemedText style={s.shortcutChipText}>Camera</ThemedText>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={s.shortcutChip}
+                        activeOpacity={0.8}
+                        onPress={() => router.push({
+                          pathname: '/photo-meal',
+                          params: { source: 'library', ...(slot ? { slot } : {}) },
+                        })}
+                        accessibilityRole="button"
+                        accessibilityLabel="Choose a photo from library"
+                      >
+                        <Ionicons name="images-outline" size={15} color={palette.ink900} />
+                        <ThemedText style={s.shortcutChipText}>Photo library</ThemedText>
+                      </TouchableOpacity>
+                    </>
+                  )}
                 </View>
               )}
 
-              {SAVED_MEALS_ENABLED && query.trim().length < 2 && (
-                <TouchableOpacity
-                  style={s.myMealsBtn}
-                  activeOpacity={0.8}
-                  onPress={() => router.push('/my-meals')}
-                >
-                  <Ionicons name="albums-outline" size={16} color={palette.ink900} />
-                  <ThemedText style={s.cameraBtnText}>My meals</ThemedText>
-                  <View style={{ flex: 1 }} />
-                  <Ionicons name="chevron-forward" size={16} color={palette.gray200} />
-                </TouchableOpacity>
-              )}
-
+              {/* A less-common path — still fully reachable, deliberately
+                  lighter weight than the shortcut chips above (§13). */}
               {query.trim().length < 2 && (
                 <TouchableOpacity
-                  style={s.myMealsBtn}
-                  activeOpacity={0.8}
+                  style={s.homemadeLink}
+                  activeOpacity={0.7}
                   onPress={() => router.push({
                     pathname: '/homemade-meal',
                     params: { ...(slot ? { slot } : {}) },
                   })}
+                  accessibilityRole="button"
+                  accessibilityLabel="Log a homemade meal"
                 >
-                  <Ionicons name="restaurant-outline" size={16} color={palette.ink900} />
-                  <ThemedText style={s.cameraBtnText}>Log a homemade meal</ThemedText>
-                  <View style={{ flex: 1 }} />
-                  <Ionicons name="chevron-forward" size={16} color={palette.gray200} />
+                  <ThemedText style={s.homemadeLinkText}>Log a homemade meal →</ThemedText>
                 </TouchableOpacity>
               )}
 
@@ -367,14 +379,17 @@ export default function LogFoodScreen() {
               ) : null}
             </View>
 
-            <TouchableOpacity
-              style={[s.addBtn, (!preview || saving) && s.addBtnDisabled]}
+            <Button
+              variant="primary"
+              size="lg"
+              block
+              label="Add to today"
+              loading={saving}
+              disabled={!preview}
               onPress={addFood}
-              disabled={!preview || saving}
-              activeOpacity={0.85}
-            >
-              {saving ? <ActivityIndicator color="#fff" /> : <ThemedText style={s.addBtnText}>Add food</ThemedText>}
-            </TouchableOpacity>
+              accessibilityLabel="Add to today"
+              style={{ marginTop: 20 }}
+            />
           </ScrollView>
         )}
       </View>
@@ -400,17 +415,17 @@ const s = StyleSheet.create({
   searchInput: { flex: 1, fontSize: fontSize.base, color: palette.ink900 },
 
   listPad: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 40 },
-  cameraRow: { flexDirection: 'row', gap: 10, marginTop: 12, marginBottom: 4 },
-  cameraBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    height: 44, borderRadius: radii.lg, borderWidth: 1, borderColor: palette.hairline,
-  },
-  cameraBtnText: { fontSize: 13, fontWeight: '700', color: palette.ink900 },
-  myMealsBtn: {
+  // §13 — compact shortcut chips (Recent/Saved/Camera), lighter than a
+  // full-width bordered row: search stays the obvious primary action.
+  shortcutRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12, marginBottom: 4 },
+  shortcutChip: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    height: 44, borderRadius: radii.lg, borderWidth: 1, borderColor: palette.hairline,
-    paddingHorizontal: 14, marginTop: 10, marginBottom: 4,
+    height: 36, borderRadius: radii.pill, borderWidth: 1, borderColor: palette.hairline,
+    paddingHorizontal: 14,
   },
+  shortcutChipText: { fontSize: 12.5, fontWeight: '700', color: palette.ink900 },
+  homemadeLink: { paddingVertical: 10, marginBottom: 4 },
+  homemadeLinkText: { fontSize: 13, fontWeight: '700', color: palette.blue600 },
   sectionLabel: { fontSize: 11, fontWeight: '800', color: palette.gray300, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 12, marginBottom: 4 },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
@@ -462,7 +477,4 @@ const s = StyleSheet.create({
   previewCard: { marginTop: 22, padding: 14, borderRadius: radii.lg, backgroundColor: palette.surfaceMuted, alignItems: 'center' },
   previewText: { fontSize: 14, fontWeight: '700', color: palette.ink900 },
   previewError: { fontSize: 13, color: palette.danger500 },
-  addBtn: { marginTop: 20, height: 52, borderRadius: radii.xl, backgroundColor: palette.ink900, alignItems: 'center', justifyContent: 'center' },
-  addBtnDisabled: { opacity: 0.45 },
-  addBtnText: { fontSize: 15, fontWeight: '800', color: '#fff' },
 });

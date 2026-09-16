@@ -39,6 +39,19 @@ const W_GOAL_FIT = 0.25;     // VERY STRONG — goal/tag fit (protein/fibre/bala
 const W_CUISINE_FIT = 0.15;  // VERY STRONG — explicit cuisine preference
 const W_PROTEIN_BUDGET = 0.20; // STRONG — day-level remaining-protein pacing
 
+export interface RankingWeights {
+  preference: number;
+  goalFit: number;
+  cuisineFit: number;
+  proteinBudget: number;
+}
+
+/** The default, tested weights — every existing caller (and every existing
+ *  test) gets exactly this unless it explicitly opts into an override. */
+export const DEFAULT_RANKING_WEIGHTS: RankingWeights = {
+  preference: W_PREFERENCE, goalFit: W_GOAL_FIT, cuisineFit: W_CUISINE_FIT, proteinBudget: W_PROTEIN_BUDGET,
+};
+
 export interface ProteinBudget {
   minG: number;
   maxG: number;
@@ -77,6 +90,13 @@ export interface DailyNutritionPlanInput {
    *  itself. Omit for a fixed, fully deterministic tiebreak (used by tests
    *  that don't care about cross-user variety). */
   varietySeed?: string;
+  /** Closing the Nutrition Planning intelligence loop (§14) — an optional
+   *  override of the ranking weights above, so a caller with a specific
+   *  weekly objective (e.g. "protein consistency") can lean the SAME
+   *  existing weighted sum toward the dimension that objective is about,
+   *  without a second ranking engine. Omit (the default, every existing
+   *  caller/test) for the exact tested weights (DEFAULT_RANKING_WEIGHTS). */
+  weights?: RankingWeights;
 }
 
 export interface RankedMealCandidate {
@@ -198,6 +218,7 @@ function rankSlotCandidates(
   remainingSlotsCount: number,
 ): RankedMealCandidate[] {
   const excluded = new Set(input.excludedCandidateKeys ?? []);
+  const w = input.weights ?? DEFAULT_RANKING_WEIGHTS;
 
   // ── HARD constraints (spec §2) — applied before any scoring ──
   let pool = candidates.filter(c => !excluded.has(mealCandidateKey(c.source, c.id)));
@@ -214,10 +235,10 @@ function rankSlotCandidates(
     const budgetFit = proteinBudgetFit(candidate.macros.proteinG ?? 0, remainingBudgetG, remainingSlotsCount);
 
     const score =
-      W_PREFERENCE * preferenceFit +
-      W_GOAL_FIT * goalFit.overall +
-      W_CUISINE_FIT * cuisineFit +
-      W_PROTEIN_BUDGET * budgetFit;
+      w.preference * preferenceFit +
+      w.goalFit * goalFit.overall +
+      w.cuisineFit * cuisineFit +
+      w.proteinBudget * budgetFit;
 
     return { candidate, score, cuisineFit, goalFit, preference, budgetFit };
   });
