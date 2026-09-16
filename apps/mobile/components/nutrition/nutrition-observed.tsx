@@ -7,6 +7,7 @@ import { ThemedText } from '@/components/themed-text';
 import { palette, radii } from '@/constants/theme';
 import type { NutritionPatternEvidence } from '@/lib/nutrition/nutrition-patterns';
 import type { DayNutrition } from '@/lib/nutrition/nutrition-history';
+import type { MacroTargetRange } from '@/lib/nutrition/daily-macro-targets';
 
 const TIER_LABEL: Record<NutritionPatternEvidence['tier'], string> = {
   daily_observation: 'Today only',
@@ -40,20 +41,44 @@ export function ObservedPanel({ patterns }: { patterns: NutritionPatternEvidence
   );
 }
 
-/** A small bar per day (newest → oldest), height ∝ logged energy. No-log days show a hairline. */
-export function DayEnergyStrip({ days }: { days: DayNutrition[] }) {
-  const max = Math.max(1, ...days.map(d => d.energyKcal));
+/**
+ * Daily Macro Targets V1 — a small bar per day (newest → oldest), height ∝
+ * logged PROTEIN (the one macro Lana has a real target for — see
+ * lib/nutrition/daily-macro-targets.ts; this was previously an energy
+ * strip, renamed/re-based since a target-vs-actual view needs a nutrient
+ * that actually HAS a target). No-log days show a hairline. `target`
+ * (optional) overlays a shaded reference band for Lana's suggested protein
+ * range — omitted entirely (no band, plain bars) when no target is
+ * available, never a fabricated one.
+ */
+export function DayProteinStrip({ days, target }: { days: DayNutrition[]; target?: MacroTargetRange | null }) {
+  const scale = Math.max(1, target?.max ?? 0, ...days.map(d => d.proteinG));
+  const bandLeftPct = target ? Math.min(100, (target.min / scale) * 100) : 0;
+  const bandWidthPct = target ? Math.min(100 - bandLeftPct, ((target.max - target.min) / scale) * 100) : 0;
   return (
-    <View style={s.strip}>
-      {[...days].reverse().map(d => {
-        const h = d.hasLogs ? Math.max(4, Math.round((d.energyKcal / max) * 44)) : 2;
-        return (
-          <View key={d.localDate} style={s.stripCol}>
-            <View style={[s.bar, { height: h, backgroundColor: d.hasLogs ? palette.ink700 : palette.border }]} />
-            <ThemedText style={s.stripDay}>{d.localDate.slice(8)}</ThemedText>
-          </View>
-        );
-      })}
+    <View style={s.stripWrap}>
+      {target && (
+        <View
+          pointerEvents="none"
+          style={[s.stripTargetBand, { left: `${bandLeftPct}%`, width: `${bandWidthPct}%` }]}
+        />
+      )}
+      <View style={s.strip}>
+        {[...days].reverse().map(d => {
+          const h = d.hasLogs ? Math.max(4, Math.round((d.proteinG / scale) * 44)) : 2;
+          return (
+            <View key={d.localDate} style={s.stripCol}>
+              <View style={[s.bar, { height: h, backgroundColor: d.hasLogs ? palette.ink700 : palette.border }]} />
+              <ThemedText style={s.stripDay}>{d.localDate.slice(8)}</ThemedText>
+            </View>
+          );
+        })}
+      </View>
+      {target && (
+        <ThemedText style={s.stripTargetLabel}>
+          Target {Math.round(target.min)}–{Math.round(target.max)}g protein
+        </ThemedText>
+      )}
     </View>
   );
 }
@@ -70,8 +95,17 @@ const s = StyleSheet.create({
   obsText: { flex: 1, fontSize: 13.5, color: palette.ink700, lineHeight: 19 },
   footNote: { fontSize: 11, color: palette.gray300, marginTop: 12 },
 
+  stripWrap: { position: 'relative' },
   strip: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, height: 64, marginTop: 4 },
   stripCol: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', gap: 4 },
   bar: { width: '70%', borderRadius: 3 },
   stripDay: { fontSize: 10, color: palette.gray300 },
+  // Daily Macro Targets V1 — the target-range band overlaid on the bars
+  // area only (excludes the day-label row at the bottom), monochrome
+  // brand-accent tint per the design system (§30 — no new colors).
+  stripTargetBand: {
+    position: 'absolute', top: 0, bottom: 14, borderRadius: 3,
+    backgroundColor: palette.blue100, opacity: 0.5,
+  },
+  stripTargetLabel: { fontSize: 10, color: palette.gray450, marginTop: 6, textAlign: 'right' },
 });

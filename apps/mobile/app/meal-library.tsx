@@ -95,9 +95,19 @@ export default function MealLibraryScreen() {
     let active = true;
     (async () => {
       setLoading(true);
+      // KFCT canonicalisation (§2/§5): a superseded legacy Kenyan meal is
+      // deactivated (is_active=false), never deleted. Every other browse/
+      // suggestion surface in the app already filters on this
+      // (today-nutrition.tsx, (tabs)/index.tsx, my-plan.tsx,
+      // nutrition-recommendation-service.ts) — this screen was the one gap:
+      // it's a NEW-selection surface (browse + pick for a new meal-plan
+      // slot), so an inactive meal must not be offered here even though
+      // meal-detail.tsx must still resolve one by id for an existing
+      // historical reference.
       const { data } = await supabase
         .from('meals')
         .select('id, name, category, image_url, calories, protein_g, difficulty, tags')
+        .eq('is_active', true)
         .order('name');
       if (active) { setMeals((data as Meal[]) ?? []); setLoading(false); }
     })();

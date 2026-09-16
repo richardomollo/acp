@@ -11,9 +11,19 @@
 // eaten. Consumed evidence stays exactly where N1 already puts it
 // (food_log_entries); this module never writes nutrition numbers of its own.
 
-import type { MealSlot } from './food-types.ts';
+import type { MealSlot, CanonicalFood } from './food-types.ts';
 
-export type MealCandidateSource = 'catalogue' | 'saved_meal';
+// Recipes V1 — 'canonical_recipe' is the third candidate source: a
+// food_recipes row (composition_method='standard_recipe_verified') joined to
+// its canonical food. It is NOT wired into
+// services/nutrition-recommendation-service.ts's fetchCandidatesBySlot in
+// this pass — that path is the flagged-off (isAdaptiveNutritionEnabled),
+// unlaunched adaptive-nutrition system; the LIVE suggestion surface
+// (app/today-nutrition.tsx) gets its own adapter directly into
+// lib/meal-ranking.ts's MealRow instead (lib/nutrition/recipe-model.ts).
+// This adapter exists so the adaptive path can adopt the same candidates
+// later without inventing a second shape.
+export type MealCandidateSource = 'catalogue' | 'saved_meal' | 'canonical_recipe';
 
 /** The five macro fields Lana's catalogue/saved-meal data actually carries
  *  (mirrors MACRO_KEYS in food-types.ts) — never a full micronutrient vector,
@@ -140,6 +150,38 @@ export function mealCandidateFromSavedMeal(meal: SavedMealForCandidate, slot: Me
     prepTimeMinutes: null,
     imageUrl: null,
     savedMealProvenance: meal.provenance,
+  };
+}
+
+/**
+ * Recipes V1 — a canonical KFCT-style recipe as a recommendation candidate,
+ * for the adaptive-nutrition ranker. `slot` is caller-supplied (a recipe has
+ * no single fixed occasion — see lib/nutrition/recipe-model.ts's
+ * KFCT_CATEGORY_SLOTS for the deterministic category→slot mapping used by
+ * the live ranker equivalent). Macros are the food's own per-100g values —
+ * the reference portion is 100g (§8/§19); never a second calculation.
+ */
+export function mealCandidateFromFoodRecipe(
+  food: Pick<CanonicalFood, 'id' | 'name' | 'countryCode' | 'nutrients' | 'compositionMethod' | 'source'>,
+  recipeId: string,
+  slot: MealSlot,
+): MealCandidate & { foodId: string; recipeId: string } {
+  return {
+    id: food.id,
+    foodId: food.id,
+    recipeId,
+    source: 'canonical_recipe',
+    name: food.name,
+    slot,
+    cuisine: food.countryCode === 'KE' ? 'kenyan' : null,
+    tags: [],
+    macros: {
+      calories: food.nutrients.energyKcal, proteinG: food.nutrients.proteinG,
+      carbsG: food.nutrients.carbohydrateG, fatG: food.nutrients.fatG, fibreG: food.nutrients.fibreG,
+    },
+    prepTimeMinutes: null,
+    imageUrl: null,
+    savedMealProvenance: null,
   };
 }
 

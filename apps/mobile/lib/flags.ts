@@ -108,6 +108,19 @@ export function isAdaptiveNutritionEnabled(): boolean {
   return process.env.EXPO_PUBLIC_LANA_ADAPTIVE_NUTRITION_ENABLED === 'true';
 }
 
+// Lana Nutrition — Monthly → Weekly → Daily Planning V1. Deliberately
+// OPT-IN, same posture as isAdaptiveNutritionEnabled above — new,
+// undeployed, unverified-on-device behaviour. Off (the default): Today
+// renders exactly as it does today (recipe-only Suggested Meals, no
+// planned-vs-actual merge); services/nutrition-planning-service.ts and its
+// 3 tables (nutrition_planning_cycles/nutrition_weekly_plans/
+// nutrition_planned_meals) are never read or written. Independent of
+// isAdaptiveNutritionEnabled — that flag still gates the separate, dormant
+// Beta #022 `meals`-based system, untouched by this feature either way.
+export function isNutritionPlanningEnabled(): boolean {
+  return process.env.EXPO_PUBLIC_LANA_NUTRITION_PLANNING_ENABLED === 'true';
+}
+
 // Phase 4.5 / 4.6 — professional → consumer continuity: the "From your coach"
 // Home card + agreed-action list, the /coach-update screen, and the
 // /trainer-tasks screen, all fed by get_client_session_feed. Turned OFF by
