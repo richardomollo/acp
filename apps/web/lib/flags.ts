@@ -97,6 +97,17 @@ export function isNutritionOutcomeIntelligenceEnabled(): boolean {
   return !isOff('ACP_OUTCOME_INTELLIGENCE_ENABLED');
 }
 
+//   Lana Chat V1 — a new, still-unfinished surface, so (unlike the kill
+//   switches above) this defaults OFF and needs an explicit "true" — the
+//   same default-off convention apps/mobile/lib/flags.ts already uses for
+//   its own new/beta flags (isAdaptiveNutritionEnabled,
+//   isNutritionPlanningEnabled). Off: the /api/ai/lana-chat route returns
+//   503; the mobile "Ask Lana" entry point hides via the matching
+//   EXPO_PUBLIC_ flag. Nothing else in the app depends on this.
+export function isLanaChatEnabled(): boolean {
+  return process.env.LANA_CHAT_ENABLED === 'true';
+}
+
 // Product decision — client task assignment ("From your coach" agreed
 // actions / the client_tasks table) is disabled on both the PT-authoring
 // side (this constant, checked in SessionWorkspace.tsx, session-model.ts's

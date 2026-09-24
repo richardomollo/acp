@@ -115,7 +115,16 @@ export function sortSupportOpportunities(opportunities: SupportOpportunity[]): S
   return [...opportunities].sort((a, b) => SUPPORT_RELEVANCE_RANK[a.relevance] - SUPPORT_RELEVANCE_RANK[b.relevance]);
 }
 
-const ASSESSMENT_ENDPOINT = 'https://activecitypass.com/api/ai/onboarding-assessment';
+// Device-QA bug (Fitness plan recovery) — this was hard-coded to production
+// while nutrition-coaching.ts/lana-chat's client already respect
+// EXPO_PUBLIC_API_URL for exactly this reason: a device pointed at local
+// Supabase (a local-only access token) got silently 401'd by PRODUCTION's
+// onboarding-assessment route, which validates against production's own
+// auth — collapsed by fetchOnboardingAssessment's own null-on-any-failure
+// contract into the same "not ready yet" UI state forever. Unset in any
+// prod/EAS build → identical behaviour to before (activecitypass.com).
+const ASSESSMENT_ENDPOINT =
+  `${process.env.EXPO_PUBLIC_API_URL || 'https://activecitypass.com'}/api/ai/onboarding-assessment`;
 // UX threshold, not a hard cancellation: this is how long the caller should
 // wait before showing the fallback plan, not how long the underlying
 // request is allowed to run. See fetchOnboardingAssessment below for why
@@ -284,10 +293,31 @@ export interface FetchAssessmentResult {
   generatedAt: string;
 }
 
+// Fitness plan recovery (device QA) — §7's "distinguish a genuine failure
+// from legitimate generation-in-progress". Every non-success path used to
+// collapse to a bare `null`, which the caller (my-plan.tsx) could only ever
+// render as "still being prepared" — visually identical whether nothing had
+// been attempted yet or a request had just been flatly rejected. `reason`
+// lets the caller tell those apart and offer a real Retry only when one is
+// warranted, without inventing a second readiness definition (isValidAssessment
+// is still the only gate for "is there a real plan").
+export type FetchAssessmentFailureReason =
+  | 'unauthorized'      // 401/403 — the access token was rejected by the assessment route
+  | 'server_error'      // any other non-2xx
+  | 'invalid_response'  // 2xx but the body didn't validate (isValidAssessment/generatedAt)
+  | 'network'           // fetch() itself threw (offline, DNS, connection refused, …)
+  | 'timeout';          // the UX deadline won the race — the real request may still land later
+
+export type FetchAssessmentOutcome =
+  | ({ ok: true } & FetchAssessmentResult)
+  | { ok: false; reason: FetchAssessmentFailureReason };
+
 /**
- * Never throws. Resolves to the assessment (+ its plan identifier) within
- * ~REQUEST_TIMEOUT_MS, or null if it didn't arrive/succeed/validate in time
- * — null is the signal for the caller to show the fallback plan immediately.
+ * Never throws. Resolves within ~REQUEST_TIMEOUT_MS to `{ok:true, assessment,
+ * generatedAt}` or `{ok:false, reason}` — `reason` is diagnostic only (never
+ * shown verbatim to the user); the caller decides what, if anything, to do
+ * with a failure (e.g. My Plan offers Retry for `unauthorized`/`server_error`/
+ * `network`, but not for `timeout`, where the request may still succeed).
  *
  * Deliberately does NOT use AbortController to cancel the underlying
  * request at the timeout: the request is raced against a timer for the
@@ -307,29 +337,63 @@ export async function fetchOnboardingAssessment(
   timeoutMs: number = REQUEST_TIMEOUT_MS,
   // Test-only injectable "now" — production always gets the real local date.
   now: Date = new Date(),
-): Promise<FetchAssessmentResult | null> {
+): Promise<FetchAssessmentOutcome> {
   // LH-30 — the server has no reliable notion of the user's "today", so the
   // plan's effective start date is the user's LOCAL calendar date, computed
   // here with the LH-26 canonical helper (never a UTC slice) and sent
   // alongside every generation / regeneration request.
   const clientLocalDate = toCalendarDate(now);
-  const request = (async (): Promise<FetchAssessmentResult | null> => {
+  const request = (async (): Promise<FetchAssessmentOutcome> => {
     try {
       const res = await fetchImpl(ASSESSMENT_ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...params, clientLocalDate }),
       });
-      if (!res.ok) return null;
+      if (res.status === 401 || res.status === 403) return { ok: false, reason: 'unauthorized' };
+      if (!res.ok) return { ok: false, reason: 'server_error' };
       const json = await res.json();
-      if (!isValidAssessment(json?.assessment) || typeof json?.generatedAt !== 'string') return null;
-      return { assessment: json.assessment, generatedAt: json.generatedAt };
+      if (!isValidAssessment(json?.assessment) || typeof json?.generatedAt !== 'string') return { ok: false, reason: 'invalid_response' };
+      return { ok: true, assessment: json.assessment, generatedAt: json.generatedAt };
     } catch {
-      return null;
+      return { ok: false, reason: 'network' };
     }
   })();
 
-  const uiTimeout = new Promise<null>(resolve => setTimeout(() => resolve(null), timeoutMs));
+  const uiTimeout = new Promise<FetchAssessmentOutcome>(resolve =>
+    setTimeout(() => resolve({ ok: false, reason: 'timeout' }), timeoutMs));
 
   return Promise.race([request, uiTimeout]);
+}
+
+// ── My Plan view state (device QA — Fitness plan recovery, §7) ─────────────
+// The single, pure, testable decision of what My Plan should render — the
+// exact same inputs the screen already holds as state, just no longer
+// re-derived ad hoc inside JSX. Distinguishes a genuine failure from
+// legitimate "still generating"/"nothing to show yet", which is the whole
+// point of this fix: a swallowed error must never render identically to an
+// in-progress generation.
+export type MyPlanViewState =
+  | 'loading'          // initial fetch in flight
+  | 'generating'       // an assessment generation attempt is in flight
+  | 'ready'            // assessment is a valid canonical plan — show it
+  | 'error_retryable'  // a genuine failure occurred and there's nothing ready to show — offer Retry
+  | 'not_ready'        // no assessment yet, no actionable error (includes a bare timeout, which may still resolve) — the honest "still being prepared" state
+  | 'no_profile';      // no plan summary either — nothing to build from yet
+
+export interface MyPlanViewStateInput {
+  loading: boolean;
+  generating: boolean;
+  hasAssessment: boolean;
+  hasPlanSummary: boolean;
+  generationError: FetchAssessmentFailureReason | null;
+}
+
+export function resolveMyPlanViewState(input: MyPlanViewStateInput): MyPlanViewState {
+  if (input.loading) return 'loading';
+  if (input.hasAssessment) return 'ready';
+  if (input.generating) return 'generating';
+  if (input.generationError && input.generationError !== 'timeout') return 'error_retryable';
+  if (input.hasPlanSummary) return 'not_ready';
+  return 'no_profile';
 }

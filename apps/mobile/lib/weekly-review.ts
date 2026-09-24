@@ -164,7 +164,11 @@ export function buildWeeklyBehaviourSummary(
 }
 
 // ── Weekly-adaptation API client (Part 10, mirrors fetchOnboardingAssessment) ─
-const WEEKLY_ADAPTATION_ENDPOINT = 'https://activecitypass.com/api/ai/weekly-adaptation';
+// Device-QA bug fix — see ai-assessment.ts's ASSESSMENT_ENDPOINT for why
+// this must respect EXPO_PUBLIC_API_URL rather than always hitting
+// production. Unset → identical behaviour to before.
+const WEEKLY_ADAPTATION_ENDPOINT =
+  `${process.env.EXPO_PUBLIC_API_URL || 'https://activecitypass.com'}/api/ai/weekly-adaptation`;
 // Weekly review is less time-critical than onboarding (Part 41), but still
 // needs a responsive UX — kept generous relative to onboarding's 15s since
 // this is a deliberate, user-initiated action (tapping "See my weekly
@@ -264,7 +268,9 @@ export async function fetchWeeklyAdaptation(
 }
 
 // ── Legacy plan date upgrade (Day 5.5 Problem C) ────────────────────────────
-const PLAN_DATE_UPGRADE_ENDPOINT = 'https://activecitypass.com/api/ai/plan-date-upgrade';
+// Device-QA bug fix — see ai-assessment.ts's ASSESSMENT_ENDPOINT.
+const PLAN_DATE_UPGRADE_ENDPOINT =
+  `${process.env.EXPO_PUBLIC_API_URL || 'https://activecitypass.com'}/api/ai/plan-date-upgrade`;
 
 export interface FetchPlanDateUpgradeResult {
   upgraded: boolean;

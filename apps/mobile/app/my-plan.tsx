@@ -17,7 +17,8 @@ import { getStravaStatus } from '@/services/strava';
 import { buildPlanSummary, sanitizeTrainingDays, EMPTY_ANSWERS, type OnboardingAnswers, type PlanSummary } from '@/lib/onboarding';
 import {
   fetchOnboardingAssessment, deriveCategoryCounts, isValidAssessment, sortSupportOpportunities,
-  CATEGORY_LABEL, type AIAssessment, type StartingPlanActivity,
+  resolveMyPlanViewState, CATEGORY_LABEL,
+  type AIAssessment, type StartingPlanActivity, type FetchAssessmentFailureReason,
 } from '@/lib/ai-assessment';
 import { buildPlanExplanation, compareWeeklyPlans, describePlanChanges } from '@/lib/coaching';
 import {
@@ -59,10 +60,32 @@ const APPROACH_ICON: Record<string, string> = {
   Consistency: 'repeat-outline',
 };
 
+// Device QA — Fitness plan recovery (§7): honest, non-technical copy per
+// failure reason — never a raw status code/error message, but also never
+// the same reassuring "still being prepared" wording a genuine failure
+// doesn't deserve.
+const GENERATION_ERROR_MESSAGE: Record<FetchAssessmentFailureReason, string> = {
+  unauthorized: 'Your session needs refreshing before we can prepare your plan.',
+  server_error: "We couldn't prepare your plan just now.",
+  invalid_response: "We couldn't prepare your plan just now.",
+  network: "We couldn't reach the server to prepare your plan.",
+  // Never actually shown — resolveMyPlanViewState routes 'timeout' to
+  // 'not_ready', not 'error_retryable' (the request may still land). Kept
+  // here only so this map stays total over FetchAssessmentFailureReason.
+  timeout: "Your session needs refreshing before we can prepare your plan.",
+};
+
 export default function MyPlanScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  // Device QA — Fitness plan recovery (§7): a genuine failure (bad/expired
+  // token, network, server error) must never render identically to
+  // legitimate "still generating" — this is what lets the screen tell them
+  // apart and offer a real Retry only when one is warranted. null means "no
+  // failed attempt to report" (either nothing tried yet, a timeout that may
+  // still land, or success).
+  const [generationError, setGenerationError] = useState<FetchAssessmentFailureReason | null>(null);
   const [assessment, setAssessment] = useState<AIAssessment | null>(null);
   // Always computed, regardless of whether the AI assessment is present —
   // "Your goal" is deterministic and reused as-is on both the AI and
@@ -259,6 +282,7 @@ export default function MyPlanScreen() {
       // saved yet" so it regenerates in the current shape below.
       if (data?.ai_assessment && isValidAssessment(data.ai_assessment) && data.ai_assessment_generated_at) {
         settled = true; clearTimeout(backstop); inFlightRef.current = false;
+        setGenerationError(null);
         setAssessment(data.ai_assessment);
         setPlanId(data.ai_assessment_generated_at);
         setLoading(false);
@@ -348,6 +372,7 @@ export default function MyPlanScreen() {
         return;
       }
       setGenerating(true);
+      setGenerationError(null);
       // fetchOnboardingAssessment now self-bounds at ~15s (a race, not a
       // cancellation — see lib/ai-assessment.ts), so this just needs a
       // little slack on top of that, not the old 50s margin.
@@ -367,15 +392,28 @@ export default function MyPlanScreen() {
       if (settled) return;
       settled = true; clearTimeout(backstop); inFlightRef.current = false;
       setGenerating(false);
-      if (result) {
+      if (result.ok) {
         setAssessment(result.assessment);
         setPlanId(result.generatedAt);
+      } else {
+        // §7 — a genuine failure (bad token, network, server error) is
+        // recorded distinctly from "no attempt made yet"; 'timeout' is kept
+        // out of the error framing below (the request may still land — see
+        // fetchOnboardingAssessment's own header comment).
+        setGenerationError(result.reason);
       }
     } catch {
       if (!settled) {
         settled = true; clearTimeout(backstop); inFlightRef.current = false;
         setLoading(false);
         setGenerating(false);
+        // The initial fitness_profile/health_profile read itself failed
+        // (most likely the shared Supabase request-timeout wrapper
+        // rejecting a stalled request) — this is READ failure, not "no
+        // plan yet"; without this the screen would fall all the way to
+        // "Complete onboarding to see your plan here", which is false for
+        // an already-onboarded user (§7/§G).
+        setGenerationError('network');
       }
     }
   }, []);
@@ -1026,6 +1064,15 @@ export default function MyPlanScreen() {
 
   const handleGenerateWeeklyReview = () => runWeeklyAdaptation();
 
+  // Device QA — Fitness plan recovery (§7): the single, pure, tested
+  // decision of whether the current "no assessment yet" state is a genuine,
+  // retryable failure or the honest "still being prepared" state — see
+  // lib/ai-assessment.ts's resolveMyPlanViewState + its own tests for every
+  // transition this drives.
+  const myPlanViewState = resolveMyPlanViewState({
+    loading, generating, hasAssessment: !!assessment, hasPlanSummary: !!planSummary, generationError,
+  });
+
   return (
     <View style={styles.root}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -1659,9 +1706,30 @@ export default function MyPlanScreen() {
                   rendered by the `assessment` branch above once it loads. */}
               <View style={styles.divider} />
               <ThemedText style={[styles.rowLabel, { marginBottom: 6 }]}>This week</ThemedText>
-              <ThemedText style={styles.emptyText}>
-                Your session schedule is still being prepared. It’ll appear here shortly.
-              </ThemedText>
+              {/* §7 — a genuine failure never renders as this same "still
+                  preparing" copy; 'timeout' is the one exception (the
+                  request may still land server-side, see
+                  fetchOnboardingAssessment's own header comment). Driven by
+                  the tested resolveMyPlanViewState, not a re-derived check. */}
+              {myPlanViewState === 'error_retryable' && generationError ? (
+                <>
+                  <ThemedText style={styles.emptyText}>{GENERATION_ERROR_MESSAGE[generationError]}</ThemedText>
+                  <TouchableOpacity onPress={() => load()} style={styles.retryBtn} accessibilityRole="button" accessibilityLabel="Retry">
+                    <ThemedText style={styles.retryBtnText}>Retry →</ThemedText>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <ThemedText style={styles.emptyText}>
+                  Your session schedule is still being prepared. It’ll appear here shortly.
+                </ThemedText>
+              )}
+            </View>
+          ) : myPlanViewState === 'error_retryable' && generationError ? (
+            <View>
+              <ThemedText style={styles.emptyText}>{GENERATION_ERROR_MESSAGE[generationError]}</ThemedText>
+              <TouchableOpacity onPress={() => load()} style={styles.retryBtn} accessibilityRole="button" accessibilityLabel="Retry">
+                <ThemedText style={styles.retryBtnText}>Retry →</ThemedText>
+              </TouchableOpacity>
             </View>
           ) : (
             <ThemedText style={styles.emptyText}>Complete onboarding to see your plan here.</ThemedText>
@@ -1772,6 +1840,19 @@ const styles = StyleSheet.create({
     color: palette.gray450,
     textAlign: 'center',
     marginTop: 40,
+  },
+  retryBtn: {
+    alignSelf: 'center',
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: radii.pill,
+    backgroundColor: palette.ink900,
+  },
+  retryBtnText: {
+    fontSize: fontSize.sm,
+    fontWeight: '700',
+    color: palette.white,
   },
 
   generatingBanner: {

@@ -917,6 +917,57 @@ export default function TodayNutritionScreen() {
           </LinearGradient>
 
           <View style={s.content}>
+            {/* Lana Nutrition Planning — an explicit, unmissable entry point
+                at the very top of the page (a buried text link at the
+                bottom was too easy to miss). Only ever shown when a real
+                plan exists (weeklyObjective is set) — never a placeholder. */}
+            {isNutritionPlanningEnabled() && weeklyObjective && (
+              <TouchableOpacity
+                onPress={() => router.push('/nutrition-weekly-plan' as any)}
+                style={s.weeklyPlanCard}
+                accessibilityRole="button"
+                accessibilityLabel={`Your weekly meal plan: ${weeklyObjective}`}
+              >
+                <View style={{ flex: 1 }}>
+                  <ThemedText style={s.weeklyPlanTitle}>Your weekly meal plan</ThemedText>
+                  <ThemedText style={s.weeklyPlanObjective} numberOfLines={2}>{weeklyObjective}</ThemedText>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={palette.blue600} />
+              </TouchableOpacity>
+            )}
+
+            {/* Right after the weekly plan card — today's specific CTA:
+                the next not-yet-resolved planned meal today, or an honest
+                "plan followed" note. Built entirely from data already on
+                this page (plannedMealsBySlot), never a new recommendation/
+                ranking call. Kept behind isSuggested (§18/§19/§31) so it
+                never appears alongside a real nutritionist-assigned plan,
+                which renders via its own unchanged branch below. */}
+            {isSuggested && isNutritionPlanningEnabled() && weeklyObjective && (() => {
+              const next = (['breakfast', 'lunch', 'dinner', 'snack'] as const)
+                .map(slot => plannedMealsBySlot[slot])
+                .find(m => m && (m.status === 'recommended' || m.status === 'planned'));
+              return (
+                <TouchableOpacity
+                  style={s.suggestCard}
+                  onPress={() => router.push('/nutrition-today-plan' as any)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open today's meal plan"
+                >
+                  <ThemedText style={s.suggestEyebrow}>Today&apos;s meal plan</ThemedText>
+                  {next ? (
+                    <>
+                      <ThemedText style={s.suggestName}>{next.plannedLabel}</ThemedText>
+                      <ThemedText style={s.suggestReason}>{weeklyObjective}</ThemedText>
+                    </>
+                  ) : (
+                    <ThemedText style={s.suggestReason}>You&apos;ve followed your plan for today.</ThemedText>
+                  )}
+                  <ThemedText style={s.suggestCta}>View today&apos;s meals →</ThemedText>
+                </TouchableOpacity>
+              );
+            })()}
+
             {/* §20 — micronutrients are NOT on Today; one secondary link into
                 the existing detailed-nutrient screen (app/nutrition-day-
                 detail.tsx), reused as-is rather than duplicating NutrientList
@@ -1109,17 +1160,6 @@ export default function TodayNutritionScreen() {
               ))}
             </View>
 
-            {isNutritionPlanningEnabled() && weeklyObjective && (
-              <TouchableOpacity
-                onPress={() => router.push('/nutrition-weekly-plan' as any)}
-                style={s.secondaryLink}
-                accessibilityRole="button"
-                accessibilityLabel="View weekly plan"
-              >
-                <ThemedText style={s.secondaryLinkText}>View weekly plan →</ThemedText>
-              </TouchableOpacity>
-            )}
-
             {isSuggested && isAdaptiveNutritionEnabled() && userId ? (
               // Beta Feedback #022 — adaptive daily plan. Only ever replaces
               // the "no active meal plan → suggested meals" branch (isSuggested);
@@ -1127,38 +1167,12 @@ export default function TodayNutritionScreen() {
               // the unchanged branch below, flag on or off.
               <AdaptiveTodayMeals userId={userId} date={localISODate(new Date())} todayFoodLog={foodLog} />
             ) : isSuggested && isNutritionPlanningEnabled() && weeklyObjective ? (
-              // §19 — WITH an active nutrition plan, the planned next meal is
-              // primary; Lana Suggests must never show an unrelated recipe
-              // recommendation competing with it. This surfaces a
-              // plan-related observation instead — the next not-yet-resolved
-              // planned meal today, or an honest "plan followed" note —
-              // built entirely from data already on this page
-              // (plannedMealsBySlot), never a new recommendation/ranking.
-              (() => {
-                const next = (['breakfast', 'lunch', 'dinner', 'snack'] as const)
-                  .map(slot => plannedMealsBySlot[slot])
-                  .find(m => m && (m.status === 'recommended' || m.status === 'planned'));
-                return (
-                  <View style={s.suggestCard}>
-                    <ThemedText style={s.suggestEyebrow}>Your plan</ThemedText>
-                    {next ? (
-                      <>
-                        <ThemedText style={s.suggestName}>{next.plannedLabel}</ThemedText>
-                        <ThemedText style={s.suggestReason}>{weeklyObjective}</ThemedText>
-                        <TouchableOpacity
-                          onPress={() => router.push({ pathname: '/recipe-detail', params: { foodId: next.plannedFoodId, slot: next.mealSlot } } as any)}
-                          accessibilityRole="button"
-                          accessibilityLabel={`View recipe for ${next.plannedLabel}`}
-                        >
-                          <ThemedText style={s.suggestCta}>View recipe →</ThemedText>
-                        </TouchableOpacity>
-                      </>
-                    ) : (
-                      <ThemedText style={s.suggestReason}>You&apos;ve followed your plan for today.</ThemedText>
-                    )}
-                  </View>
-                );
-              })()
+              // §19 — WITH an active nutrition plan, "Lana suggests" must
+              // never show an unrelated recipe recommendation competing
+              // with it. The plan-related CTA itself now renders once, at
+              // the top of the page right after the weekly plan card — see
+              // above. Nothing further to render here.
+              null
             ) : isSuggested ? (
               // §18/§19/§31 — WITHOUT an active plan, "Lana suggests" never
               // competes with the food diary above: at most ONE card, placed
@@ -1407,6 +1421,19 @@ const s = StyleSheet.create({
   content: { paddingHorizontal: 20, paddingTop: 24 },
   emptyText: { fontSize: 13, color: palette.gray300, textAlign: 'center', marginTop: 40 },
   sourceNote: { fontSize: 12, color: palette.gray300, marginBottom: 16 },
+
+  // Lana Nutrition Planning — the one explicit "you have an active plan"
+  // marker on the page. Tinted (palette.blue50) rather than plain white on
+  // purpose: this is the single spot where brand color marks an active,
+  // ongoing state (§25's own "brand color marks action/progress" rule),
+  // distinct from the neutral food-diary cards below it.
+  weeklyPlanCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: palette.blue50, borderRadius: radii.xl,
+    borderWidth: 1, borderColor: palette.blue100, padding: 16, marginBottom: 20,
+  },
+  weeklyPlanTitle: { fontSize: 15, fontWeight: '800', color: palette.ink900, marginBottom: 3 },
+  weeklyPlanObjective: { fontSize: 13, color: palette.gray450, lineHeight: 18 },
 
   // §18/§19/§31 — "Lana suggests", a single card, positioned below the food
   // diary. Uses Card-equivalent surface/border tokens (palette.white /

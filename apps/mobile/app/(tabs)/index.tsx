@@ -31,6 +31,12 @@ import { ActivityFulfilmentCard, GymAccessList, ProfessionalSupportBlock, type P
 import { useMarketplaceLocation } from '@/contexts/marketplace-location-context';
 import { getEligiblePersonalTrainerIds } from '@/services/professional-eligibility-service';
 import { isMeasurementCheckinEnabled, isProfessionalContinuityEnabled } from '@/lib/flags';
+import { getMealCandidates } from '@/lib/meal-ranking';
+import { recipeService } from '@/services/recipe-service';
+import { slotsForRecipeCategory, mealRowFromRecipe, classifySuggestionSource, isSuggestionEligible } from '@/lib/nutrition/recipe-model';
+import { validateGoalDirection } from '@/lib/onboarding-validation';
+import { TodayWorkoutStrip } from '@/components/fitness/today-workout-strip';
+import { SearchTrigger } from '@/components/search-trigger-modal';
 import { MeasurementCheckinCard } from '@/components/home/measurement-checkin-card';
 import { CoachUpdateCard, HomeCoachActions } from '@/components/home/coach-update-card';
 import { loadContinuityModel } from '@/services/professional-continuity-service';
@@ -1581,28 +1587,51 @@ export default function HomeScreen() {
           setTodayMeals(planMeals);
           setTodayMealsAreSuggested(false);
         } else {
-          // One query per category (rather than a single shared limit) so a
-          // category-skewed table can't crowd the others out of the results.
-          const categories = ['breakfast', 'lunch', 'dinner'];
-          const categoryResults = await Promise.all(
-            categories.map(category =>
-              supabase.from('meals')
-                .select('id, name, image_url, calories, category')
-                .eq('is_active', true)
-                .eq('category', category)
-                .limit(5),
-            ),
-          );
+          // Suggested Meals V1 recipe-only policy — the SAME canonical
+          // source Suggested Meals/today-nutrition.tsx already use
+          // (recipeService.listActiveForSuggestions()). The legacy `meals`
+          // table is never queried here — it has zero active rows since
+          // Suggested Meals moved off it this session, which is exactly why
+          // this section previously went permanently empty.
+          const recipeCandidates = await recipeService.listActiveForSuggestions().catch(() => []);
+          const goal = fitnessProfileData?.goal ?? null;
+          const cuisinePreferences = fitnessProfileData?.cuisine_preference ? [fitnessProfileData.cuisine_preference] : [];
+          // LH-39 — same gentle, pool-relative lean as today-nutrition.tsx;
+          // missing/implausible weights → 'unknown' → no tilt.
+          const { weightDirection } = validateGoalDirection({
+            goal,
+            currentWeightKg: fitnessProfileData?.starting_weight_kg ?? null,
+            goalWeightKg: fitnessProfileData?.goal_weight_kg ?? null,
+          });
+          const categories = ['breakfast', 'lunch', 'dinner'] as const;
+          const mealsBySlot: DailyMealCandidates[] = categories.map((category) => {
+            const rows = recipeCandidates
+              .filter(({ recipe }) => slotsForRecipeCategory(recipe.category).includes(category))
+              .map(({ food, recipe }) => ({ ...mealRowFromRecipe(food, recipe, category), recipeFoodId: food.id }))
+              // recipe-only eligibility, same as today-nutrition.tsx — every
+              // row here already has a real recipeFoodId by construction.
+              .filter(row => isSuggestionEligible(classifySuggestionSource({ recipeFoodId: row.recipeFoodId, isActive: true })));
+            const candidates = getMealCandidates({
+              meals: rows.map(r => ({
+                id: r.id, name: r.name, category, cuisine: r.cuisine, tags: r.tags ?? [],
+                calories: r.calories ?? 0, protein_g: r.protein_g ?? 0, carbs_g: r.carbs_g ?? 0,
+                fat_g: r.fat_g ?? 0, fibre_g: r.fibre_g, is_active: true,
+              })),
+              goal, cuisinePreferences, weightDirection,
+            });
+            const topScore = candidates[0]?.scoring.overall;
+            const tiedTopIds = new Set(candidates.filter(c => c.scoring.overall === topScore).map(c => c.mealId));
+            return {
+              category,
+              foods: rows.filter(r => tiedTopIds.has(r.id)).map(r => ({
+                id: r.id, name: r.name, image_url: null, calories: r.calories,
+              })),
+            };
+          });
           // Stable daily selection (Home Nutrition Hardening, Problem B) —
           // deterministic from user + calendar date + slot, never
           // Math.random(). Same user opening Home twice today always sees
           // the same suggestions; they can only rotate on a new date.
-          const mealsBySlot: DailyMealCandidates[] = categories.map((category, i) => ({
-            category,
-            foods: ((categoryResults[i].data ?? []) as any[]).map(m => ({
-              id: m.id, name: m.name, image_url: m.image_url, calories: m.calories,
-            })),
-          }));
           const dailySelections = selectDailyMeals(authSession.user.id, today, mealsBySlot);
           const suggested: TodayMeal[] = dailySelections.map(sel => ({
             id: sel.food.id,
@@ -2000,7 +2029,9 @@ export default function HomeScreen() {
         )}
 
         {/* ─── Your goal (once set) — same slot as the status banner above.
-              Dismissible; comes back only if the goal actually changes. ─── */}
+              Dismissible; comes back only if the goal actually changes.
+              Disabled per request: hidden entirely once the goal is set,
+              not just dismissible.
         {!isGuest && goalStatus === 'complete' && goalSummary && !goalBannerDismissed && (
           <TouchableOpacity
             style={styles.goalBanner}
@@ -2026,6 +2057,7 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </TouchableOpacity>
         )}
+        */}
 
         {/* ─── How are you feeling: full-width check-in CTA (hidden once logged today) ─── */}
         {!isGuest && todayMood === null && (
@@ -2078,8 +2110,6 @@ export default function HomeScreen() {
                 <SectionHeader
                   title="Today's Focus"
                   onInfoPress={() => setShowIntelligenceInfo(true)}
-                  onSeeAll={homeInsight ? () => router.push(homeInsight.ctaTarget as any) : undefined}
-                  seeAllLabel={homeInsight?.ctaLabel}
                 />
 
                 {/* ─── ACP Intelligence™ — compact insight, presentation layer
@@ -2100,6 +2130,8 @@ export default function HomeScreen() {
                 )}
               </View>
 
+              {/* Rings card — temporarily disabled per request. Remove the
+                  surrounding comment markers to bring it back.
               <CombinedGoalRingsCard
                 rings={[
                   {
@@ -2158,15 +2190,47 @@ export default function HomeScreen() {
                   },
                 ]}
               />
+              */}
             </View>
           </View>
         )}
 
-        {/* ─── Today's Plan — the plan activity Home features for today.
-              Beta #012: this is the still-unresolved activity dated today
-              (which may be the 2nd of the day); once every actionable
-              activity today is resolved it becomes a compact ✓/skipped
-              acknowledgement and "UP NEXT" below takes over as primary. ─── */}
+        {/* ─── "View today's plan →" — moved off the Today's Focus section
+              header per request, now sits just before the search bar. Same
+              homeInsight CTA target/label as before, just relocated. ─── */}
+        {!isGuest && homeInsight && (
+          <TouchableOpacity
+            onPress={() => router.push(homeInsight.ctaTarget as any)}
+            style={styles.workoutPlanCtaRow}
+            accessibilityRole="button"
+            accessibilityLabel={homeInsight.ctaLabel}
+          >
+            <ThemedText style={styles.seeAllText}>{homeInsight.ctaLabel}</ThemedText>
+          </TouchableOpacity>
+        )}
+
+        {/* ─── Today's workout — the same date strip + selected-day workout
+              card as the Fitness tab (components/fitness/today-workout-strip),
+              placed just before "Suggested for today" per request. The
+              search bar deep-links into the Fitness tab's own search
+              (which already owns the sessions/trainers data) rather than
+              duplicating that fetch here. ─── */}
+        {!isGuest && (
+          <>
+            <ThemedText style={styles.workoutSearchSub}>Plan your workouts and classes</ThemedText>
+            <View style={styles.workoutSearchWrap}>
+              <SearchTrigger
+                placeholder="Search workouts, classes or trainers"
+                onPress={() => router.push({ pathname: '/(tabs)/fitness', params: { openSearch: '1' } } as any)}
+              />
+            </View>
+            <TodayWorkoutStrip />
+          </>
+        )}
+
+        {/* ─── Today's Plan / "Suggested for today" — temporarily disabled
+              per request. Remove the surrounding comment markers to bring
+              it back.
         {!isGuest && homeIntelLoaded && homePrimaryRef && (
           <View style={styles.section}>
             {!homePrimaryResolved && (
@@ -2181,11 +2245,6 @@ export default function HomeScreen() {
               const hasPlanMedia = (!!todayPlanMediaUrl || !!planFallbackMedia) && !homePrimaryResolved;
               return (
               <View style={[styles.todayPlanCard, hasPlanMedia && styles.todayPlanCardMedia]}>
-                {/* LH — the workout media covers only the "hero" (eyebrow →
-                    "View workout" CTA). Wrapping it in this positioned view
-                    makes the absolutely-filled image/scrim stop at the hero's
-                    bottom edge; "GET PROFESSIONAL SUPPORT" renders below on
-                    the card's plain surface. */}
                 <View style={hasPlanMedia ? styles.todayPlanHero : undefined}>
                 {hasPlanMedia && (
                   <>
@@ -2297,6 +2356,7 @@ export default function HomeScreen() {
             </View>
           </View>
         )}
+        */}
 
         {/* ─── Beta #021 — REST DAY / PROGRAMME TRANSITION. Fills the exact
               slot "Today's Plan" leaves empty when the plan has nothing
@@ -2767,6 +2827,11 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: palette.white },
   topFadeBg: { position: 'absolute', top: 0, left: 0, right: 0, height: 460 },
 
+  // Mirrors the Fitness tab's own header subtitle + search bar (headerSub/searchWrap).
+  workoutSearchSub: { fontSize: fontSize.sm, color: palette.gray450, marginTop: 16, paddingHorizontal: 20 },
+  workoutSearchWrap: { marginTop: 10, marginBottom: 4, paddingHorizontal: 20 },
+  workoutPlanCtaRow: { alignItems: 'flex-start', paddingHorizontal: 20, marginTop: 16 },
+
   // Header
   header: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
@@ -2849,9 +2914,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     borderRadius: radii['2xl'],
     marginHorizontal: 20,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 8,
   },
   nextWeekHomeCard: {
     flexDirection: 'row',
