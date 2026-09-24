@@ -1,0 +1,838 @@
+kfct_code,recipe_name,sort_order,ingredient_name,grams,household_measure,ingredient_text,book_page,pdf_page
+15003,Kaimati (Fried Dumplings),1,"wheat flour, refined",280,2 cups (280 g),"2 cups (280 g) wheat flour, refined",6,24
+15003,Kaimati (Fried Dumplings),2,water,447,2 cups (447 g),2 cups (447 g) water,6,24
+15003,Kaimati (Fried Dumplings),3,"vanilla essence, clear",3,½ tsp. (3 g),"½ tsp. (3 g) vanilla essence, clear",6,24
+15003,Kaimati (Fried Dumplings),4,cardamoms powder,1,½ tsp. (1 g),½ tsp. (1 g) cardamoms powder,6,24
+15003,Kaimati (Fried Dumplings),5,"yeast, dry",12,1¼ tbsp. (12 g),"1¼ tbsp. (12 g) yeast, dry",6,24
+15003,Kaimati (Fried Dumplings),6,cooking oil,1000,5 1/8 cups (1000 g),5 1/8 cups (1000 g) cooking oil,6,24
+15003,Kaimati (Fried Dumplings),7,sugar,56,4 tbsp. (56 g),4 tbsp. (56 g) sugar,6,24
+15003,Kaimati (Fried Dumplings),8,white sugar,187,1 cup (187 g),1 cup (187 g) white sugar,6,24
+15003,Kaimati (Fried Dumplings),9,water,116,½ cup (116g),½ cup (116g) water,6,24
+15003,Kaimati (Fried Dumplings),10,"vanilla essence, clear",4,½ tsp. (4 g),"½ tsp. (4 g) vanilla essence, clear",6,24
+15004,Mahamri (Swahili Doughnuts),1,wheat flour refined,525,3 ½ cups (525 g),"3 ½ cups (525 g) wheat flour, refined",8,26
+15004,Mahamri (Swahili Doughnuts),2,coconut milk,181,¾ cup (181 g),¾ cup (181 g) coconut milk,8,26
+15004,Mahamri (Swahili Doughnuts),3,white sugar,123,9 tbsp. (123 g),9 tbsp. (123 g) white sugar,8,26
+15004,Mahamri (Swahili Doughnuts),4,dry yeast,12,1¼ tbsp. (12 g),1¼ tbsp. (12 g) dry yeast,8,26
+15004,Mahamri (Swahili Doughnuts),5,cardamom,2,1 tsp. (2 g),1 tsp. (2 g) cardamom,8,26
+15004,Mahamri (Swahili Doughnuts),6,water,182,¾ cups (182 g),¾ cups (182 g) water,8,26
+15004,Mahamri (Swahili Doughnuts),7,cooking oil,1735,8 1/8 cups (1735 g),8 1/8 cups (1735 g) cooking oil,8,26
+15124,"Enriched Mandazi (East African Doughnuts, Enriched)",1,self-raising wheat flour,1063,7 cups (1063 g),7 cups (1063 g) self-raising wheat flour,10,28
+15124,"Enriched Mandazi (East African Doughnuts, Enriched)",2,,179,3 eggs (179 g),3 eggs (179 g),10,28
+15124,"Enriched Mandazi (East African Doughnuts, Enriched)",3,margarine,118,9 tbsp. (118 g),9 tbsp. (118 g) margarine,10,28
+15124,"Enriched Mandazi (East African Doughnuts, Enriched)",4,,15,Rind from 2 lemons (15 g),Rind from 2 lemons (15 g),10,28
+15124,"Enriched Mandazi (East African Doughnuts, Enriched)",5,sugar,144,¾ cup (144 g),¾ cup (144 g) sugar,10,28
+15124,"Enriched Mandazi (East African Doughnuts, Enriched)",6,"salt, iodized",2,½ tsp. (2 g),"½ tsp. (2 g) salt, iodized",10,28
+15124,"Enriched Mandazi (East African Doughnuts, Enriched)",7,cooking fat,1039,7 cups (1039 g),7 cups (1039 g) cooking fat,10,28
+15124,"Enriched Mandazi (East African Doughnuts, Enriched)",8,cow milk,289,11/3 cups (289 g),11/3 cups (289 g) cow milk,10,28
+15124,"Enriched Mandazi (East African Doughnuts, Enriched)",9,water,282,1¼ cups (282 g),1¼ cups (282 g) water,10,28
+15125,"Basic Mandazi (East African Doughnuts, Basic)",1,all-purpose wheat flour,953,7 ¼ cups (953 g),7 ¼ cups (953 g) all-purpose wheat flour,12,30
+15125,"Basic Mandazi (East African Doughnuts, Basic)",2,baking powder,48,3 tbsp. (48 g),3 tbsp. (48 g) baking powder,12,30
+15125,"Basic Mandazi (East African Doughnuts, Basic)",3,sugar,128,2/3 cup (128 g),2/3 cup (128 g) sugar,12,30
+15125,"Basic Mandazi (East African Doughnuts, Basic)",4,cooking oil,1235,6 1/3 cups (1235 g),6 1/3 cups (1235 g) cooking oil,12,30
+15125,"Basic Mandazi (East African Doughnuts, Basic)",5,water,723,3 1/3 cups (723 g),3 1/3 cups (723 g) water,12,30
+15025,Meat Samosa (Sambusa ya Nyama),1,minced beef,500,½ kg,½ kg minced beef,14,32
+15025,Meat Samosa (Sambusa ya Nyama),2,"coriander, fresh",30,30 g,"30 g coriander, fresh",14,32
+15025,Meat Samosa (Sambusa ya Nyama),3,"leek, unpeeled, raw",356,1 stem (356 g),"1 stem (356 g) leek, unpeeled, raw",14,32
+15025,Meat Samosa (Sambusa ya Nyama),4,"garlic, unpeeled, raw",5,1 clove (5 g),"1 clove (5 g) garlic, unpeeled, raw",14,32
+15025,Meat Samosa (Sambusa ya Nyama),5,"chilli pepper, fresh, raw",1,¼ tsp. (1 g),"¼ tsp. (1 g) chilli pepper, fresh, raw",14,32
+15025,Meat Samosa (Sambusa ya Nyama),6,"wheat flour, refined",475,3 cups (475 g),"3 cups (475 g) wheat flour, refined",14,32
+15025,Meat Samosa (Sambusa ya Nyama),7,"salt, iodized",2,½ tsp. (2 g),"½ tsp. (2 g) salt, iodized",14,32
+15025,Meat Samosa (Sambusa ya Nyama),8,water,264,1¼ cups (264 g),1¼ cups (264 g) water,14,32
+15025,Meat Samosa (Sambusa ya Nyama),9,"cooking oil water. Mix into a medium soft dough. oughly until smooth. make the pieces into small balls. thickness. rolled-out ball and stack them on top of each other. Continue until all the pieces are placed. for 2 minutes per side. If the shallow pan is too small, cut the rolled-out dough to fit. after toasting until all the 9 pieces are separated. fold each of the triangular pieces into an enve- lope and seal the edges with a preparation of wheat flour paste.",572,3 cups (572 g),"3 cups (572 g) cooking oil water. Mix into a medium soft dough. oughly until smooth. make the pieces into small balls. thickness. rolled-out ball and stack them on top of each other. Continue until all the pieces are placed. for 2 minutes per side. If the shallow pan is too small, cut the rolled-out dough to fit. after toasting until all the 9 pieces are separated. fold each of the triangular pieces into an enve- lope and seal the edges with a preparation of wheat flour paste.",14,32
+15026,Vegetable Samosa (Sambusa ya Mboga),1,cabbage,557,557 g,557 g cabbage,16,34
+15026,Vegetable Samosa (Sambusa ya Mboga),2,,42,"1 head garlic, fresh (42 g)","1 head garlic, fresh (42 g)",16,34
+15026,Vegetable Samosa (Sambusa ya Mboga),3,,389,"4 onions, red skinned, raw, unpeeled (389g)","4 onions, red skinned, raw, unpeeled (389g)",16,34
+15026,Vegetable Samosa (Sambusa ya Mboga),4,,307,"2 carrots, orange, raw (307 g)","2 carrots, orange, raw (307 g)",16,34
+15026,Vegetable Samosa (Sambusa ya Mboga),5,,34,"3 pieces ginger, fresh, (34 g)","3 pieces ginger, fresh, (34 g)",16,34
+15026,Vegetable Samosa (Sambusa ya Mboga),6,"garden peas, green, raw",363,3 cups (363 g),"3 cups (363 g) garden peas, green, raw",16,34
+15026,Vegetable Samosa (Sambusa ya Mboga),7,water,825,3 ¾ cups (825 g),3 ¾ cups (825 g) water,16,34
+15026,Vegetable Samosa (Sambusa ya Mboga),8,"wheat flour, refined",608,4 ¼ cups (608 g),"4 ¼ cups (608 g) wheat flour, refined",16,34
+15026,Vegetable Samosa (Sambusa ya Mboga),9,"salt, iodized",7,1 ½ tsp. (7 g),"1 ½ tsp. (7 g) salt, iodized",16,34
+15026,Vegetable Samosa (Sambusa ya Mboga),10,"green chilli, fresh",2,1 ½ tsp. (2 g),"1 ½ tsp. (2 g) green chilli, fresh",16,34
+15026,Vegetable Samosa (Sambusa ya Mboga),11,"cooking oil minutes. the pockets. cup of cold water. dough from sticking onto the working surface. surface of each of the spread dough and stack three pieces together (the oil will help the layers to separate later). and trim the edges to form a circle the size of the plate. lightly cook each side for 1 minute. placed on top of each other), place into a wide",857,4 1/3 cups (857 g),"4 1/3 cups (857 g) cooking oil minutes. the pockets. cup of cold water. dough from sticking onto the working surface. surface of each of the spread dough and stack three pieces together (the oil will help the layers to separate later). and trim the edges to form a circle the size of the plate. lightly cook each side for 1 minute. placed on top of each other), place into a wide",16,34
+15027,Pancakes (Chapati za Maji),1,"wheat flour, refined, all purpose",433,3 cups (433 g),"3 cups (433 g) wheat flour, refined, all purpose",18,36
+15027,Pancakes (Chapati za Maji),2,,112,"2 eggs, whole (112 g)","2 eggs, whole (112 g)",18,36
+15027,Pancakes (Chapati za Maji),3,"cow milk, fresh",528,2 1/3 cups (528 g),"2 1/3 cups (528 g) cow milk, fresh",18,36
+15027,Pancakes (Chapati za Maji),4,"sugar, white",22,1/8 cup (22 g),"1/8 cup (22 g) sugar, white",18,36
+15027,Pancakes (Chapati za Maji),5,water,303,11/3 cups (303 g),11/3 cups (303 g) water,18,36
+15027,Pancakes (Chapati za Maji),6,cooking oil,160,¾ cup (160 g),¾ cup (160 g) cooking oil,18,36
+15029,Drop Scones,1,"wheat flour, self-raising",398,3 cups (398 g),"3 cups (398 g) wheat flour, self-raising",20,38
+15029,Drop Scones,2,,183,"3 eggs, whole (183 g)","3 eggs, whole (183 g)",20,38
+15029,Drop Scones,3,cow milk,392,1 3/4 cups (392 g),1 3/4 cups (392 g) cow milk,20,38
+15029,Drop Scones,4,"sugar, white",93,½ cup (93 g),"½ cup (93 g) sugar, white",20,38
+15029,Drop Scones,5,margarine,63,1/3 cup (63 g),1/3 cup (63 g) margarine,20,38
+15029,Drop Scones,6,water,121,½ cup (121 g),½ cup (121 g) water,20,38
+15029,Drop Scones,7,"salt, iodized",2,1 pinch (2 g),"1 pinch (2 g) salt, iodized",20,38
+15029,Drop Scones,8,cooking oil,293,1 ½ cups (293 g),1 ½ cups (293 g) cooking oil,20,38
+15042,Qita (Maize & Wheat Flour Pancake),1,"wheat flour, refined",312,2 cups (312 g),"2 cups (312 g) wheat flour, refined",22,40
+15042,Qita (Maize & Wheat Flour Pancake),2,"maize flour, white, re fined",533,3 cups (533 g),"3 cups (533 g) maize flour, white, re- fined",22,40
+15042,Qita (Maize & Wheat Flour Pancake),3,"yeast, dry",7,1 tbsp. (7 g),"1 tbsp. (7 g) yeast, dry",22,40
+15042,Qita (Maize & Wheat Flour Pancake),4,water,835,3 ¼ cups (835 g),3 ¼ cups (835 g) water,22,40
+15042,Qita (Maize & Wheat Flour Pancake),5,"salt, iodized",6,½ tbsp. (6 g),"½ tbsp. (6 g) salt, iodized",22,40
+15042,Qita (Maize & Wheat Flour Pancake),6,"butter, cow",61,4 tbsp. (61 g),"4 tbsp. (61 g) butter, cow",22,40
+15042,Qita (Maize & Wheat Flour Pancake),7,mixed spices,13,1 tbsp. (13 g),1 tbsp. (13 g) mixed spices,22,40
+15042,Qita (Maize & Wheat Flour Pancake),8,,2,2 cloves garlic (2 g),2 cloves garlic (2 g),22,40
+15135,Mkate Kuta,1,"wheat flour, all-purpose",531,3 ½ cups (531 g),"3 ½ cups (531 g) wheat flour, all-purpose",24,42
+15135,Mkate Kuta,2,"wheat flour, self-rising",563,3 ½ cups (563 g),"3 ½ cups (563 g) wheat flour, self-rising",24,42
+15135,Mkate Kuta,3,sugar,293,1 ½ cups (293 g),1 ½ cups (293 g) sugar,24,42
+15135,Mkate Kuta,4,cooking oil,1240,6 1/3 cups (1240 g),6 1/3 cups (1240 g) cooking oil,24,42
+15135,Mkate Kuta,5,cardamom powder,2,1 ¼ tsp. (2 g),1 ¼ tsp. (2 g) cardamom powder,24,42
+15135,Mkate Kuta,6,water,783,3 ½ cups (783 g),3 ½ cups (783 g) water,24,42
+15028,Tosti Mayai (Egg Toast),1,,134,"2 eggs, whole (134 g)","2 eggs, whole (134 g)",26,44
+15028,Tosti Mayai (Egg Toast),2,"salt, iodized",1,1/8 tsp. (1 g),"1/8 tsp. (1 g) salt, iodized",26,44
+15028,Tosti Mayai (Egg Toast),3,cooking oil,28,1/8 cup (28 g),1/8 cup (28 g) cooking oil,26,44
+15028,Tosti Mayai (Egg Toast),4,,123,"4 slices bread, white (123 g)","4 slices bread, white (123 g)",26,44
+15122,Oatmeal,1,oats,119,1 cup (119 g),1 cup (119 g) oats,28,46
+15122,Oatmeal,2,water,529,2 1/3 cups (529 g),2 1/3 cups (529 g) water,28,46
+15122,Oatmeal,3,"salt, iodized",1,¼ tsp.  (1 g),"¼ tsp.  (1 g) salt, iodized",28,46
+15081,Chai ya Maziwa (Mixed Tea),1,water,2968,13 cups (2968 g),13 cups (2968 g) water,30,48
+15081,Chai ya Maziwa (Mixed Tea),2,cow milk,1020,4 ½ cups (1020 g),4 ½ cups (1020 g) cow milk,30,48
+15081,Chai ya Maziwa (Mixed Tea),3,sugar,139,¾ cup (139 g),¾ cup (139 g) sugar,30,48
+15081,Chai ya Maziwa (Mixed Tea),4,tea leaves,12,3 tbsp. (12 g),3 tbsp. (12 g) tea leaves,30,48
+15064,Vimumunya vya Chumvi (Pumpkin & Coconut Milk),1,S,739,"Pumpkin, raw (739 g)","Pumpkin, raw (739 g)                                         S",32,50
+15064,Vimumunya vya Chumvi (Pumpkin & Coconut Milk),2,"salt, iodized                                   •",6,1 tsp. (6 g),"1 tsp. (6 g) salt, iodized                                   •",32,50
+15064,Vimumunya vya Chumvi (Pumpkin & Coconut Milk),3,coconut milk                              •,253,1 1/8 cups (253 g),1 1/8 cups (253 g) coconut milk                              •,32,50
+15064,Vimumunya vya Chumvi (Pumpkin & Coconut Milk),4,water,223,1 cup (223 g),1 cup (223 g) water,32,50
+15001,Maize Porridge (Uji wa Mahindi),1,whole maize flour white,236,1 ¾ cups (236 g),"1 ¾ cups (236 g) whole maize flour, white",36,54
+15001,Maize Porridge (Uji wa Mahindi),2,water,1513,7 cups (1513 g),7 cups (1513 g) water,36,54
+15001,Maize Porridge (Uji wa Mahindi),3,cow milk,330,1½ cups (330 g),1½ cups (330 g) cow milk,36,54
+15002,"Sorghum, Finger Millet and Maize Porridge",1,"sorghum flour, whole",83,8 tbsp. (83 g),"8 tbsp. (83 g) sorghum flour, whole",38,56
+15002,"Sorghum, Finger Millet and Maize Porridge",2,finger millet flour whole,68,6 ½ tbsp. (68 g),"6 ½ tbsp. (68 g) finger millet flour, whole",38,56
+15002,"Sorghum, Finger Millet and Maize Porridge",3,"maize flour, whole white",82,8 ¼ tbsp. (82 g),"8 ¼ tbsp. (82 g) maize flour, whole, white",38,56
+15002,"Sorghum, Finger Millet and Maize Porridge",4,cow milk,366,1 2/3 cups (366 g),1 2/3 cups (366 g) cow milk,38,56
+15002,"Sorghum, Finger Millet and Maize Porridge",5,water,1833,7 ¼ cups (1833 g),7 ¼ cups (1833 g) water,38,56
+15013,Cassava Porridge (Uji wa Muhogo),1,cassava flour,100,10 tbsp. (100 g),10 tbsp. (100 g) cassava flour,40,58
+15013,Cassava Porridge (Uji wa Muhogo),2,sugar,22,2 tbsp. (22 g),2 tbsp. (22 g) sugar,40,58
+15013,Cassava Porridge (Uji wa Muhogo),3,water,1840,8 ½ cups (1840 g),8 ½ cups (1840 g) water,40,58
+15014,Finger Millet Porridge (Uji wa Wimbi),1,"finger millet flour, whole",123,1 cup (123 g),"1 cup (123 g) finger millet flour, whole",42,60
+15014,Finger Millet Porridge (Uji wa Wimbi),2,"sugar, white",35,2 ½ tbsp. (35 g),"2 ½ tbsp. (35 g) sugar, white",42,60
+15014,Finger Millet Porridge (Uji wa Wimbi),3,water,1509,7 cups (1509 g),7 cups (1509 g) water,42,60
+15015,Bulrush Millet Porridge (Uji wa Mawele),1,bulrush millet flour,176,1 1/3 cups (176 g),1 1/3 cups (176 g) bulrush millet flour,44,62
+15015,Bulrush Millet Porridge (Uji wa Mawele),2,sugar,29,2 tbsp. (29 g),2 tbsp. (29 g) sugar,44,62
+15015,Bulrush Millet Porridge (Uji wa Mawele),3,water,940,4 1/3 cups (940 g),4 1/3 cups (940 g) water,44,62
+15016,Rice Flour Porridge (Uji wa Mchele),1,rice flour,140,1 cup (140 g),1 cup (140 g) rice flour,46,64
+15016,Rice Flour Porridge (Uji wa Mchele),2,sugar,49,3 ½ tbsp. (49 g),3 ½ tbsp. (49 g) sugar,46,64
+15016,Rice Flour Porridge (Uji wa Mchele),3,cardamom powder,1,½ tsp. (1 g),½ tsp. (1 g) cardamom powder,46,64
+15016,Rice Flour Porridge (Uji wa Mchele),4,coconut milk,140,2/3 cup (140 g),2/3 cup (140 g) coconut milk,46,64
+15016,Rice Flour Porridge (Uji wa Mchele),5,water,1780,8 1/8 cups (1780 g),8 1/8 cups (1780 g) water,46,64
+15012,"Cassava, Millet & Sorghum Porridge",1,cassava flour,46,1/3 cup (46 g),1/3 cup (46 g) cassava flour,48,66
+15012,"Cassava, Millet & Sorghum Porridge",2,red sorghum flour,26,2 ½ tbsp. (26 g),2 ½ tbsp. (26 g) red sorghum flour,48,66
+15012,"Cassava, Millet & Sorghum Porridge",3,finger millet flour,25,2 ½ tbsp. (25 g),2 ½ tbsp. (25 g) finger millet flour,48,66
+15012,"Cassava, Millet & Sorghum Porridge",4,sugar,46,3 tbsp. (46 g),3 tbsp. (46 g) sugar,48,66
+15012,"Cassava, Millet & Sorghum Porridge",5,water,1607,7 ½ cups (1607 g),7 ½ cups (1607 g) water,48,66
+15119,Finger Millet and Sorghum Porridge,1,finger millet flour,128,1 cup (128 g),1 cup (128 g) finger millet flour,50,68
+15119,Finger Millet and Sorghum Porridge,2,sorghum flour,56,5½ tbsp. (56 g),5½ tbsp. (56 g) sorghum flour,50,68
+15119,Finger Millet and Sorghum Porridge,3,milk,749,3 1/3 cups (749 g),3 1/3 cups (749 g) milk,50,68
+15119,Finger Millet and Sorghum Porridge,4,water,733,3 1/3 cups (733 g),3 1/3 cups (733 g) water,50,68
+15123,Oat Porridge (Uji wa Shayiri),1,oatmeal flour,107,5 tbsp. (107 g),5 tbsp. (107 g) oatmeal flour,52,70
+15123,Oat Porridge (Uji wa Shayiri),2,sugar,105,½ cup (105 g),½ cup (105 g) sugar,52,70
+15123,Oat Porridge (Uji wa Shayiri),3,water,990,4 ½ cups (990 g),4 ½ cups (990 g) water,52,70
+15123,Oat Porridge (Uji wa Shayiri),4,cow milk,331,1½ cups (331 g),1½ cups (331 g) cow milk,52,70
+15018,“Busara” (Whole Maize and Finger Millet Porridge),1,"maize flour, whole, white",130,1 cup (130 g),"1 cup (130 g) maize flour, whole, white",54,72
+15018,“Busara” (Whole Maize and Finger Millet Porridge),2,finger millet flour,273,2 1/8 cups (273 g),2 1/8 cups (273 g) finger millet flour,54,72
+15018,“Busara” (Whole Maize and Finger Millet Porridge),3,sprouted finger millet flour,194,1 ½ cups (194 g),1 ½ cups (194 g) sprouted finger millet flour,54,72
+15018,“Busara” (Whole Maize and Finger Millet Porridge),4,water,4455,20 ½ cups (4455 g),20 ½ cups (4455 g) water,54,72
+15136,Wheat Flour Porridge (Uji wa Ngano),1,"wheat flour, refined",112,¾ cup (112 g),"¾ cup (112 g) wheat flour, refined",56,74
+15136,Wheat Flour Porridge (Uji wa Ngano),2,water,1286,6 cups (1286 g),6 cups (1286 g) water,56,74
+15136,Wheat Flour Porridge (Uji wa Ngano),3,sugar,135,2/3 cup (135 g),2/3 cup (135 g) sugar,56,74
+15136,Wheat Flour Porridge (Uji wa Ngano),4,peanut butter,119,½ cup (119 g),½ cup (119 g) peanut butter,56,74
+15036,Pilau (Spiced Rice),1,raw white rice,595,3 1/3 cups (595 g),3 1/3 cups (595 g) raw white rice,60,78
+15036,Pilau (Spiced Rice),2,beef,500,½ kg,½ kg beef,60,78
+15036,Pilau (Spiced Rice),3,"cardamom, whole",1,10 seeds (1 g),"10 seeds (1 g) cardamom, whole",60,78
+15036,Pilau (Spiced Rice),4,"cinnamon, whole",3,5 sticks (3 g),"5 sticks (3 g) cinnamon, whole",60,78
+15036,Pilau (Spiced Rice),5,"black pepper, whole",1,5 seeds (1 g),"5 seeds (1 g) black pepper, whole",60,78
+15036,Pilau (Spiced Rice),6,"cloves, whole",1,5 seeds (1 g),"5 seeds (1 g) cloves, whole",60,78
+15036,Pilau (Spiced Rice),7,"salt, iodized",30,6 tsp. (30 g),"6 tsp. (30 g) salt, iodized",60,78
+15036,Pilau (Spiced Rice),8,cumin,11,2 tbsp. (11 g),2 tbsp. (11 g) cumin,60,78
+15036,Pilau (Spiced Rice),9,,840,"4 potatoes, unpeeled, raw (840 g)","4 potatoes, unpeeled, raw (840 g)",60,78
+15036,Pilau (Spiced Rice),10,,387,"3 onions, red skinned, unpeeled, raw (387 g)","3 onions, red skinned, unpeeled, raw (387 g)",60,78
+15036,Pilau (Spiced Rice),11,"garlic, whole",17,5 cloves (17 g),"5 cloves (17 g) garlic, whole",60,78
+15036,Pilau (Spiced Rice),12,ginger,23,1 root (23 g),1 root (23 g) ginger,60,78
+15036,Pilau (Spiced Rice),13,,115,½ green capsicum (115 g),½ green capsicum (115 g),60,78
+15036,Pilau (Spiced Rice),14,"coriander, fresh",62,62 g,"62 g coriander, fresh",60,78
+15036,Pilau (Spiced Rice),15,water,1788,8 ¼ cups (1788 g),8 ¼ cups (1788 g) water,60,78
+15036,Pilau (Spiced Rice),16,cooking oil,293,1 ½ cups (293 g),1 ½ cups (293 g) cooking oil,60,78
+15038,Mseto wa Maharagwe (Rice with Beans),1,"kidney beans, raw",505,3 cups (505 g),"3 cups (505 g) kidney beans, raw",62,80
+15038,Mseto wa Maharagwe (Rice with Beans),2,water,4600,21 ¼ cups (4600 g),21 ¼ cups (4600 g) water,62,80
+15038,Mseto wa Maharagwe (Rice with Beans),3,"raw white rice, long grain",684,4 cups (684 g),"4 cups (684 g) raw white rice, long grain",62,80
+15038,Mseto wa Maharagwe (Rice with Beans),4,,206,(206 g),(206 g),62,80
+15038,Mseto wa Maharagwe (Rice with Beans),5,,226,"2 tomatoes, red, ripe, raw (226 g)","2 tomatoes, red, ripe, raw (226 g)",62,80
+15038,Mseto wa Maharagwe (Rice with Beans),6,cooking oil,238,1 ¼ cups (238 g),1 ¼ cups (238 g) cooking oil,62,80
+15038,Mseto wa Maharagwe (Rice with Beans),7,salt,27,2 tbsp. (27 g),2 tbsp. (27 g) salt,62,80
+15037,Mseto wa Ndengu (Rice with Green Grams),1,raw white rice,621,3 ½ cups (621 g),3 ½ cups (621 g) raw white rice,64,82
+15037,Mseto wa Ndengu (Rice with Green Grams),2,green grams,242,1 ¼ cups (242 g),1 ¼ cups (242 g) green grams,64,82
+15037,Mseto wa Ndengu (Rice with Green Grams),3,coconut milk g),180,¾ cup (180 g),¾ cup (180 g) coconut milk g),64,82
+15037,Mseto wa Ndengu (Rice with Green Grams),4,"salt, iodized",3,½ tsp. (3 g),"½ tsp. (3 g) salt, iodized",64,82
+15037,Mseto wa Ndengu (Rice with Green Grams),5,water,2832,13 cups (2832 g),13 cups (2832 g) water,64,82
+15066r,Swahili Biryani Rice,1,raw white rice,1000,5 3/4 cups (1 kg),5 3/4 cups (1 kg) raw white rice,66,84
+15066r,Swahili Biryani Rice,2,water,1874,8 2/3 (1874 g),8 2/3 (1874 g) water,66,84
+15066r,Swahili Biryani Rice,3,"food colour powder, egg yellow",1,1 g,"1 g food colour powder, egg yellow",66,84
+15066r,Swahili Biryani Rice,4,"salt, iodized",10,2 tsp. (10 g),"2 tsp. (10 g) salt, iodized",66,84
+15066r,Swahili Biryani Rice,5,cooking oil,85,7 tbsp. (85 g),7 tbsp. (85 g) cooking oil,66,84
+15074,Wali wa Kuchemshwa (Boiled Rice),1,raw white rice,1000,5 2/3 cups (1 kg),5 2/3 cups (1 kg) raw white rice,68,86
+15074,Wali wa Kuchemshwa (Boiled Rice),2,"salt, iodized",15,3 tsp. (15 g),"3 tsp. (15 g) salt, iodized",68,86
+15074,Wali wa Kuchemshwa (Boiled Rice),3,cooking oil,50,¼ cup (50 g),¼ cup (50 g) cooking oil,68,86
+15074,Wali wa Kuchemshwa (Boiled Rice),4,water,1954,9 cups (1954 g),9 cups (1954 g) water,68,86
+15075,Wali wa Yasmin (Onion Fried Rice),1,raw white rice,898,5 cups (898 g),5 cups (898 g) raw white rice,70,88
+15075,Wali wa Yasmin (Onion Fried Rice),2,,335,"4 onions, red skinned, raw, unpeeled (335g)","4 onions, red skinned, raw, unpeeled (335g)",70,88
+15075,Wali wa Yasmin (Onion Fried Rice),3,cooking oil,134,2/3 cup (134 g),2/3 cup (134 g) cooking oil,70,88
+15075,Wali wa Yasmin (Onion Fried Rice),4,"salt, iodized",15,3 tsp. (15 g),"3 tsp. (15 g) salt, iodized",70,88
+15075,Wali wa Yasmin (Onion Fried Rice),5,water,1622,7 ½ cups (1622 g),7 ½ cups (1622 g) water,70,88
+15094,Mseto wa Viazi (Potatoes in rice),1,,468,"5 potatoes, unpeeled, Irish, white, raw (468 g)","5 potatoes, unpeeled, Irish, white, raw (468 g)",72,90
+15094,Mseto wa Viazi (Potatoes in rice),2,,379,"3 carrots, orange, raw (379 g)","3 carrots, orange, raw (379 g)",72,90
+15094,Mseto wa Viazi (Potatoes in rice),3,,205,"2 onions, red skinned, raw, unpeeled (205 g)","2 onions, red skinned, raw, unpeeled (205 g)",72,90
+15094,Mseto wa Viazi (Potatoes in rice),4,,240,"3 tomatoes, red, ripe (240 g)","3 tomatoes, red, ripe (240 g)",72,90
+15094,Mseto wa Viazi (Potatoes in rice),5,cooking fat,63,6 tbsp. (63 g),6 tbsp. (63 g) cooking fat,72,90
+15094,Mseto wa Viazi (Potatoes in rice),6,raw white rice,882,5 cups (882 g),5 cups (882 g) raw white rice,72,90
+15094,Mseto wa Viazi (Potatoes in rice),7,water,2412,11 1/3 cups (2412 g),11 1/3 cups (2412 g) water,72,90
+15094,Mseto wa Viazi (Potatoes in rice),8,"salt, iodized",9,2 tsp. (9 g),"2 tsp. (9 g) salt, iodized",72,90
+15129,Steamed Rice (Wali wa Mvuke),1,raw white rice,193,1 cup (193 g),1 cup (193 g) raw white rice,74,92
+15129,Steamed Rice (Wali wa Mvuke),2,water,1015,4 2/3 cups (1015 g),4 2/3 cups (1015 g) water,74,92
+15129,Steamed Rice (Wali wa Mvuke),3,"salt, iodized",9,2 tsp. (9 g),"2 tsp. (9 g) salt, iodized",74,92
+15116,Mcheleng (Rice with milk),1,raw white rice,500,2 ¾ cups (500 g),2 ¾ cups (500 g) raw white rice,76,94
+15116,Mcheleng (Rice with milk),2,water,488,2 ¼ cups (488 g),2 ¼ cups (488 g) water,76,94
+15116,Mcheleng (Rice with milk),3,"milk, cow",541,2 ¼ cups (541 g),"2 ¼ cups (541 g) milk, cow",76,94
+15116,Mcheleng (Rice with milk),4,"milk cream, cow",284,1 ¼ cups (284 g),"1 ¼ cups (284 g) milk cream, cow",76,94
+15116,Mcheleng (Rice with milk),5,"salt, iodized",14,1 tbsp. (14 g),"1 tbsp. (14 g) salt, iodized",76,94
+15057,"Mukimo (Fresh Maize, Potatoes & Pumpkin Leaves)",1,,876,"6 potatoes, unpeeled, Irish, raw (876g)","6 potatoes, unpeeled, Irish, raw (876g)",80,98
+15057,"Mukimo (Fresh Maize, Potatoes & Pumpkin Leaves)",2,pumpkin leaves,31,4 bunches (31 g),4 bunches (31 g) pumpkin leaves,80,98
+15057,"Mukimo (Fresh Maize, Potatoes & Pumpkin Leaves)",3,"green maize, white, boiled",479,2 ½ cups (479 g),"2 ½ cups (479 g) green maize, white, boiled",80,98
+15057,"Mukimo (Fresh Maize, Potatoes & Pumpkin Leaves)",4,water,453,2 cups (453 g),2 cups (453 g) water,80,98
+15057,"Mukimo (Fresh Maize, Potatoes & Pumpkin Leaves)",5,"salt, iodized",12,2 ½ tsp. (12 g),"2 ½ tsp. (12 g) salt, iodized",80,98
+15054,"Mukimo (Maize, Beans, Potatoes & Pumpkin Leaves)",1,,1386,"10 potatoes, unpeeled, Irish, white (1386 g)","10 potatoes, unpeeled, Irish, white (1386 g)",82,100
+15054,"Mukimo (Maize, Beans, Potatoes & Pumpkin Leaves)",2,"pumpkin leaves, raw",81,9 stalks (81 g),"9 stalks (81 g) pumpkin leaves, raw",82,100
+15054,"Mukimo (Maize, Beans, Potatoes & Pumpkin Leaves)",3,"white maize and kidney beans, cooked",1182,7 ½ cups (1182 g),"7 ½ cups (1182 g) white maize and kidney beans, cooked",82,100
+15054,"Mukimo (Maize, Beans, Potatoes & Pumpkin Leaves)",4,water,999,4 2/3 cups (999 g),4 2/3 cups (999 g) water,82,100
+15054,"Mukimo (Maize, Beans, Potatoes & Pumpkin Leaves)",5,"salt, iodized",13,2 ½ tsp. (13 g),"2 ½ tsp. (13 g) salt, iodized",82,100
+15059,"Mukimo wa Njahi (Black Beans, Green Bananas & Potatoes)",1,"potatoes, unpeeled, Irish, raw",1200,6 (1.2 kg),"6 (1.2 kg) potatoes, unpeeled, Irish, raw",84,102
+15059,"Mukimo wa Njahi (Black Beans, Green Bananas & Potatoes)",2,,1000,"6 green bananas, unpeeled, raw (1 kg)","6 green bananas, unpeeled, raw (1 kg)",84,102
+15059,"Mukimo wa Njahi (Black Beans, Green Bananas & Potatoes)",3,"njahi, dolichos lablab raw, dry",497,2 ½ cups (497 g),"2 ½ cups (497 g) njahi, dolichos lablab, raw, dry",84,102
+15059,"Mukimo wa Njahi (Black Beans, Green Bananas & Potatoes)",4,water,5611,25 ¾ cups (5611 g),25 ¾ cups (5611 g) water,84,102
+15059,"Mukimo wa Njahi (Black Beans, Green Bananas & Potatoes)",5,"salt, iodized",20,4 tsp. (20 g),"4 tsp. (20 g) salt, iodized",84,102
+15062,Mukimo wa Njahi (Raw & Ripe Bananas),1,"njahi dolichos lablab, black beans, raw, dry",1000,5 1/8 cups (1 kg),"5 1/8 cups (1 kg) njahi dolichos lablab, black beans, raw, dry",86,104
+15062,Mukimo wa Njahi (Raw & Ripe Bananas),2,"raw, unpeeled bananas",3000,21 large (3 kg),"21 large (3 kg) raw, unpeeled bananas",86,104
+15062,Mukimo wa Njahi (Raw & Ripe Bananas),3,"ripe, unpeeled bananas",1200,12 large (1.2 kg),"12 large (1.2 kg) ripe, unpeeled bananas",86,104
+15062,Mukimo wa Njahi (Raw & Ripe Bananas),4,"salt, iodized",21,5 tsp. (21 g),"5 tsp. (21 g) salt, iodized",86,104
+15062,Mukimo wa Njahi (Raw & Ripe Bananas),5,water,6037,28 ¾ cups (6037 g),28 ¾ cups (6037 g) water,86,104
+15061,Mashed Potato and Bananas,1,,2000,raw (2 kg),raw (2 kg),88,106
+15061,Mashed Potato and Bananas,2,,1200,"7 bananas, raw, unpeeled (1.2 kg)","7 bananas, raw, unpeeled (1.2 kg)",88,106
+15061,Mashed Potato and Bananas,3,,134,"1 onion, red skinned, raw, unpeeled (134 g)","1 onion, red skinned, raw, unpeeled (134 g)",88,106
+15061,Mashed Potato and Bananas,4,,321,"3 tomatoes, red, raw (321 g)","3 tomatoes, red, raw (321 g)",88,106
+15061,Mashed Potato and Bananas,5,cooking fat,186,1 ¼ cups (186 g),1 ¼ cups (186 g) cooking fat,88,106
+15061,Mashed Potato and Bananas,6,"salt, iodized",35,2 tbsp. (35 g),"2 tbsp. (35 g) salt, iodized",88,106
+15061,Mashed Potato and Bananas,7,water,734,3 1/3 cups (734 g),3 1/3 cups (734 g) water,88,106
+15069,Mushenye (Green Maize and Sweet Potatoes),1,"beans, kidney, dry",757,3 ¾ cups (757 g),"3 ¾ cups (757 g) beans, kidney, dry",90,108
+15069,Mushenye (Green Maize and Sweet Potatoes),2,"green maize, with husks",917,2 cobs (917 g),"2 cobs (917 g) green maize, with husks",90,108
+15069,Mushenye (Green Maize and Sweet Potatoes),3,,1600,raw (1.6 kg),raw (1.6 kg),90,108
+15069,Mushenye (Green Maize and Sweet Potatoes),4,"salt, iodized",20,4 tsp. (20 g),"4 tsp. (20 g) salt, iodized",90,108
+15069,Mushenye (Green Maize and Sweet Potatoes),5,peanut butter,323,1 1/3 cups (323 g),1 1/3 cups (323 g) peanut butter,90,108
+15069,Mushenye (Green Maize and Sweet Potatoes),6,water,6501,30 cups (6501 g),30 cups (6501 g) water,90,108
+15068,Wukunu (Sweet Potatoes & Dehulled Black Beans),1,"black beans, dolichos lablab, raw, dry",384,2¼ cups (384 g),"2¼ cups (384 g) black beans, dolichos lablab, raw, dry",92,110
+15068,Wukunu (Sweet Potatoes & Dehulled Black Beans),2,,1800,raw (1.8 kg),raw (1.8 kg),92,110
+15068,Wukunu (Sweet Potatoes & Dehulled Black Beans),3,water,2946,13½ cups (2946 g),13½ cups (2946 g) water,92,110
+15068,Wukunu (Sweet Potatoes & Dehulled Black Beans),4,"salt, iodized",11,2 tsp. (11 g),"2 tsp. (11 g) salt, iodized",92,110
+15083,Kimanga cha Ndizi (Smoked Green Bananas and Kidney Beans),1,"beans, kidney, dry",310,1 ¾ cups (310 g),"1 ¾ cups (310 g) beans, kidney, dry",94,112
+15083,Kimanga cha Ndizi (Smoked Green Bananas and Kidney Beans),2,,169,"13 green bananas, peeled smoked (169g)","13 green bananas, peeled smoked (169g)",94,112
+15083,Kimanga cha Ndizi (Smoked Green Bananas and Kidney Beans),3,"salt, iodized",12,2 ½ tsp. (12 g),"2 ½ tsp. (12 g) salt, iodized",94,112
+15083,Kimanga cha Ndizi (Smoked Green Bananas and Kidney Beans),4,water,4180,19 ¼ (4180 g),19 ¼ (4180 g) water,94,112
+15084,Kimanga cha Mihogo (Mashed Cassava and Pigeon Peas),1,"cassava, unpeeled, raw",1300,1 ½ (1.3 kg),"1 ½ (1.3 kg) cassava, unpeeled, raw",96,114
+15084,Kimanga cha Mihogo (Mashed Cassava and Pigeon Peas),2,"pigeon peas, dry, raw",541,3 cups (541 g),"3 cups (541 g) pigeon peas, dry, raw",96,114
+15084,Kimanga cha Mihogo (Mashed Cassava and Pigeon Peas),3,"salt, iodized",20,4 tsp. (20 g),"4 tsp. (20 g) salt, iodized",96,114
+15084,Kimanga cha Mihogo (Mashed Cassava and Pigeon Peas),4,water,4641,21 1/3 cups (4641 g),21 1/3 cups (4641 g) water,96,114
+15103,Mashed Potatoes,1,,1250,"7 potatoes, unpeeled, white, Irish, raw (1.25 kg)","7 potatoes, unpeeled, white, Irish, raw (1.25 kg)",98,116
+15103,Mashed Potatoes,2,water,625,2 ¾ cups (625 g),2 ¾ cups (625 g) water,98,116
+15103,Mashed Potatoes,3,"salt, iodized",7,½ tbsp. (7 g),"½ tbsp. (7 g) salt, iodized",98,116
+15104,Mashed Bananas Plain,1,,1000,"9 unpeeled bananas, green, raw (1 kg)","9 unpeeled bananas, green, raw (1 kg)",100,118
+15104,Mashed Bananas Plain,2,water,465,2 1/8 cups (465 g),2 1/8 cups (465 g) water,100,118
+15104,Mashed Bananas Plain,3,"salt, iodized",5,1 tsp. (5 g),"1 tsp. (5 g) salt, iodized",100,118
+15105,Enriched Mashed Potatoes,1,,1000,(1 kg),(1 kg),102,120
+15105,Enriched Mashed Potatoes,2,water,1007,4 2/3 cups (1007 g),4 2/3 cups (1007 g) water,102,120
+15105,Enriched Mashed Potatoes,3,"salt, iodized",3,½ tsp. (3 g),"½ tsp. (3 g) salt, iodized",102,120
+15105,Enriched Mashed Potatoes,4,margarine,76,6 tbsp. (76 g),6 tbsp. (76 g) margarine,102,120
+15106,Enriched Mashed Bananas,1,,1200,"14 green bananas, raw, unpeeled (1.2 kg)","14 green bananas, raw, unpeeled (1.2 kg)",104,122
+15106,Enriched Mashed Bananas,2,water,702,3 ¼ cups (702 g),3 ¼ cups (702 g) water,104,122
+15106,Enriched Mashed Bananas,3,"salt, iodized",4,¾ tsp. (4 g),"¾ tsp. (4 g) salt, iodized",104,122
+15106,Enriched Mashed Bananas,4,margarine,113,8 ½ tbsp. (113 g),8 ½ tbsp. (113 g) margarine,104,122
+15111,Kimito (Mashed Beans & Potatoes),1,,1900,(1.9 kg),(1.9 kg),106,124
+15111,Kimito (Mashed Beans & Potatoes),2,"beans, kidney, raw, dry",515,3 cups (515 g),"3 cups (515 g) beans, kidney, raw, dry",106,124
+15111,Kimito (Mashed Beans & Potatoes),3,"salt, iodized",21,4 tsp. (21 g),"4 tsp. (21 g) salt, iodized",106,124
+15111,Kimito (Mashed Beans & Potatoes),4,cooking oil,7,½ tbsp. (7 g),½ tbsp. (7 g) cooking oil,106,124
+15111,Kimito (Mashed Beans & Potatoes),5,water,7898,36 1/3 cups (7898 g),36 1/3 cups (7898 g) water,106,124
+15090,Kimanga cha Viazi Vitamu (Mashed Sweet Potato & Black Beans),1,,1000,raw (1 kg),raw (1 kg),108,126
+15090,Kimanga cha Viazi Vitamu (Mashed Sweet Potato & Black Beans),2,"dolichos beans, black",365,2 cups (365 g),"2 cups (365 g) dolichos beans, black",108,126
+15090,Kimanga cha Viazi Vitamu (Mashed Sweet Potato & Black Beans),3,"salt, iodized",11,2 tsp. (11 g),"2 tsp. (11 g) salt, iodized",108,126
+15090,Kimanga cha Viazi Vitamu (Mashed Sweet Potato & Black Beans),4,water,6239,28 ¾ cups (6239 g),28 ¾ cups (6239 g) water,108,126
+15121,Enriched Matoke,1,,1500,peeled (1.5 kg),peeled (1.5 kg),110,128
+15121,Enriched Matoke,2,peanut butter,68,¼ cup (68 g),¼ cup (68 g) peanut butter,110,128
+15121,Enriched Matoke,3,"salt, iodized",5,1 tsp. (5 g),"1 tsp. (5 g) salt, iodized",110,128
+15121,Enriched Matoke,4,water,968,4 ½ cups (968 g),4 ½ cups (968 g) water,110,128
+15118,Nyenyi (Mashed Pigeon Peas & Green Maize),1,"pigeon peas, dry, raw",474,2 ½ cups (474 g),"2 ½ cups (474 g) pigeon peas, dry, raw",112,130
+15118,Nyenyi (Mashed Pigeon Peas & Green Maize),2,,1600,"6 potatoes, unpeeled, Irish, white (1.6 kg)","6 potatoes, unpeeled, Irish, white (1.6 kg)",112,130
+15118,Nyenyi (Mashed Pigeon Peas & Green Maize),3,"pumpkin leaves, raw",200,200 g,"200 g pumpkin leaves, raw",112,130
+15118,Nyenyi (Mashed Pigeon Peas & Green Maize),4,,750,3 maize cobs with kernels (750 g),3 maize cobs with kernels (750 g),112,130
+15118,Nyenyi (Mashed Pigeon Peas & Green Maize),5,"salt, iodized",20,4 tsp. (20 g),"4 tsp. (20 g) salt, iodized",112,130
+15118,Nyenyi (Mashed Pigeon Peas & Green Maize),6,margarine,61,1/3 cup (61 g),1/3 cup (61 g) margarine,112,130
+15118,Nyenyi (Mashed Pigeon Peas & Green Maize),7,water,6472,30 cups (6472 g),30 cups (6472 g) water,112,130
+15049,Ashir,1,"pounded maize white, de-germed",1536,8 ½ cups (1536 g),"8 ½ cups (1536 g) pounded maize, white, de-germed",116,134
+15049,Ashir,2,cow milk,414,13/4 cups (414 g),13/4 cups (414 g) cow milk,116,134
+15049,Ashir,3,sugar,88,6 ½ tbsp. (88 g),6 ½ tbsp. (88 g) sugar,116,134
+15049,Ashir,4,"salt, iodized",12,1 ½ tsp. (12 g),"1 ½ tsp. (12 g) salt, iodized",116,134
+15049,Ashir,5,water,6430,29 2/3 cups (6430 g),29 2/3 cups (6430 g) water,116,134
+15060,Githeri (Fresh Beans and Maize),1,"bean pods, red",2500,2.5 kg,"2.5 kg bean pods, red",118,136
+15060,Githeri (Fresh Beans and Maize),2,water,2005,9 ¼ cups (2005 g),9 ¼ cups (2005 g) water,118,136
+15060,Githeri (Fresh Beans and Maize),3,"spring onion, unpeeled",140,1 stem (140 g),"1 stem (140 g) spring onion, unpeeled",118,136
+15060,Githeri (Fresh Beans and Maize),4,cooking fat,187,1 ¼ cups (187 g),1 ¼ cups (187 g) cooking fat,118,136
+15060,Githeri (Fresh Beans and Maize),5,"salt, iodized",28,5 ½ tsp. (28 g),"5 ½ tsp. (28 g) salt, iodized",118,136
+15053,Githeri (Stewed Maize & Beans),1,"maize and beans dry, boiled",1730,11 cups (1730 g),"11 cups (1730 g) maize and beans, dry, boiled",120,138
+15053,Githeri (Stewed Maize & Beans),2,,132,(132 g),(132 g),120,138
+15053,Githeri (Stewed Maize & Beans),3,cooking oil,69,1/3 cup (69 g),1/3 cup (69 g) cooking oil,120,138
+15053,Githeri (Stewed Maize & Beans),4,"salt, iodized",14,3 tsp. (14 g),"3 tsp. (14 g) salt, iodized",120,138
+15053,Githeri (Stewed Maize & Beans),5,water,389,13/4 cups (389 g),13/4 cups (389 g) water,120,138
+15055,Githeri (Sautéed Fresh Maize & Beans),1,,1500,4 green maize cobs with kernels (1.5 kg),4 green maize cobs with kernels (1.5 kg),122,140
+15055,Githeri (Sautéed Fresh Maize & Beans),2,"kidney beans, red, dry",740,4 ¼ cups (740 g),"4 ¼ cups (740 g) kidney beans, red, dry",122,140
+15055,Githeri (Sautéed Fresh Maize & Beans),3,water g),4728,21 ¾ cups (4728 g),21 ¾ cups (4728 g) water g),122,140
+15055,Githeri (Sautéed Fresh Maize & Beans),4,cooking fat,173,1 1/8 cups (173 g),1 1/8 cups (173 g) cooking fat,122,140
+15055,Githeri (Sautéed Fresh Maize & Beans),5,"salt, iodized",22,4 ½ tsp. (22 g),"4 ½ tsp. (22 g) salt, iodized",122,140
+15086,Muthokoi (Dehulled Maize and Beans),1,"maize, white, de-germed",440,2 ½ cups (440 g),"2 ½ cups (440 g) maize, white, de-germed",124,142
+15086,Muthokoi (Dehulled Maize and Beans),2,"beans, kidney, dry, raw",474,2 2/3 cups (474 g),"2 2/3 cups (474 g) beans, kidney, dry, raw",124,142
+15086,Muthokoi (Dehulled Maize and Beans),3,water (to boil muthokoi),4646,21 1/3 cups (4646 g),21 1/3 cups (4646 g) water (to boil muthokoi),124,142
+15086,Muthokoi (Dehulled Maize and Beans),4,,182,"1 onion red skinned, raw, unpeeled (182 g)","1 onion red skinned, raw, unpeeled (182 g)",124,142
+15086,Muthokoi (Dehulled Maize and Beans),5,"cooking fat, shortening commercial, vegetable fat",185,1 ¼ cups (185 g),"1 ¼ cups (185 g) cooking fat, shortening, commercial, vegetable fat",124,142
+15086,Muthokoi (Dehulled Maize and Beans),6,"salt, iodized",22,4 ½ tsp. (22 g),"4 ½ tsp. (22 g) salt, iodized",124,142
+15093,Nchenga/ Nzenga (Crushed Maize),1,"crushed maize, white, dry",231,1 1/3 cups (231 g),"1 1/3 cups (231 g) crushed maize, white, dry",126,144
+15093,Nchenga/ Nzenga (Crushed Maize),2,,115,"1 onion, red skinned, raw, unpeeled (115 g)","1 onion, red skinned, raw, unpeeled (115 g)",126,144
+15093,Nchenga/ Nzenga (Crushed Maize),3,,169,"1 carrot, orange, raw (169 g)","1 carrot, orange, raw (169 g)",126,144
+15093,Nchenga/ Nzenga (Crushed Maize),4,cooking fat,28,2 ½ tbsp. (28 g),2 ½ tbsp. (28 g) cooking fat,126,144
+15093,Nchenga/ Nzenga (Crushed Maize),5,"salt, iodized",12,2 ½ tsp. (12 g),"2 ½ tsp. (12 g) salt, iodized",126,144
+15093,Nchenga/ Nzenga (Crushed Maize),6,water,1004,4 2/3 cups (1004 g),4 2/3 cups (1004 g) water,126,144
+15045,Mchuzi wa Maharagwe (Bean Stew),1,"beans, kidney, dry",462,2 2/3 cups (462 g),"2 2/3 cups (462 g) beans, kidney, dry",130,148
+15045,Mchuzi wa Maharagwe (Bean Stew),2,water,2333,10 3/4 cups (2333 g),10 3/4 cups (2333 g) water,130,148
+15045,Mchuzi wa Maharagwe (Bean Stew),3,,140,"1 tomato, red, raw (140 g)","1 tomato, red, raw (140 g)",130,148
+15045,Mchuzi wa Maharagwe (Bean Stew),4,,92,"1 onion, red, raw (92 g)","1 onion, red, raw (92 g)",130,148
+15045,Mchuzi wa Maharagwe (Bean Stew),5,cooking oil,40,¼ cup (40 g),¼ cup (40 g) cooking oil,130,148
+15045,Mchuzi wa Maharagwe (Bean Stew),6,"salt, iodized",13,2 ½ tsp. (13 g),"2 ½ tsp. (13 g) salt, iodized",130,148
+15045,Mchuzi wa Maharagwe (Bean Stew),7,coriander,56,9 stalks (56 g),9 stalks (56 g) coriander,130,148
+15046,Mchuzi wa Ndengu Kamande (Lentil Stew),1,"lentils, dry, raw",466,2 1/3 cups (466 g),"2 1/3 cups (466 g) lentils, dry, raw",132,150
+15046,Mchuzi wa Ndengu Kamande (Lentil Stew),2,water,2541,11 2/3 cups (2541 g),11 2/3 cups (2541 g) water,132,150
+15046,Mchuzi wa Ndengu Kamande (Lentil Stew),3,,161,"2 onions, red skinned, raw, unpeeled (161 g)","2 onions, red skinned, raw, unpeeled (161 g)",132,150
+15046,Mchuzi wa Ndengu Kamande (Lentil Stew),4,,258,"2 tomatoes, red, raw (258 g)","2 tomatoes, red, raw (258 g)",132,150
+15046,Mchuzi wa Ndengu Kamande (Lentil Stew),5,cooking oil,63,1/3 cup (63 g),1/3 cup (63 g) cooking oil,132,150
+15046,Mchuzi wa Ndengu Kamande (Lentil Stew),6,"salt, iodized",15,3 tsp. (15 g),"3 tsp. (15 g) salt, iodized",132,150
+15044,Mchuzi wa Ndengu (Green Gram Stew),1,"green gram, dry, raw",544,2 ¾ cups (544 g),"2 ¾ cups (544 g) green gram, dry, raw",134,152
+15044,Mchuzi wa Ndengu (Green Gram Stew),2,water,2337,10 3/4 cups (2337 g),10 3/4 cups (2337 g) water,134,152
+15044,Mchuzi wa Ndengu (Green Gram Stew),3,,118,"1 onion, red skinned, raw, unpeeled (118 g)","1 onion, red skinned, raw, unpeeled (118 g)",134,152
+15044,Mchuzi wa Ndengu (Green Gram Stew),4,,155,"2 tomatoes, red, raw (155 g)","2 tomatoes, red, raw (155 g)",134,152
+15044,Mchuzi wa Ndengu (Green Gram Stew),5,cooking oil,84,7 tbsp. (84 g),7 tbsp. (84 g) cooking oil,134,152
+15044,Mchuzi wa Ndengu (Green Gram Stew),6,"salt, iodized",13,2 ½ tsp. (13 g),"2 ½ tsp. (13 g) salt, iodized",134,152
+15115,Bean Stew with Milk and Cream,1,"beans, kidney, dry",500,2 3/4 cups (500 g),"2 3/4 cups (500 g) beans, kidney, dry",136,154
+15115,Bean Stew with Milk and Cream,2,water,6385,29 ½ cups (6385 g),29 ½ cups (6385 g) water,136,154
+15115,Bean Stew with Milk and Cream,3,"spring onion, unpeeled",58,1 bunch (58 g),"1 bunch (58 g) spring onion, unpeeled",136,154
+15115,Bean Stew with Milk and Cream,4,,291,"3 tomatoes, red, ripe (291 g)","3 tomatoes, red, ripe (291 g)",136,154
+15115,Bean Stew with Milk and Cream,5,cooking oil,34,3 tbsp. (34 g),3 tbsp. (34 g) cooking oil,136,154
+15115,Bean Stew with Milk and Cream,6,"cow milk, pasteurized",503,2¼ cups (503 g),"2¼ cups (503 g) cow milk, pasteurized",136,154
+15115,Bean Stew with Milk and Cream,7,cow cream,139,2/3 cup (139 g),2/3 cup (139 g) cow cream,136,154
+15115,Bean Stew with Milk and Cream,8,"salt, iodized",10,2 tsp. (10 g),"2 tsp. (10 g) salt, iodized",136,154
+15114,Black Bean Stew (Njahi/Dolichos Bean Stew),1,"black beans, dolichos",501,2 ½ cups (501 g),"2 ½ cups (501 g) black beans, dolichos",138,156
+15114,Black Bean Stew (Njahi/Dolichos Bean Stew),2,,349,"2 onions, red skinned, raw, unpeeled (349 g)","2 onions, red skinned, raw, unpeeled (349 g)",138,156
+15114,Black Bean Stew (Njahi/Dolichos Bean Stew),3,,307,"3 tomatoes, red, ripe (307 g)","3 tomatoes, red, ripe (307 g)",138,156
+15114,Black Bean Stew (Njahi/Dolichos Bean Stew),4,cooking oil,27,2 ½ tbsp. (27 g),2 ½ tbsp. (27 g) cooking oil,138,156
+15114,Black Bean Stew (Njahi/Dolichos Bean Stew),5,"salt, iodized",12,2 ½ tsp. (12 g),"2 ½ tsp. (12 g) salt, iodized",138,156
+15114,Black Bean Stew (Njahi/Dolichos Bean Stew),6,water,6438,29 2/3 cups (6438 g),29 2/3 cups (6438 g) water,138,156
+15092,Mchuzi wa Mbaazi (Pigeon Peas Stew),1,"pigeon peas, dried",434,2.5 cups (434 g),"2.5 cups (434 g) pigeon peas, dried",140,158
+15092,Mchuzi wa Mbaazi (Pigeon Peas Stew),2,,119,"1 onion, red skinned, raw, unpeeled (119 g)","1 onion, red skinned, raw, unpeeled (119 g)",140,158
+15092,Mchuzi wa Mbaazi (Pigeon Peas Stew),3,,167,"2 tomatoes, red, ripe (167 g)","2 tomatoes, red, ripe (167 g)",140,158
+15092,Mchuzi wa Mbaazi (Pigeon Peas Stew),4,cooking fat,63,6 tbsp. (63 g),6 tbsp. (63 g) cooking fat,140,158
+15092,Mchuzi wa Mbaazi (Pigeon Peas Stew),5,"salt, iodized",12,2 ½ tsp. (12 g),"2 ½ tsp. (12 g) salt, iodized",140,158
+15092,Mchuzi wa Mbaazi (Pigeon Peas Stew),6,water,4048,18 2/3 cups (4048 g),18 2/3 cups (4048 g) water,140,158
+15142,Firinda (Skinned Bean Stew),1,"beans, kidney, dry",400,2 ¼ cups (400 g),"2 ¼ cups (400 g) beans, kidney, dry",142,160
+15142,Firinda (Skinned Bean Stew),2,cooking oil,20,1 ½ tbsp. (20 g),1 ½ tbsp. (20 g) cooking oil,142,160
+15142,Firinda (Skinned Bean Stew),3,water,6326,29 1/8 cups (6326 g),29 1/8 cups (6326 g) water,142,160
+15142,Firinda (Skinned Bean Stew),4,"salt, iodized",12,2 ½ tsp. (12 g),"2 ½ tsp. (12 g) salt, iodized",142,160
+15142,Firinda (Skinned Bean Stew),5,"spring onions, unpeeled",67,8 stalks (67 g),"8 stalks (67 g) spring onions, unpeeled",142,160
+15085,Ndoto (Sautéed Red Kidney Beans & Red Sorghum),1,red sorghum,501,3 cups (501 g),3 cups (501 g) red sorghum,144,162
+15085,Ndoto (Sautéed Red Kidney Beans & Red Sorghum),2,red kidney beans,308,1 ¾ cups (308 g),1 ¾ cups (308 g) red kidney beans,144,162
+15085,Ndoto (Sautéed Red Kidney Beans & Red Sorghum),3,water,5059,23 ¼ cups (5059 g),23 ¼ cups (5059 g) water,144,162
+15085,Ndoto (Sautéed Red Kidney Beans & Red Sorghum),4,"salt, iodized",14,3 tsp. (14 g),"3 tsp. (14 g) salt, iodized",144,162
+15085,Ndoto (Sautéed Red Kidney Beans & Red Sorghum),5,"onions, red skinned raw, unpeeled",176,1 ½ cups (176 g),"1 ½ cups (176 g) onions, red skinned, raw, unpeeled",144,162
+15085,Ndoto (Sautéed Red Kidney Beans & Red Sorghum),6,cooking oil,144,3/4 cups (144 g),3/4 cups (144 g) cooking oil,144,162
+15040,"Fiqe (Red Sorghum, Beans and Teff Flour)",1,"beans kidney, raw",262,1 ½ cups (262 g),"1 ½ cups (262 g) beans kidney, raw",146,164
+15040,"Fiqe (Red Sorghum, Beans and Teff Flour)",2,red sorghum flour,207,1½ cups (207 g),1½ cups (207 g) red sorghum flour,146,164
+15040,"Fiqe (Red Sorghum, Beans and Teff Flour)",3,teff flour,323,2 cups (323 g),2 cups (323 g) teff flour,146,164
+15040,"Fiqe (Red Sorghum, Beans and Teff Flour)",4,"sukuma wiki leaves, raw",611,1 medium-size bowl (611 g),"1 medium-size bowl (611 g) sukuma wiki leaves, raw",146,164
+15040,"Fiqe (Red Sorghum, Beans and Teff Flour)",5,"salt, iodized",22,1 ½ tbsp. (22 g),"1 ½ tbsp. (22 g) salt, iodized",146,164
+15040,"Fiqe (Red Sorghum, Beans and Teff Flour)",6,ghee,88,7 tbsp. (88 g),7 tbsp. (88 g) ghee,146,164
+15040,"Fiqe (Red Sorghum, Beans and Teff Flour)",7,water,1882,8 2/3 cups (1882 g),8 2/3 cups (1882 g) water,146,164
+15087,Beef Stew,1,"beef, medium fat, without bone, raw",1000,1 kg,"1 kg beef, medium fat, without bone, raw",150,168
+15087,Beef Stew,2,,164,"2 onions, red skinned, raw, unpeeled (164 g)","2 onions, red skinned, raw, unpeeled (164 g)",150,168
+15087,Beef Stew,3,,304,"3 tomatoes, red, ripe (304 g)","3 tomatoes, red, ripe (304 g)",150,168
+15087,Beef Stew,4,"salt, iodized",3,½ tsp. (3 g),"½ tsp. (3 g) salt, iodized",150,168
+15087,Beef Stew,5,cooking oil,20,1½ tbsp. (20 g),1½ tbsp. (20 g) cooking oil,150,168
+15087,Beef Stew,6,water,682,3 1/8 cups (682 g),3 1/8 cups (682 g) water,150,168
+15099,Stir Fried Goat Meat,1,"meat, goat, medium fat, raw",1000,1 kg,"1 kg meat, goat, medium fat, raw",152,170
+15099,Stir Fried Goat Meat,2,,106,(106 g),(106 g),152,170
+15099,Stir Fried Goat Meat,3,,336,"3 tomatoes, red, ripe, chopped (336 g)","3 tomatoes, red, ripe, chopped (336 g)",152,170
+15099,Stir Fried Goat Meat,4,cooking oil,27,1/8 cup (27 g),1/8 cup (27 g) cooking oil,152,170
+15099,Stir Fried Goat Meat,5,"salt, iodized",7,1 ½ tsp. (7 g),"1 ½ tsp. (7 g) salt, iodized",152,170
+15099,Stir Fried Goat Meat,6,water,494,2 ¼ cups (494 g),2 ¼ cups (494 g) water,152,170
+15098,Stir Fried Beef,1,"beef, raw, medium fat",1000,1 kg,"1 kg beef, raw, medium fat",154,172
+15098,Stir Fried Beef,2,water,646,3 cups (646 g),3 cups (646 g) water,154,172
+15098,Stir Fried Beef,3,,176,"2 onions, red skinned, raw, unpeeled (176 g)","2 onions, red skinned, raw, unpeeled (176 g)",154,172
+15098,Stir Fried Beef,4,,295,"3 tomatoes, red, ripe (295 g)","3 tomatoes, red, ripe (295 g)",154,172
+15098,Stir Fried Beef,5,cooking oil,36,3 tbsp. (36 g),3 tbsp. (36 g) cooking oil,154,172
+15098,Stir Fried Beef,6,"salt, iodized",7,1 ½ tsp. (7 g),"1 ½ tsp. (7 g) salt, iodized",154,172
+15066s,Swahili Biryani Stew (Swahili Spiced Beef Stew),1,"beef, raw, medium fat",1000,1 kg,"1 kg beef, raw, medium fat",156,174
+15066s,Swahili Biryani Stew (Swahili Spiced Beef Stew),2,,806,"8 onions, red skinned, raw, unpeeled (806 g)","8 onions, red skinned, raw, unpeeled (806 g)",156,174
+15066s,Swahili Biryani Stew (Swahili Spiced Beef Stew),3,,454,"2 potatoes, unpeeled Irish, white, raw (454 g)","2 potatoes, unpeeled Irish, white, raw (454 g)",156,174
+15066s,Swahili Biryani Stew (Swahili Spiced Beef Stew),4,,1100,"9 tomatoes, red, ripe (1.1 kg)","9 tomatoes, red, ripe (1.1 kg)",156,174
+15066s,Swahili Biryani Stew (Swahili Spiced Beef Stew),5,"tomato paste, salted",163,1 cup (163 g),"1 cup (163 g) tomato paste, salted",156,174
+15066s,Swahili Biryani Stew (Swahili Spiced Beef Stew),6,fresh coriander,60,1 bunch (60 g),1 bunch (60 g) fresh coriander,156,174
+15066s,Swahili Biryani Stew (Swahili Spiced Beef Stew),7,,242,"1 capsicum, green (242 g)","1 capsicum, green (242 g)",156,174
+15066s,Swahili Biryani Stew (Swahili Spiced Beef Stew),8,cooking oil,468,2 1/3 cups (468 g),2 1/3 cups (468 g) cooking oil,156,174
+15066s,Swahili Biryani Stew (Swahili Spiced Beef Stew),9,ginger,20,1 piece (20 g),1 piece (20 g) ginger,156,174
+15066s,Swahili Biryani Stew (Swahili Spiced Beef Stew),10,,46,"1 garlic, whole (46 g)","1 garlic, whole (46 g)",156,174
+15066s,Swahili Biryani Stew (Swahili Spiced Beef Stew),11,"salt, iodized",37,2 ½ tbsp. (37 g),"2 ½ tbsp. (37 g) salt, iodized",156,174
+15066s,Swahili Biryani Stew (Swahili Spiced Beef Stew),12,pilau masala,18,4 tbsp. (18 g),4 tbsp. (18 g) pilau masala,156,174
+15066s,Swahili Biryani Stew (Swahili Spiced Beef Stew),13,maziwa mala (fermented milk),242,1 cup (242 g),1 cup (242 g) maziwa mala (fermented milk),156,174
+15066s,Swahili Biryani Stew (Swahili Spiced Beef Stew),14,turmeric powder,2,1 ¼ tsp. (2 g),1 ¼ tsp. (2 g) turmeric powder,156,174
+15066s,Swahili Biryani Stew (Swahili Spiced Beef Stew),15,water,511,2 ¼ cups (511 g),2 ¼ cups (511 g) water,156,174
+15134,Minced Meat Balls,1,"minced raw beef, medium fat                            |",1000,1 kg,"1 kg minced raw beef, medium fat                            |",158,176
+15134,Minced Meat Balls,2,water                                     •,1207,5 ½ cups (1207 g),5 ½ cups (1207 g) water                                     •,158,176
+15134,Minced Meat Balls,3,•,376,"4 onions, red skinned, raw, unpeeled (376 g)","4 onions, red skinned, raw, unpeeled (376 g)                •",158,176
+15134,Minced Meat Balls,4,,439,"5 tomatoes, red, ripe (439 g)","5 tomatoes, red, ripe (439 g)",158,176
+15134,Minced Meat Balls,5,•,51,1 bunch coriander leaves (51 g),1 bunch coriander leaves (51 g)                             •,158,176
+15134,Minced Meat Balls,6,"salt, iodized",12,2 ½ tsp. (12 g),"2 ½ tsp. (12 g) salt, iodized",158,176
+15134,Minced Meat Balls,7,,102,½ cup cooking oil (102 g),½ cup cooking oil (102 g),158,176
+15134,Minced Meat Balls,8,cumin seeds,4,2 tsp. (4 g),2 tsp. (4 g) cumin seeds,158,176
+15134,Minced Meat Balls,9,curry powder                                 •,3,1 ½ tsp. (3 g),1 ½ tsp. (3 g) curry powder                                 •,158,176
+15134,Minced Meat Balls,10,,8,4 Royco® cubes (8 g),4 Royco® cubes (8 g),158,176
+15134,Minced Meat Balls,11,•,39,1 whole garlic (39 g),1 whole garlic (39 g)                                       •,158,176
+15134,Minced Meat Balls,12,white raw rice,48,¼ cup (48 g),¼ cup (48 g) white raw rice,158,176
+15082,Stewed Dried Fish,1,dry fish,210,210 g,210 g dry fish,160,178
+15082,Stewed Dried Fish,2,,319,"3 tomatoes, red, ripe (319 g)","3 tomatoes, red, ripe (319 g)",160,178
+15082,Stewed Dried Fish,3,,143,"1 whole onion, red skinned, raw, unpeeled (143g)","1 whole onion, red skinned, raw, unpeeled (143g)",160,178
+15082,Stewed Dried Fish,4,cooking oil,104,½ cup (104 g),½ cup (104 g) cooking oil,160,178
+15082,Stewed Dried Fish,5,peanut butter,28,2 tbsp. (28 g),2 tbsp. (28 g) peanut butter,160,178
+15082,Stewed Dried Fish,6,magadi (water and ash),1,1 g,1 g magadi (water and ash),160,178
+15082,Stewed Dried Fish,7,water,406,13/4 cups (406 g),13/4 cups (406 g) water,160,178
+15017,“Omena Stew” (Silver Sardine Stew),1,dried omena fish,128,2 cups (128 g),2 cups (128 g) dried omena fish,162,180
+15017,“Omena Stew” (Silver Sardine Stew),2,,164,(164 g),(164 g),162,180
+15017,“Omena Stew” (Silver Sardine Stew),3,water,453,2 cups (453 g),2 cups (453 g) water,162,180
+15017,“Omena Stew” (Silver Sardine Stew),4,"ghee, cow",21,1 tbsp. (21 g),"1 tbsp. (21 g) ghee, cow",162,180
+15017,“Omena Stew” (Silver Sardine Stew),5,"salt, iodized",12,2 ½ tsp. (12 g),"2 ½ tsp. (12 g) salt, iodized",162,180
+15017,“Omena Stew” (Silver Sardine Stew),6,,313,"3 tomatoes, red, ripe (313 g)","3 tomatoes, red, ripe (313 g)",162,180
+15017,“Omena Stew” (Silver Sardine Stew),7,milk,509,2 ¼ cups (509 g),2 ¼ cups (509 g) milk,162,180
+15017,“Omena Stew” (Silver Sardine Stew),8,cooking oil,200,1 cup (200 g),1 cup (200 g) cooking oil,162,180
+15096,Fried Tilapia,1,cooking oil,831,4 ¼ cups (831 g),4 ¼ cups (831 g) cooking oil,164,182
+15096,Fried Tilapia,2,,7,1 ½ tsp. salt (7 g),1 ½ tsp. salt (7 g),164,182
+15138,Hydrabadi Biryani,1,raw white rice,424,2 cups (424 g),2 cups (424 g) raw white rice,166,184
+15138,Hydrabadi Biryani,2,king fish,500,½ kg,½ kg king fish,166,184
+15138,Hydrabadi Biryani,3,red chilli powder,5,1 ½ tsp. (5 g),1 ½ tsp. (5 g) red chilli powder,166,184
+15138,Hydrabadi Biryani,4,turmeric powder,1,¼ tsp. (1 g),¼ tsp. (1 g) turmeric powder,166,184
+15138,Hydrabadi Biryani,5,coriander powder,6,2 tsp. (6 g),2 tsp. (6 g) coriander powder,166,184
+15138,Hydrabadi Biryani,6,cumin seeds,4,½ tsp. (4 g),½ tsp. (4 g) cumin seeds,166,184
+15138,Hydrabadi Biryani,7,garlic,18,6 cloves (18 g),6 cloves (18 g) garlic,166,184
+15138,Hydrabadi Biryani,8,ginger,15,1 piece (15 g),1 piece (15 g) ginger,166,184
+15138,Hydrabadi Biryani,9,,6,3 green chillies (6 g),3 green chillies (6 g),166,184
+15138,Hydrabadi Biryani,10,coriander leaves,21,1 bunch (21 g),1 bunch (21 g) coriander leaves,166,184
+15138,Hydrabadi Biryani,11,mint leaves,14,1 bunch (14 g),1 bunch (14 g) mint leaves,166,184
+15138,Hydrabadi Biryani,12,yoghurt,67,4 ½ tbsp. (67 g),4 ½ tbsp. (67 g) yoghurt,166,184
+15138,Hydrabadi Biryani,13,seeds,5,6 anise (5 g),6 anise (5 g) seeds,166,184
+15138,Hydrabadi Biryani,14,clove seeds,2,¼ tsp. (2 g),¼ tsp. (2 g) clove seeds,166,184
+15138,Hydrabadi Biryani,15,,2,8 cardamom seeds (2 g),8 cardamom seeds (2 g),166,184
+15138,Hydrabadi Biryani,16,cinnamon,3,6 sticks (3 g),6 sticks (3 g) cinnamon,166,184
+15138,Hydrabadi Biryani,17,"salt, iodized",21,1 ½ tbsp. (21 g),"1 ½ tbsp. (21 g) salt, iodized",166,184
+15138,Hydrabadi Biryani,18,,1,1 bay leaf (1 g),1 bay leaf (1 g),166,184
+15138,Hydrabadi Biryani,19,,11,½ lemon (11 g),½ lemon (11 g),166,184
+15138,Hydrabadi Biryani,20,cooking oil,126,2/3 cup (126 g),2/3 cup (126 g) cooking oil,166,184
+15138,Hydrabadi Biryani,21,water,1895,8 ¾ cups (1895 g),8 ¾ cups (1895 g) water,166,184
+15107,Stewed Nile Perch,1,Nile perch fish,1000,1 kg,1 kg Nile perch fish,168,186
+15107,Stewed Nile Perch,2,,91,"1 onion, red skinned, raw, unpeeled (91 g)","1 onion, red skinned, raw, unpeeled (91 g)",168,186
+15107,Stewed Nile Perch,3,,293,"3 tomatoes, red, ripe (293 g)","3 tomatoes, red, ripe (293 g)",168,186
+15107,Stewed Nile Perch,4,cooking oil,67,1/3 cup (67 g),1/3 cup (67 g) cooking oil,168,186
+15107,Stewed Nile Perch,5,"salt, iodized",18,3 ½ tsp. (18 g),"3 ½ tsp. (18 g) salt, iodized",168,186
+15107,Stewed Nile Perch,6,water,1439,6 2/3 cups (1439 g),6 2/3 cups (1439 g) water,168,186
+15108,Stewed Goat Meat,1,"goat meat, medium fat",1200,1.2 kg,"1.2 kg goat meat, medium fat",170,188
+15108,Stewed Goat Meat,2,,136,"1 onion, red skinned, raw, unpeeled (136 g)","1 onion, red skinned, raw, unpeeled (136 g)",170,188
+15108,Stewed Goat Meat,3,,319,"3 tomatoes, red, ripe (319 g)","3 tomatoes, red, ripe (319 g)",170,188
+15108,Stewed Goat Meat,4,cooking oil,89,½ cup (89 g),½ cup (89 g) cooking oil,170,188
+15108,Stewed Goat Meat,5,"salt, iodized",19,4 tsp. (19 g),"4 tsp. (19 g) salt, iodized",170,188
+15047,Nyirinyiri (Camel Meat),1,,544,½ kg camel hump (544 g),½ kg camel hump (544 g),172,190
+15047,Nyirinyiri (Camel Meat),2,"salt, iodized",6,1 tsp. (6 g),"1 tsp. (6 g) salt, iodized",172,190
+15050,Ikalanga (Sheep Tail Fat),1,sheep fat,894,894 g,894 g sheep fat,174,192
+15050,Ikalanga (Sheep Tail Fat),2,water,420,2 cups (420 g),2 cups (420 g) water,174,192
+15050,Ikalanga (Sheep Tail Fat),3,"salt, iodized",4,1 tsp. (4 g),"1 tsp. (4 g) salt, iodized",174,192
+15041,"Qanchibelo (Beef, Maize & Wheat Flour mix)",1,water,2722,12 ½ cups (2722 g),12 ½ cups (2722 g) water,176,194
+15041,"Qanchibelo (Beef, Maize & Wheat Flour mix)",2,sukuma wiki,514,514 g,514 g sukuma wiki,176,194
+15041,"Qanchibelo (Beef, Maize & Wheat Flour mix)",3,"salt, iodized",16,1 tbsp. (16 g),"1 tbsp. (16 g) salt, iodized",176,194
+15041,"Qanchibelo (Beef, Maize & Wheat Flour mix)",4,red chilli flakes,1,1 tsp. (1 g),1 tsp. (1 g) red chilli flakes,176,194
+15041,"Qanchibelo (Beef, Maize & Wheat Flour mix)",5,coriander powder,1,1 tsp. (1 g),1 tsp. (1 g) coriander powder,176,194
+15041,"Qanchibelo (Beef, Maize & Wheat Flour mix)",6,black pepper,1,½ tsp. (1 g),½ tsp. (1 g) black pepper,176,194
+15041,"Qanchibelo (Beef, Maize & Wheat Flour mix)",7,,198,½ red capsicum (198 g),½ red capsicum (198 g),176,194
+15041,"Qanchibelo (Beef, Maize & Wheat Flour mix)",8,,210,1 green capsicum (210 g),1 green capsicum (210 g),176,194
+15041,"Qanchibelo (Beef, Maize & Wheat Flour mix)",9,,227,½ yellow capsicum (227 g),½ yellow capsicum (227 g),176,194
+15041,"Qanchibelo (Beef, Maize & Wheat Flour mix)",10,,140,"1 onion, raw, red skinned, unpeeled (140 g)","1 onion, raw, red skinned, unpeeled (140 g)",176,194
+15041,"Qanchibelo (Beef, Maize & Wheat Flour mix)",11,,195,"2 tomatoes, red, ripe (195 g)","2 tomatoes, red, ripe (195 g)",176,194
+15041,"Qanchibelo (Beef, Maize & Wheat Flour mix)",12,"wheat flour, atta",478,4 1/8 cups (478 g),"4 1/8 cups (478 g) wheat flour, atta",176,194
+15041,"Qanchibelo (Beef, Maize & Wheat Flour mix)",13,"maize flour, white",339,2 2/3 cups (339 g),"2 2/3 cups (339 g) maize flour, white",176,194
+15137,Okra Meat Dish,1,okra,367,367 g,367 g okra,178,196
+15137,Okra Meat Dish,2,,208,"2 red skinned onions, raw, unpeeled (208g)","2 red skinned onions, raw, unpeeled (208g)",178,196
+15137,Okra Meat Dish,3,,435,"5 tomatoes, red, ripe (435 g)","5 tomatoes, red, ripe (435 g)",178,196
+15137,Okra Meat Dish,4,garlic,18,3 cloves (18 g),3 cloves (18 g) garlic,178,196
+15137,Okra Meat Dish,5,"meat, beef",700,700 g,"700 g meat, beef",178,196
+15137,Okra Meat Dish,6,cooking oil,40,¼ cup (40 g),¼ cup (40 g) cooking oil,178,196
+15137,Okra Meat Dish,7,"salt, iodized",13,2 ½ tsp. (13 g),"2 ½ tsp. (13 g) salt, iodized",178,196
+15137,Okra Meat Dish,8,,8,2 Royco® cubes (8 g),2 Royco® cubes (8 g),178,196
+15137,Okra Meat Dish,9,curry powder,2,1 tsp. (2 g),1 tsp. (2 g) curry powder,178,196
+15137,Okra Meat Dish,10,coriander leaves,65,65 g,65 g coriander leaves,178,196
+15137,Okra Meat Dish,11,water,253,11/8 cups (253 g),11/8 cups (253 g) water,178,196
+15072,Tsiswa (Stewed Termites),1,"dried termites, raw",335,2 cups (335 g),"2 cups (335 g) dried termites, raw",180,198
+15072,Tsiswa (Stewed Termites),2,,107,"1 onion, red skinned, raw, unpeeled (107g)","1 onion, red skinned, raw, unpeeled (107g)",180,198
+15072,Tsiswa (Stewed Termites),3,cow’s milk,271,1 ¼ cups (271 g),1 ¼ cups (271 g) cow’s milk,180,198
+15072,Tsiswa (Stewed Termites),4,"salt, iodized",7,½ tbsp. (7 g),"½ tbsp. (7 g) salt, iodized",180,198
+15101,Omena wa kukaangwa (Fried Omena),1,"omena, dried, raw",120,120 g,"120 g omena, dried, raw",182,200
+15101,Omena wa kukaangwa (Fried Omena),2,"spring onion, raw, unpeeled",25,1 bunch (25 g),"1 bunch (25 g) spring onion, raw, unpeeled",182,200
+15101,Omena wa kukaangwa (Fried Omena),3,,270,"2 tomatoes, red, ripe (270 g)","2 tomatoes, red, ripe (270 g)",182,200
+15101,Omena wa kukaangwa (Fried Omena),4,cooking oil,202,1 cup (202 g),1 cup (202 g) cooking oil,182,200
+15101,Omena wa kukaangwa (Fried Omena),5,"salt, iodized",3,½ tsp. (3 g),"½ tsp. (3 g) salt, iodized",182,200
+15022,Fried Egg (Mayai Ya Kukaangwa),1,,59,"1 egg, whole (59 g)","1 egg, whole (59 g)",184,202
+15022,Fried Egg (Mayai Ya Kukaangwa),2,"salt, iodized",1,1 pinch (1 g),"1 pinch (1 g) salt, iodized",184,202
+15022,Fried Egg (Mayai Ya Kukaangwa),3,cooking oil,3,1 tsp. (3 g),1 tsp. (3 g) cooking oil,184,202
+15023,Omelette,1,,243,"4 eggs, whole (243 g)","4 eggs, whole (243 g)",186,204
+15023,Omelette,2,,288,"2 tomatoes, red, ripe (288 g)","2 tomatoes, red, ripe (288 g)",186,204
+15023,Omelette,3,,179,"1 onion, red skinned, raw, unpeeled (179g)","1 onion, red skinned, raw, unpeeled (179g)",186,204
+15023,Omelette,4,"salt, iodized",1,1 pinch (1 g),"1 pinch (1 g) salt, iodized",186,204
+15023,Omelette,5,cooking oil,20,2 tbsp. (20 g),2 tbsp. (20 g) cooking oil,186,204
+15024,Spanish Omelette,1,,221,"4 eggs, whole (221 g)","4 eggs, whole (221 g)",188,206
+15024,Spanish Omelette,2,cooking oil,29,1/8 cup (29 g),1/8 cup (29 g) cooking oil,188,206
+15024,Spanish Omelette,3,"salt, iodized",3,½ tsp. (3 g),"½ tsp. (3 g) salt, iodized",188,206
+15024,Spanish Omelette,4,"onion, red, raw, peeled chopped",33,¼ cup (33 g),"¼ cup (33 g) onion, red, raw, peeled, chopped",188,206
+15024,Spanish Omelette,5,"tomato, red, ripe, chopped",89,½ cup (89 g),"½ cup (89 g) tomato, red, ripe, chopped",188,206
+15024,Spanish Omelette,6,"yellow capsicum, chopped",16,1/8 cup (16 g),"1/8 cup (16 g) yellow capsicum, chopped",188,206
+15024,Spanish Omelette,7,"green capsicum, chopped",18,1/8 cup (18 g),"1/8 cup (18 g) green capsicum, chopped",188,206
+15024,Spanish Omelette,8,"capsicum, chopped",20,1/8 cup red (20 g),"1/8 cup red (20 g) capsicum, chopped",188,206
+15070,“Ingokho” (Stewed Chicken),1,"chicken, whole",1400,1.4 kg,"1.4 kg chicken, whole",192,210
+15070,“Ingokho” (Stewed Chicken),2,,219,"2 red skinned onions, raw, unpeeled, (219g)","2 red skinned onions, raw, unpeeled, (219g)",192,210
+15070,“Ingokho” (Stewed Chicken),3,,187,½ green capsicum (187 g),½ green capsicum (187 g),192,210
+15070,“Ingokho” (Stewed Chicken),4,"salt, iodized",11,2 tsp. (11 g),"2 tsp. (11 g) salt, iodized",192,210
+15070,“Ingokho” (Stewed Chicken),5,,504,"4 tomatoes, red, ripe (504 g)","4 tomatoes, red, ripe (504 g)",192,210
+15073,“Ingokho” (Fried Chicken),1,whole chicken,1300,1.3 kg,1.3 kg whole chicken,194,212
+15073,“Ingokho” (Fried Chicken),2,"salt, iodized",10,2 tsp. (10 g),"2 tsp. (10 g) salt, iodized",194,212
+15073,“Ingokho” (Fried Chicken),3,cooking oil,623,3 1/8 cups (623 g),3 1/8 cups (623 g) cooking oil,194,212
+15102,Aluru (Stewed Quails),1,,507,"3 quails, whole (507 g)","3 quails, whole (507 g)",196,214
+15102,Aluru (Stewed Quails),2,,196,"2 tomatoes, red, ripe (196 g)","2 tomatoes, red, ripe (196 g)",196,214
+15102,Aluru (Stewed Quails),3,,76,"1 onion, red skinned, raw, unpeeled (76 g)","1 onion, red skinned, raw, unpeeled (76 g)",196,214
+15102,Aluru (Stewed Quails),4,"salt, iodized",10,2 tsp. (10 g),"2 tsp. (10 g) salt, iodized",196,214
+15102,Aluru (Stewed Quails),5,cow’s milk,517,2 cups (517 g),2 cups (517 g) cow’s milk,196,214
+15102,Aluru (Stewed Quails),6,cooking oil,679,3 ½ cups (679 g),3 ½ cups (679 g) cooking oil,196,214
+15095,“Likhanga” (Stewed Guinea Fowl),1,whole guinea fowl,665,665 g,665 g whole guinea fowl,198,216
+15095,“Likhanga” (Stewed Guinea Fowl),2,,69,"1 onion, red skinned, raw, unpeeled (69g)","1 onion, red skinned, raw, unpeeled (69g)",198,216
+15095,“Likhanga” (Stewed Guinea Fowl),3,,196,"2 tomatoes, red, ripe (196g)","2 tomatoes, red, ripe (196g)",198,216
+15095,“Likhanga” (Stewed Guinea Fowl),4,cooking oil,49,¼ cup (49 g),¼ cup (49 g) cooking oil,198,216
+15095,“Likhanga” (Stewed Guinea Fowl),5,"salt, iodized",14,3 tsp. (14 g),"3 tsp. (14 g) salt, iodized",198,216
+15095,“Likhanga” (Stewed Guinea Fowl),6,water,537,2 ½ cups (537 g),2 ½ cups (537 g) water,198,216
+15088,"Munono (Cow Blood, Beef, Cow Fat)",1,"cow’s blood, fresh",392,1 ¾ cups (392 g),"1 ¾ cups (392 g) cow’s blood, fresh",202,220
+15088,"Munono (Cow Blood, Beef, Cow Fat)",2,"beef, medium fat",695,695 g,"695 g beef, medium fat",202,220
+15088,"Munono (Cow Blood, Beef, Cow Fat)",3,cow’s fat,457,457 g,457 g cow’s fat,202,220
+15088,"Munono (Cow Blood, Beef, Cow Fat)",4,water,446,2 cups (446 g),2 cups (446 g) water,202,220
+15071,Malesele (Cow Blood with Sour Milk),1,cow’s fat,117,117 g,117 g cow’s fat,204,222
+15071,Malesele (Cow Blood with Sour Milk),2,"cow’s blood, fresh",1000,4 ½ cups (1 kg),"4 ½ cups (1 kg) cow’s blood, fresh",204,222
+15071,Malesele (Cow Blood with Sour Milk),3,,183,"2 onions, red skinned, raw, unpeeled (183 g)","2 onions, red skinned, raw, unpeeled (183 g)",204,222
+15071,Malesele (Cow Blood with Sour Milk),4,"sour milk, cow",466,1¾ cups (466 g),"1¾ cups (466 g) sour milk, cow",204,222
+15071,Malesele (Cow Blood with Sour Milk),5,"salt, iodized",9,2 tsp. (9 g),"2 tsp. (9 g) salt, iodized",204,222
+15071,Malesele (Cow Blood with Sour Milk),6,,363,"3 tomatoes, red, ripe (363 g)","3 tomatoes, red, ripe (363 g)",204,222
+15048,“Mbuboyi” (Blood Cooked in Fresh Milk),1,fresh cow’s blood,1000,4 ½ cups (1 kg),4 ½ cups (1 kg) fresh cow’s blood,206,224
+15048,“Mbuboyi” (Blood Cooked in Fresh Milk),2,fresh cow’s milk,492,2 1/8 cups (492 g),2 1/8 cups (492 g) fresh cow’s milk,206,224
+15089,“Osarge Ogkole” (Fresh Blood and Milk Soup),1,fresh cow’s milk,1486,6 2/3 cups (1486 g),6 2/3 cups (1486 g) fresh cow’s milk,208,226
+15089,“Osarge Ogkole” (Fresh Blood and Milk Soup),2,"cow’s blood, fresh",342,1 ½ cups (342 g),"1 ½ cups (342 g) cow’s blood, fresh",208,226
+15031,Sukuma Wiki (Stir-fried Kales),1,,2667,sukuma wiki leaves raw (2667 g),sukuma wiki leaves raw (2667 g),212,230
+15031,Sukuma Wiki (Stir-fried Kales),2,,345,"2 tomatoes, red, ripe (345 g)","2 tomatoes, red, ripe (345 g)",212,230
+15031,Sukuma Wiki (Stir-fried Kales),3,,184,"1 onion, red skinned, raw, unpeeled (184 g)","1 onion, red skinned, raw, unpeeled (184 g)",212,230
+15031,Sukuma Wiki (Stir-fried Kales),4,cooking oil,45,¼ cup (45 g),¼ cup (45 g) cooking oil,212,230
+15031,Sukuma Wiki (Stir-fried Kales),5,"salt, iodized",3,½ tsp. (3 g),"½ tsp. (3 g) salt, iodized",212,230
+15032,Stir-fried Cabbage,1,"cabbage, white, raw",1124,1124 g,"1124 g cabbage, white, raw",214,232
+15032,Stir-fried Cabbage,2,,139,"½ onion, red skinned, raw, unpeeled (139g)","½ onion, red skinned, raw, unpeeled (139g)",214,232
+15032,Stir-fried Cabbage,3,cooking oil,83,½ cup (83 g),½ cup (83 g) cooking oil,214,232
+15032,Stir-fried Cabbage,4,"salt, iodized",12,2 ½ tsp. (12 g),"2 ½ tsp. (12 g) salt, iodized",214,232
+15033,“Mrenda and Seveve” (Jute Mallow & Pumpkin Leaves),1,"jute mallow leaves, raw",316,316 g,"316 g jute mallow leaves, raw",216,234
+15033,“Mrenda and Seveve” (Jute Mallow & Pumpkin Leaves),2,"pumpkin leaves, raw",74,74 g,"74 g pumpkin leaves, raw",216,234
+15033,“Mrenda and Seveve” (Jute Mallow & Pumpkin Leaves),3,,75,"1 onion, red skinned, raw, unpeeled (75 g)","1 onion, red skinned, raw, unpeeled (75 g)",216,234
+15033,“Mrenda and Seveve” (Jute Mallow & Pumpkin Leaves),4,"salt, iodized",3,½ tsp. (3 g),"½ tsp. (3 g) salt, iodized",216,234
+15033,“Mrenda and Seveve” (Jute Mallow & Pumpkin Leaves),5,water,134,2/3 cup (134 g),2/3 cup (134 g) water,216,234
+15033,“Mrenda and Seveve” (Jute Mallow & Pumpkin Leaves),6,,145,"1 tomato, red, ripe (145 g)","1 tomato, red, ripe (145 g)",216,234
+15033,“Mrenda and Seveve” (Jute Mallow & Pumpkin Leaves),7,cow’s milk,410,1 ¾ cups (410 g),1 ¾ cups (410 g) cow’s milk,216,234
+15034,Pumpkin Leaves,1,"pumpkin leaves, raw",110,14 stalks (110 g),"14 stalks (110 g) pumpkin leaves, raw",218,236
+15034,Pumpkin Leaves,2,,44,"1 onion, red skinned, raw, unpeeled (44 g)","1 onion, red skinned, raw, unpeeled (44 g)",218,236
+15034,Pumpkin Leaves,3,,91,"1 tomato, red, ripe (91 g)","1 tomato, red, ripe (91 g)",218,236
+15034,Pumpkin Leaves,4,cooking oil,12,1 tbsp. (12 g),1 tbsp. (12 g) cooking oil,218,236
+15034,Pumpkin Leaves,5,cow milk,132,2/3 cup (132 g),2/3 cup (132 g) cow milk,218,236
+15034,Pumpkin Leaves,6,"salt, iodized",3,½ tsp. (3 g),"½ tsp. (3 g) salt, iodized",218,236
+15035,"“Saget, Terere & Managu”",1,"spider plant leaves, raw",451,451 g,"451 g spider plant leaves, raw",220,238
+15035,"“Saget, Terere & Managu”",2,"African nightshade leaves, raw",1022,1022 g,"1022 g African nightshade leaves, raw",220,238
+15035,"“Saget, Terere & Managu”",3,amaranth leaves,551,551 g,551 g amaranth leaves,220,238
+15035,"“Saget, Terere & Managu”",4,,126,"1 onion, red skinned, raw, unpeeled (126g)","1 onion, red skinned, raw, unpeeled (126g)",220,238
+15035,"“Saget, Terere & Managu”",5,cow’s milk,511,2 ¼ cups (511 g),2 ¼ cups (511 g) cow’s milk,220,238
+15035,"“Saget, Terere & Managu”",6,"salt, iodized",3,½ tsp. (3 g),"½ tsp. (3 g) salt, iodized",220,238
+15035,"“Saget, Terere & Managu”",7,water,539,2 ½ cups (539 g),2 ½ cups (539 g) water,220,238
+15039,“Nderema” (Vine Spinach),1,"vine spinach leaves, fresh",417,417 g,"417 g vine spinach leaves, fresh",222,240
+15039,“Nderema” (Vine Spinach),2,,182,"2 tomatoes, red, ripe (182 g)","2 tomatoes, red, ripe (182 g)",222,240
+15039,“Nderema” (Vine Spinach),3,,139,"1 onion, red skinned, raw, unpeeled (139g)","1 onion, red skinned, raw, unpeeled (139g)",222,240
+15039,“Nderema” (Vine Spinach),4,"salt, iodized",3,½ tsp. (3 g),"½ tsp. (3 g) salt, iodized",222,240
+15039,“Nderema” (Vine Spinach),5,ghee,39,3 tbsp. (39 g),3 tbsp. (39 g) ghee,222,240
+15030,“Terere” (Stir-fried Amaranth Leaves),1,"amaranth leaves, raw",1585,1585 g,"1585 g amaranth leaves, raw",224,242
+15030,“Terere” (Stir-fried Amaranth Leaves),2,,289,"2 tomatoes, red, ripe (289 g)","2 tomatoes, red, ripe (289 g)",224,242
+15030,“Terere” (Stir-fried Amaranth Leaves),3,,105,"1 onion, red skinned, raw, unpeeled (105g)","1 onion, red skinned, raw, unpeeled (105g)",224,242
+15030,“Terere” (Stir-fried Amaranth Leaves),4,"salt, iodized",3,½ tsp. (3 g),"½ tsp. (3 g) salt, iodized",224,242
+15030,“Terere” (Stir-fried Amaranth Leaves),5,cooking oil,45,¼ cup (45 g),¼ cup (45 g) cooking oil,224,242
+15120,Mashed Pumpkin & Black Nightshade leaves,1,"black night shade leaves, raw",752,752 g,"752 g black night shade leaves, raw",226,244
+15120,Mashed Pumpkin & Black Nightshade leaves,2,"pumpkin, raw",1100,1.1 kg,"1.1 kg pumpkin, raw",226,244
+15120,Mashed Pumpkin & Black Nightshade leaves,3,"salt, iodized",4,1 tsp. (4 g),"1 tsp. (4 g) salt, iodized",226,244
+15120,Mashed Pumpkin & Black Nightshade leaves,4,cooking oil,24,1/8 cup (24 g),1/8 cup (24 g) cooking oil,226,244
+15120,Mashed Pumpkin & Black Nightshade leaves,5,water,998,4 ½ cups (998 g),4 ½ cups (998 g) water,226,244
+15077,“Thabai / Thaa” (Stinging Nettle leaves),1,"stinging nettle leaves, raw",267,267 g,"267 g stinging nettle leaves, raw",228,246
+15077,“Thabai / Thaa” (Stinging Nettle leaves),2,,96,"1 onion, red skinned, raw, unpeeled (96 g)","1 onion, red skinned, raw, unpeeled (96 g)",228,246
+15077,“Thabai / Thaa” (Stinging Nettle leaves),3,cooking oil,25,2 tbsp. (25 g),2 tbsp. (25 g) cooking oil,228,246
+15077,“Thabai / Thaa” (Stinging Nettle leaves),4,"salt, iodized",7,1 ½ tsp. (7 g),"1 ½ tsp. (7 g) salt, iodized",228,246
+15077,“Thabai / Thaa” (Stinging Nettle leaves),5,water,994,4 ½ cups (994 g),4 ½ cups (994 g) water,228,246
+15078,“Rhikhuvi” (Stewed Cowpea Leaves),1,"cow pea leaves, raw",871,871 g,"871 g cow pea leaves, raw",230,248
+15078,“Rhikhuvi” (Stewed Cowpea Leaves),2,,79,"½ onion, red skinned, raw, unpeeled (79 g)","½ onion, red skinned, raw, unpeeled (79 g)",230,248
+15078,“Rhikhuvi” (Stewed Cowpea Leaves),3,cooking oil,59,1/3 cup (59 g),1/3 cup (59 g) cooking oil,230,248
+15078,“Rhikhuvi” (Stewed Cowpea Leaves),4,"salt, iodized",8,1 ½ tsp. (8 g),"1 ½ tsp. (8 g) salt, iodized",230,248
+15078,“Rhikhuvi” (Stewed Cowpea Leaves),5,“msherekha” (wood ash and water),38,1/8 cup (38 g),1/8 cup (38 g) “msherekha” (wood ash and water),230,248
+15078,“Rhikhuvi” (Stewed Cowpea Leaves),6,milk,149,2/3 cup (149 g),2/3 cup (149 g) milk,230,248
+15078,“Rhikhuvi” (Stewed Cowpea Leaves),7,water,201,¾ cup (201 g),¾ cup (201 g) water,230,248
+15079,“Kunde & Mrenda”,1,"cow- pea leaves, raw",79,79 g,"79 g cow- pea leaves, raw",232,250
+15079,“Kunde & Mrenda”,2,jute mallow leaves,232,232 g,232 g jute mallow leaves,232,250
+15079,“Kunde & Mrenda”,3,“magadi” (water and ash optional),24,1/8 cup (24 g),"1/8 cup (24 g) “magadi” (water and ash, optional)",232,250
+15079,“Kunde & Mrenda”,4,"salt, iodized",4,1 tsp. (4 g),"1 tsp. (4 g) salt, iodized",232,250
+15079,“Kunde & Mrenda”,5,milk,159,2/3 cup (159 g),2/3 cup (159 g) milk,232,250
+15076,Stir-fried Spinach,1,"spinach leaves, raw",675,675 g,"675 g spinach leaves, raw",234,252
+15076,Stir-fried Spinach,2,,123,(123 g),(123 g),234,252
+15076,Stir-fried Spinach,3,cooking oil,25,1/8 cup (25 g),1/8 cup (25 g) cooking oil,234,252
+15076,Stir-fried Spinach,4,"salt, iodized",2,½ tsp. (2 g),"½ tsp. (2 g) salt, iodized",234,252
+15091,Kitojo (Sweet Potato Leaves),1,"fresh sweet potato leaves, raw",835,835 g,"835 g fresh sweet potato leaves, raw",236,254
+15091,Kitojo (Sweet Potato Leaves),2,,81,"1 onion, red skinned, raw, unpeeled (81 g)","1 onion, red skinned, raw, unpeeled (81 g)",236,254
+15091,Kitojo (Sweet Potato Leaves),3,cooking oil,44,¼ cup (44 g),¼ cup (44 g) cooking oil,236,254
+15091,Kitojo (Sweet Potato Leaves),4,"salt, iodized",6,1 tsp. (6 g),"1 tsp. (6 g) salt, iodized",236,254
+15080,Obobwa (Stewed Mushrooms in Peanut Butter),1,"mushrooms, raw",400,400g,"400g mushrooms, raw",238,256
+15080,Obobwa (Stewed Mushrooms in Peanut Butter),2,,187,"1 onion, red skinned, raw, unpeeled (187 g)","1 onion, red skinned, raw, unpeeled (187 g)",238,256
+15080,Obobwa (Stewed Mushrooms in Peanut Butter),3,peanut butter,55,3 ½ tbsp. (55 g),3 ½ tbsp. (55 g) peanut butter,238,256
+15080,Obobwa (Stewed Mushrooms in Peanut Butter),4,,140,"1 tomato, red, raw (140 g)","1 tomato, red, raw (140 g)",238,256
+15080,Obobwa (Stewed Mushrooms in Peanut Butter),5,"salt, iodized",11,2 tsp. (11 g),"2 tsp. (11 g) salt, iodized",238,256
+15080,Obobwa (Stewed Mushrooms in Peanut Butter),6,“msherekha” (wood ash and water mixture),1,1 g,1 g “msherekha” (wood ash and water mixture),238,256
+15080,Obobwa (Stewed Mushrooms in Peanut Butter),7,water,157,¾ cup (157 g),¾ cup (157 g) water,238,256
+15127,Potato Curry,1,,558,"2 potatoes, unpeeled, Irish, white, raw (558 g)","2 potatoes, unpeeled, Irish, white, raw (558 g)",240,258
+15127,Potato Curry,2,,223,"2 tomatoes, red, ripe (223 g)","2 tomatoes, red, ripe (223 g)",240,258
+15127,Potato Curry,3,"salt, iodized",9,2 tsp. (9 g),"2 tsp. (9 g) salt, iodized",240,258
+15127,Potato Curry,4,turmeric powder,1,¼ tsp. (1 g),¼ tsp. (1 g) turmeric powder,240,258
+15127,Potato Curry,5,coriander powder,6,2 tsp. (6 g),2 tsp. (6 g) coriander powder,240,258
+15127,Potato Curry,6,red chilli powder,1,¼ tsp. (1 g),¼ tsp. (1 g) red chilli powder,240,258
+15127,Potato Curry,7,cooking oil,42,3 ½ tbsp. (42 g),3 ½ tbsp. (42 g) cooking oil,240,258
+15127,Potato Curry,8,"fenugreek seeds, raw",1,¼ tsp. (1 g),"¼ tsp. (1 g) fenugreek seeds, raw",240,258
+15127,Potato Curry,9,"mustard seeds, raw",3,1 tsp. (3 g),"1 tsp. (3 g) mustard seeds, raw",240,258
+15127,Potato Curry,10,"cumin seeds, raw",3,½ tsp. (3 g),"½ tsp. (3 g) cumin seeds, raw",240,258
+15127,Potato Curry,11,curry leaves,2,½ bunch (2 g),½ bunch (2 g) curry leaves,240,258
+15127,Potato Curry,12,,5,"¼ lemon, fresh (5 g)","¼ lemon, fresh (5 g)",240,258
+15127,Potato Curry,13,sugar,9,2 tsp. (9 g),2 tsp. (9 g) sugar,240,258
+15127,Potato Curry,14,water,299,1 1/3 cups (299 g),1 1/3 cups (299 g) water,240,258
+15128,Peas and Brinjal Curry,1,"garden peas, raw",186,1 cup (186 g),"1 cup (186 g) garden peas, raw",242,260
+15128,Peas and Brinjal Curry,2,,169,"3 egg plants (brinjals), raw (169 g)","3 egg plants (brinjals), raw (169 g)",242,260
+15128,Peas and Brinjal Curry,3,,161,"2 tomatoes, red, ripe (161 g)","2 tomatoes, red, ripe (161 g)",242,260
+15128,Peas and Brinjal Curry,4,coriander leaves,40,1 bunch (40 g),1 bunch (40 g) coriander leaves,242,260
+15128,Peas and Brinjal Curry,5,garlic,10,3 cloves (10 g),3 cloves (10 g) garlic,242,260
+15128,Peas and Brinjal Curry,6,,5,"2 chillies, fresh, raw (5 g)","2 chillies, fresh, raw (5 g)",242,260
+15128,Peas and Brinjal Curry,7,,7,1 piece ginger (7 g),1 piece ginger (7 g),242,260
+15128,Peas and Brinjal Curry,8,"fenugreek seeds, raw",3,1 tsp. (3 g),"1 tsp. (3 g) fenugreek seeds, raw",242,260
+15128,Peas and Brinjal Curry,9,"mustard seeds, raw",3,1 tsp. (3 g),"1 tsp. (3 g) mustard seeds, raw",242,260
+15128,Peas and Brinjal Curry,10,"cumin seeds, raw",1,¼ tsp. (1 g),"¼ tsp. (1 g) cumin seeds, raw",242,260
+15128,Peas and Brinjal Curry,11,coriander powder,8,2 tsp. (8 g),2 tsp. (8 g) coriander powder,242,260
+15128,Peas and Brinjal Curry,12,turmeric powder,1,¼ tsp. (1 g),¼ tsp. (1 g) turmeric powder,242,260
+15128,Peas and Brinjal Curry,13,red chilli powder,1,¼ tsp. (1 g),¼ tsp. (1 g) red chilli powder,242,260
+15128,Peas and Brinjal Curry,14,"salt, iodized",7,1 ½ tsp. (7 g),"1 ½ tsp. (7 g) salt, iodized",242,260
+15128,Peas and Brinjal Curry,15,water,113,½ cup (113 g),½ cup (113 g) water,242,260
+15128,Peas and Brinjal Curry,16,cooking oil,39,3 tbsp. (39 g),3 tbsp. (39 g) cooking oil,242,260
+15126,Stewed Split Dal,1,"yellow split dal, raw",176,1 cup (176 g),"1 cup (176 g) yellow split dal, raw",244,262
+15126,Stewed Split Dal,2,,246,"3 tomatoes, red, raw diced (246 g)","3 tomatoes, red, raw diced (246 g)",244,262
+15126,Stewed Split Dal,3,"salt, iodized",12,2 tsp. (12 g),"2 tsp. (12 g) salt, iodized",244,262
+15126,Stewed Split Dal,4,turmeric powder,2,¾ tsp. (2 g),¾ tsp. (2 g) turmeric powder,244,262
+15126,Stewed Split Dal,5,red chilli powder,1,¼ tsp. (1 g),¼ tsp. (1 g) red chilli powder,244,262
+15126,Stewed Split Dal,6,"tomato paste, salted",17,½ tbsp. (17 g),"½ tbsp. (17 g) tomato paste, salted",244,262
+15126,Stewed Split Dal,7,cooking oil,22,2 tbsp. (22 g),2 tbsp. (22 g) cooking oil,244,262
+15126,Stewed Split Dal,8,"fenugreek seeds, raw",3,1 tsp. (3 g),"1 tsp. (3 g) fenugreek seeds, raw",244,262
+15126,Stewed Split Dal,9,"mustard seeds, raw",4,1 tsp. (4 g),"1 tsp. (4 g) mustard seeds, raw",244,262
+15126,Stewed Split Dal,10,"cumin seeds, raw",2,1 tsp. (2 g),"1 tsp. (2 g) cumin seeds, raw",244,262
+15126,Stewed Split Dal,11,curry leaves,3,1 bunch (3 g),1 bunch (3 g) curry leaves,244,262
+15126,Stewed Split Dal,12,,3,"1 lemon, fresh (3 g)","1 lemon, fresh (3 g)",244,262
+15126,Stewed Split Dal,13,"sugar, white",22,1 ½ tbsp. (22 g),"1 ½ tbsp. (22 g) sugar, white",244,262
+15126,Stewed Split Dal,14,water,1835,8 ½ cups (1835 g),8 ½ cups (1835 g) water,244,262
+15139,Chick Peas Curry,1,"chick peas, raw",294,1 2/3 cups (294 g),"1 2/3 cups (294 g) chick peas, raw",246,264
+15139,Chick Peas Curry,2,red chilli powder,10,1 tsp. (10 g),1 tsp. (10 g) red chilli powder,246,264
+15139,Chick Peas Curry,3,turmeric powder,3,½ tsp. (3 g),½ tsp. (3 g) turmeric powder,246,264
+15139,Chick Peas Curry,4,chole masala,6,½ tsp. (6 g),½ tsp. (6 g) chole masala,246,264
+15139,Chick Peas Curry,5,,220,"3 tomatoes, red, ripe (220 g)","3 tomatoes, red, ripe (220 g)",246,264
+15139,Chick Peas Curry,6,"tomato paste, salted",20,1 tbsp. (20 g),"1 tbsp. (20 g) tomato paste, salted",246,264
+15139,Chick Peas Curry,7,,113,"1 onion, red skinned, raw, unpeeled (113 g)","1 onion, red skinned, raw, unpeeled (113 g)",246,264
+15139,Chick Peas Curry,8,cooking oil,43,3 tbsp. (43 g),3 tbsp. (43 g) cooking oil,246,264
+15139,Chick Peas Curry,9,garlic,16,4 cloves (16 g),4 cloves (16 g) garlic,246,264
+15139,Chick Peas Curry,10,ginger,9,1 piece (9 g),1 piece (9 g) ginger,246,264
+15139,Chick Peas Curry,11,coriander leaves,20,20 g,20 g coriander leaves,246,264
+15139,Chick Peas Curry,12,coriander powder,11,1 tbsp. (11 g),1 tbsp. (11 g) coriander powder,246,264
+15139,Chick Peas Curry,13,cinnamon,1,6 sticks (1 g),6 sticks (1 g) cinnamon,246,264
+15139,Chick Peas Curry,14,"salt, iodized",13,2 ½ tsp. (13 g),"2 ½ tsp. (13 g) salt, iodized",246,264
+15139,Chick Peas Curry,15,,1,½ bay leaf (1 g),½ bay leaf (1 g),246,264
+15139,Chick Peas Curry,16,cloves,2,4 sticks (2 g),4 sticks (2 g) cloves,246,264
+15139,Chick Peas Curry,17,"cumin seeds, raw",2,1 tsp. (2 g),"1 tsp. (2 g) cumin seeds, raw",246,264
+15139,Chick Peas Curry,18,,7,1 lemon wedge (7 g),1 lemon wedge (7 g),246,264
+15139,Chick Peas Curry,19,water,643,3 cups (643 g),3 cups (643 g) water,246,264
+15139,Chick Peas Curry,20,"anise seeds, raw",1,1 tsp. (1 g),"1 tsp. (1 g) anise seeds, raw",246,264
+15058,Stewed Potatoes & Arrowroots,1,,1000,"9 potatoes, unpeeled, Irish, white (1 kg)","9 potatoes, unpeeled, Irish, white (1 kg)",250,268
+15058,Stewed Potatoes & Arrowroots,2,,1700,"3 arrowroots, unpeeled, raw (1.7 kg)","3 arrowroots, unpeeled, raw (1.7 kg)",250,268
+15058,Stewed Potatoes & Arrowroots,3,,1200,"6 green bananas, unpeeled, raw (1.2 kg)","6 green bananas, unpeeled, raw (1.2 kg)",250,268
+15058,Stewed Potatoes & Arrowroots,4,,185,"1 onion, red skinned, raw, unpeeled (185 g)","1 onion, red skinned, raw, unpeeled (185 g)",250,268
+15058,Stewed Potatoes & Arrowroots,5,,511,"3 tomatoes, red, ripe (511 g)","3 tomatoes, red, ripe (511 g)",250,268
+15058,Stewed Potatoes & Arrowroots,6,cooking oil,69,1/3 cup (69 g),1/3 cup (69 g) cooking oil,250,268
+15058,Stewed Potatoes & Arrowroots,7,"salt, iodized",15,3 tsp. (15 g),"3 tsp. (15 g) salt, iodized",250,268
+15058,Stewed Potatoes & Arrowroots,8,water,1534,7 cups (1534 g),7 cups (1534 g) water,250,268
+15052,Yam Stew,1,,2000,"1 yam, white, raw (2 kg)","1 yam, white, raw (2 kg)",252,270
+15052,Yam Stew,2,,908,"6 potatoes, unpeeled, Irish, white (908 g)","6 potatoes, unpeeled, Irish, white (908 g)",252,270
+15052,Yam Stew,3,,175,"1 onion, red skinned, raw, unpeeled (175 g)","1 onion, red skinned, raw, unpeeled (175 g)",252,270
+15052,Yam Stew,4,,209,"2 tomatoes, red, ripe (209 g)","2 tomatoes, red, ripe (209 g)",252,270
+15052,Yam Stew,5,,245,"2 carrots, orange, raw (245 g)","2 carrots, orange, raw (245 g)",252,270
+15052,Yam Stew,6,"salt, iodized",22,1 ½ tbsp. (22 g),"1 ½ tbsp. (22 g) salt, iodized",252,270
+15052,Yam Stew,7,cooking oil,76,1/3 cup (76 g),1/3 cup (76 g) cooking oil,252,270
+15052,Yam Stew,8,water,1036,4 3/4 cups (1036 g),4 3/4 cups (1036 g) water,252,270
+15141,Pumpkins with Peanut Butter,1,pumpkin raw unpeeled,1500,1.5 kg,1.5 kg pumpkin raw unpeeled,254,272
+15141,Pumpkins with Peanut Butter,2,peanut butter,109,7 tbsp. (109 g),7 tbsp. (109 g) peanut butter,254,272
+15141,Pumpkins with Peanut Butter,3,cooking oil,16,4 tsp. (16 g),4 tsp. (16 g) cooking oil,254,272
+15141,Pumpkins with Peanut Butter,4,water,466,2 1/8 cups (466 g),2 1/8 cups (466 g) water,254,272
+15141,Pumpkins with Peanut Butter,5,"salt, iodized",7,1 ½ tsp. (7 g),"1 ½ tsp. (7 g) salt, iodized",254,272
+15113,Sweet Potatoes with Peanut Butter,1,,1600,fleshed (1.6 kg),fleshed (1.6 kg),256,274
+15113,Sweet Potatoes with Peanut Butter,2,,71,"1 onion, red skinned, unpeeled, raw (71 g)","1 onion, red skinned, unpeeled, raw (71 g)",256,274
+15113,Sweet Potatoes with Peanut Butter,3,,296,"2 tomatoes, Red, ripe (296 g)","2 tomatoes, Red, ripe (296 g)",256,274
+15113,Sweet Potatoes with Peanut Butter,4,cooking oil,36,3 tbsp. (36 g),3 tbsp. (36 g) cooking oil,256,274
+15113,Sweet Potatoes with Peanut Butter,5,peanut butter,100,6 tbsp. (100 g),6 tbsp. (100 g) peanut butter,256,274
+15113,Sweet Potatoes with Peanut Butter,6,"salt, iodized",7,1 ½ tsp. (7 g),"1 ½ tsp. (7 g) salt, iodized",256,274
+15113,Sweet Potatoes with Peanut Butter,7,water,1004,4 2/3 cups (1004 g),4 2/3 cups (1004 g) water,256,274
+15112,Arrowroot Stew,1,,916,"4 potatoes, unpeeled, white, Irish (916 g)","4 potatoes, unpeeled, white, Irish (916 g)",258,276
+15112,Arrowroot Stew,2,,1600,"3 arrowroots, unpeeled, raw (1.6 kg)","3 arrowroots, unpeeled, raw (1.6 kg)",258,276
+15112,Arrowroot Stew,3,,393,"3 green bananas, unpeeled (393 g)","3 green bananas, unpeeled (393 g)",258,276
+15112,Arrowroot Stew,4,,342,"3 carrots, orange (342 g)","3 carrots, orange (342 g)",258,276
+15112,Arrowroot Stew,5,,188,"2 red skinned, onions, unpeeled (188 g)","2 red skinned, onions, unpeeled (188 g)",258,276
+15112,Arrowroot Stew,6,,286,"3 tomatoes, red, ripe (286 g)","3 tomatoes, red, ripe (286 g)",258,276
+15112,Arrowroot Stew,7,cooking oil,64,1/3 cup (64 g),1/3 cup (64 g) cooking oil,258,276
+15112,Arrowroot Stew,8,"salt, iodized",20,4 tsp. (20 g),"4 tsp. (20 g) salt, iodized",258,276
+15112,Arrowroot Stew,9,water,1522,7 cups (1522 g),7 cups (1522 g) water,258,276
+15117,Pan Fried Arrowroots,1,,574,"1 arrowroot, unpeeled, raw (574 g)","1 arrowroot, unpeeled, raw (574 g)",260,278
+15117,Pan Fried Arrowroots,2,cooking oil,209,1 cup (209 g),1 cup (209 g) cooking oil,260,278
+15117,Pan Fried Arrowroots,3,water,1085,5 cups (1085g),5 cups (1085g) water,260,278
+15117,Pan Fried Arrowroots,4,"salt, iodized",5,1 tsp. (5 g),"1 tsp. (5 g) salt, iodized",260,278
+15109,Pan Fried Sweet Potatoes,1,,1900,fleshed (1.9 kg),fleshed (1.9 kg),262,280
+15109,Pan Fried Sweet Potatoes,2,water,996,4 ½ cups (996 g),4 ½ cups (996 g) water,262,280
+15109,Pan Fried Sweet Potatoes,3,oil,191,1 cup (191 g),1 cup (191 g) oil,262,280
+15131,Potato Bhajia,1,,809,"3 potatoes, unpeeled, white, Irish (809 g)","3 potatoes, unpeeled, white, Irish (809 g)",264,282
+15131,Potato Bhajia,2,,11,1 small piece of ginger (11 g),1 small piece of ginger (11 g),264,282
+15131,Potato Bhajia,3,,14,4 cloves garlic (14 g),4 cloves garlic (14 g),264,282
+15131,Potato Bhajia,4,,8,4 green chillies (8 g),4 green chillies (8 g),264,282
+15131,Potato Bhajia,5,coriander leaves,30,1 bunch (30 g),1 bunch (30 g) coriander leaves,264,282
+15131,Potato Bhajia,6,gram flour,133,1 cups (133 g),1 cups (133 g) gram flour,264,282
+15131,Potato Bhajia,7,"salt, iodized",8,1 ½ tsp. (8 g),"1 ½ tsp. (8 g) salt, iodized",264,282
+15131,Potato Bhajia,8,red chilli powder,2,1 tsp. (2 g),1 tsp. (2 g) red chilli powder,264,282
+15131,Potato Bhajia,9,turmeric powder,2,1 tsp. (2 g),1 tsp. (2 g) turmeric powder,264,282
+15131,Potato Bhajia,10,,2,Juice of ½ lemon (2 g),Juice of ½ lemon (2 g),264,282
+15131,Potato Bhajia,11,cooking oil,818,4 1/8 cups (818 g),4 1/8 cups (818 g) cooking oil,264,282
+15131,Potato Bhajia,12,water,68,1/3 cup (68 g),1/3 cup (68 g) water,264,282
+15131,Potato Bhajia,13,bicarbonate of soda,1,1 pinch (1 g),1 pinch (1 g) bicarbonate of soda,264,282
+15110,Potato Chips,1,,1100,"6 potatoes, unpeeled, Irish, white (1.1 kg)","6 potatoes, unpeeled, Irish, white (1.1 kg)",266,284
+15110,Potato Chips,2,cooking oil,867,4 ½ cups (867 g),4 ½ cups (867 g) cooking oil,266,284
+15097,Stewed Green Bananas,1,,2100,"12 green bananas, unpeeled, raw (2.1 kg)","12 green bananas, unpeeled, raw (2.1 kg)",268,286
+15097,Stewed Green Bananas,2,,256,"2 onions, red skinned, raw, unpeeled (256 g)","2 onions, red skinned, raw, unpeeled (256 g)",268,286
+15097,Stewed Green Bananas,3,,633,"6 tomatoes, red, ripe (633 g)","6 tomatoes, red, ripe (633 g)",268,286
+15097,Stewed Green Bananas,4,"salt, iodized",4,1 tsp. (4 g),"1 tsp. (4 g) salt, iodized",268,286
+15097,Stewed Green Bananas,5,cooking oil,80,½ cup (80 g),½ cup (80 g) cooking oil,268,286
+15097,Stewed Green Bananas,6,water,1019,4 2/3 cups (1019 g),4 2/3 cups (1019 g) water,268,286
+15056,Matoke (Stewed Green Bananas with Meat),1,"beef, medium fat",456,456 g,"456 g beef, medium fat",270,288
+15056,Matoke (Stewed Green Bananas with Meat),2,"green bananas, unpeeled, raw",1500,1.5 kg,"1.5 kg green bananas, unpeeled, raw",270,288
+15056,Matoke (Stewed Green Bananas with Meat),3,,184,"1 onion, unpeeled, red skinned, raw (184 g)","1 onion, unpeeled, red skinned, raw (184 g)",270,288
+15056,Matoke (Stewed Green Bananas with Meat),4,,329,"3 tomatoes, red, ripe (329 g)","3 tomatoes, red, ripe (329 g)",270,288
+15056,Matoke (Stewed Green Bananas with Meat),5,coriander leaves,106,106 g,106 g coriander leaves,270,288
+15056,Matoke (Stewed Green Bananas with Meat),6,,1100,"8 potatoes, unpeeled, Irish, white (1.1 kg)","8 potatoes, unpeeled, Irish, white (1.1 kg)",270,288
+15056,Matoke (Stewed Green Bananas with Meat),7,"salt, iodized",24,1 ½ tbsp. (24 g),"1 ½ tbsp. (24 g) salt, iodized",270,288
+15056,Matoke (Stewed Green Bananas with Meat),8,"cooking fat, white",44,¼ cup (44 g),"¼ cup (44 g) cooking fat, white",270,288
+15056,Matoke (Stewed Green Bananas with Meat),9,water,1810,8 ¼ cups (1810 g),8 ¼ cups (1810 g) water,270,288
+15005,Whole Maize Flour Ugali,1,"whole maize flour, white",495,3 2/3 cups (495 g),"3 2/3 cups (495 g) whole maize flour, white",274,292
+15005,Whole Maize Flour Ugali,2,water,1026,4 3/4 cups (1026 g),4 3/4 cups (1026 g) water,274,292
+15006,Maize and Finger Millet Flour Ugali,1,"whole maize flour, white",253,2 cups (253 g),"2 cups (253 g) whole maize flour, white",276,294
+15006,Maize and Finger Millet Flour Ugali,2,finger millet flour,262,2 cups (262 g),2 cups (262 g) finger millet flour,276,294
+15006,Maize and Finger Millet Flour Ugali,3,water,1149,5 cups (1149 g),5 cups (1149 g) water,276,294
+15007,"Maize, Red Sorghum and Finger Millet flour Ugali",1,"whole maize flour, white",255,2 cups (255 g),"2 cups (255 g) whole maize flour, white",278,296
+15007,"Maize, Red Sorghum and Finger Millet flour Ugali",2,red sorghum flour,132,1 cup (132 g),1 cup (132 g) red sorghum flour,278,296
+15007,"Maize, Red Sorghum and Finger Millet flour Ugali",3,flour,113,1 cup finger millet (113 g),1 cup finger millet (113 g) flour,278,296
+15007,"Maize, Red Sorghum and Finger Millet flour Ugali",4,water,1139,5 cups (1139 g),5 cups (1139 g) water,278,296
+15008,Cassava & Red Sorghum Flour Ugali,1,cassava flour,174,1 1/3 cups (174 g),1 1/3 cups (174 g) cassava flour,280,298
+15008,Cassava & Red Sorghum Flour Ugali,2,red sorghum flour,237,1 3/4 cups (237 g),1 3/4 cups (237 g) red sorghum flour,280,298
+15008,Cassava & Red Sorghum Flour Ugali,3,water,1164,5 ¼ cups (1164 g),5 ¼ cups (1164 g) water,280,298
+15009,Refined Maize Flour Ugali,1,"refined, white, maize flour",488,3 ½ cups (488 g),"3 ½ cups (488 g) refined, white, maize flour",282,300
+15009,Refined Maize Flour Ugali,2,water,921,4 ¼ cups (921 g),4 ¼ cups (921 g) water,282,300
+15010,"Sorghum, Finger Millet and Refined Maize",1,red sorghum flour,444,3 ½ cups (444 g),3 ½ cups (444 g) red sorghum flour,284,302
+15010,"Sorghum, Finger Millet and Refined Maize",2,finger millet flour,154,1¼ cups (154 g),1¼ cups (154 g) finger millet flour,284,302
+15010,"Sorghum, Finger Millet and Refined Maize",3,"maize flour, refined, white",570,4 ½ cups (570 g),"4 ½ cups (570 g) maize flour, refined, white,",284,302
+15010,"Sorghum, Finger Millet and Refined Maize",4,water,1531,7 cups (1531 g),7 cups (1531 g) water,284,302
+15011,Cassava Flour Ugali,1,cassava flour,125,1 cup (125 g),1 cup (125 g) cassava flour,286,304
+15011,Cassava Flour Ugali,2,water,268,1 ¼ cups (268 g),1 ¼ cups (268 g) water,286,304
+15051,"Cassava, Finger Millet & Sorghum Flour Ugali",1,cassava flour,780,6 cups (780 g),6 cups (780 g) cassava flour,288,306
+15051,"Cassava, Finger Millet & Sorghum Flour Ugali",2,finger millet flour,313,2 1/3 cups (313 g),2 1/3 cups (313 g) finger millet flour,288,306
+15051,"Cassava, Finger Millet & Sorghum Flour Ugali",3,sorghum flour,345,2 ½ cups (345 g),2 ½ cups (345 g) sorghum flour,288,306
+15051,"Cassava, Finger Millet & Sorghum Flour Ugali",4,water,1998,9 cups (1998 g),9 cups (1998 g) water,288,306
+15043,"Gurdo, Marqa (Ugali in Sour Milk)",1,teff flour,126,1 cup (126 g),1 cup (126 g) teff flour,290,308
+15043,"Gurdo, Marqa (Ugali in Sour Milk)",2,red sorghum flour,288,2 ¼ cups (288 g),2 ¼ cups (288 g) red sorghum flour,290,308
+15043,"Gurdo, Marqa (Ugali in Sour Milk)",3,fermented milk,771,3 1/3 cups (771 g),3 1/3 cups (771 g) fermented milk,290,308
+15043,"Gurdo, Marqa (Ugali in Sour Milk)",4,"salt, iodized",7,1 ½ tsp. (7 g),"1 ½ tsp. (7 g) salt, iodized",290,308
+15043,"Gurdo, Marqa (Ugali in Sour Milk)",5,ghee,59,4½ tbsp. (59 g),4½ tbsp. (59 g) ghee,290,308
+15043,"Gurdo, Marqa (Ugali in Sour Milk)",6,water,232,1 cup (232 g),1 cup (232 g) water,290,308
+15065,Vinolo (Banana and Maize Flour Ugali),1,,710,"4 bananas, green, raw, unpeeled (710 g)","4 bananas, green, raw, unpeeled (710 g)",292,310
+15065,Vinolo (Banana and Maize Flour Ugali),2,"maize flour, white",257,2 cups (257 g),"2 cups (257 g) maize flour, white",292,310
+15065,Vinolo (Banana and Maize Flour Ugali),3,water,890,4 cups (890 g),4 cups (890 g) water,292,310
+15100,Finger Millet Flour Ugali,1,finger millet flour,993,7 3/4 cups (993 g),7 3/4 cups (993 g) finger millet flour,294,312
+15100,Finger Millet Flour Ugali,2,water,1007,4 2/3 cups (1007 g),4 2/3 cups (1007 g) water,294,312
+15019,White Chapati,1,"wheat flour, refined fortified",576,4 1/3 cups (576 g),"4 1/3 cups (576 g) wheat flour, refined, fortified",298,316
+15019,White Chapati,2,water,318,1 ½ cups (318 g),1 ½ cups (318 g) water,298,316
+15019,White Chapati,3,white sugar,5,1 tsp. (5 g),1 tsp. (5 g) white sugar,298,316
+15019,White Chapati,4,"salt, iodized",2,½ tsp. (2 g),"½ tsp. (2 g) salt, iodized",298,316
+15019,White Chapati,5,cooking oil,168,¾ cup (168 g),¾ cup (168 g) cooking oil,298,316
+15020,Brown Chapati,1,"wheat flour, whole atta",414,3 2/3 cups (414 g),"3 2/3 cups (414 g) wheat flour, whole, atta",300,318
+15020,Brown Chapati,2,water,198,1 cup (198 g),1 cup (198 g) water,300,318
+15020,Brown Chapati,3,"sugar, white",5,1 tsp. (5 g),"1 tsp. (5 g) sugar, white",300,318
+15020,Brown Chapati,4,"salt, iodized",2,½ tsp.  (2 g),"½ tsp.  (2 g) salt, iodized",300,318
+15020,Brown Chapati,5,cooking oil,134,2/3 cup (134 g),2/3 cup (134 g) cooking oil,300,318
+15130,Roti (Indian Chapati),1,"wheat flour, whole",227,1 3/4 cups (227 g),"1 3/4 cups (227 g) wheat flour, whole",302,320
+15130,Roti (Indian Chapati),2,"salt, iodized",3,½ tsp. (3 g),"½ tsp. (3 g) salt, iodized",302,320
+15130,Roti (Indian Chapati),3,water,163,3/4 cup (163 g),3/4 cup (163 g) water,302,320
+15130,Roti (Indian Chapati),4,cooking oil,26,2 tbsp. (26 g),2 tbsp. (26 g) cooking oil,302,320
+15130,Roti (Indian Chapati),5,cow ghee,34,2 ½ tbsp. (34 g),2 ½ tbsp. (34 g) cow ghee,302,320
+15140,Bhature (Fried Indian Bread),1,self-raising wheat flour,304,2 1/3 cups (304 g),2 1/3 cups (304 g) self-raising wheat flour,304,322
+15140,Bhature (Fried Indian Bread),2,"salt, iodized",8,1 ½ tsp. (8 g),"1 ½ tsp. (8 g) salt, iodized",304,322
+15140,Bhature (Fried Indian Bread),3,sugar,9,1 ½ tsp. (9 g),1 ½ tsp. (9 g) sugar,304,322
+15140,Bhature (Fried Indian Bread),4,ghee,17,1 ½ tbsp. (17 g),1 ½ tbsp. (17 g) ghee,304,322
+15140,Bhature (Fried Indian Bread),5,cooking oil,419,3 ¾ cups (419 g),3 ¾ cups (419 g) cooking oil,304,322
+15140,Bhature (Fried Indian Bread),6,fenugreek leaves,7,Handful (7 g),Handful (7 g) fenugreek leaves,304,322
+15140,Bhature (Fried Indian Bread),7,natural yoghurt,178,3/4 cup (178 g),3/4 cup (178 g) natural yoghurt,304,322
+15140,Bhature (Fried Indian Bread),8,water,103,½ cup (103 g),½ cup (103 g) water,304,322
+15140,Bhature (Fried Indian Bread),9,coriander leaves,19,19 g,19 g coriander leaves,304,322
+15067,Vimumunya vya Sukari (Sweetened Pumpkin & Coconut Milk),1,,1700,"pumpkin, unpeeled (1.7 kg)","pumpkin, unpeeled (1.7 kg)",308,326
+15067,Vimumunya vya Sukari (Sweetened Pumpkin & Coconut Milk),2,"cardamoms, powder",1,1 tsp. (1 g),"1 tsp. (1 g) cardamoms, powder",308,326
+15067,Vimumunya vya Sukari (Sweetened Pumpkin & Coconut Milk),3,sugar,113,½ cup (113 g),½ cup (113 g) sugar,308,326
+15067,Vimumunya vya Sukari (Sweetened Pumpkin & Coconut Milk),4,coconut milk,400,1 ½ cups (400 g),1 ½ cups (400 g) coconut milk,308,326
+15067,Vimumunya vya Sukari (Sweetened Pumpkin & Coconut Milk),5,water,810,3 3/4 cups (810 g),3 3/4 cups (810 g) water,308,326
+15133,Siro (Semolina & Nuts),1,semolina flour,145,1 cup (145 g),1 cup (145 g) semolina flour,310,328
+15133,Siro (Semolina & Nuts),2,cow ghee,177,1 cup (177 g),1 cup (177 g) cow ghee,310,328
+15133,Siro (Semolina & Nuts),3,cow milk,472,2 1/8 cups (472 g),2 1/8 cups (472 g) cow milk,310,328
+15133,Siro (Semolina & Nuts),4,sugar,188,1 cup (188 g),1 cup (188 g) sugar,310,328
+15133,Siro (Semolina & Nuts),5,,22,"15 pistachio nuts, raw (22 g)","15 pistachio nuts, raw (22 g)",310,328
+15133,Siro (Semolina & Nuts),6,,10,"1 tbsp. almonds, nuts, raw (10 g)","1 tbsp. almonds, nuts, raw (10 g)",310,328
+15133,Siro (Semolina & Nuts),7,"cardamoms, powder",1,1 tsp. (1 g),"1 tsp. (1 g) cardamoms, powder",310,328
+15132,Chaas (Diluted Yoghurt),1,natural yoghurt,450,2 cups (450 g),2 cups (450 g) natural yoghurt,312,330
+15132,Chaas (Diluted Yoghurt),2,water,169,¾ cup (169 g),¾ cup (169 g) water,312,330
+15132,Chaas (Diluted Yoghurt),3,"salt, iodized",4,1 tsp. (4 g),"1 tsp. (4 g) salt, iodized",312,330
+15063,Groundnut Sauce,1,"groundnuts, raw, with skin",472,3 1/3 cups (472 g),"3 1/3 cups (472 g) groundnuts, raw, with skin",314,332
+15063,Groundnut Sauce,2,"salt, iodized",12,2 ½ tsp. (12 g),"2 ½ tsp. (12 g) salt, iodized",314,332
+15063,Groundnut Sauce,3,sour milk,979,4 1/3 cups (979 g),4 1/3 cups (979 g) sour milk,314,332
+15063,Groundnut Sauce,4,water,119,½ cup (119 g),½ cup (119 g) water,314,332

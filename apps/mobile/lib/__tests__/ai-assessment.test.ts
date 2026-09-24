@@ -2,8 +2,8 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   isValidAssessment, isCanonicalPlanReady, fetchOnboardingAssessment, deriveCategoryCounts, sumDurationMinutes, sortSupportOpportunities,
-  projectPlanSchedule,
-  type SupportOpportunity, type StartingPlanActivity,
+  projectPlanSchedule, resolveMyPlanViewState,
+  type SupportOpportunity, type StartingPlanActivity, type MyPlanViewStateInput,
 } from '../ai-assessment.ts';
 import { EMPTY_ANSWERS } from '../onboarding.ts';
 
@@ -263,37 +263,49 @@ describe('sumDurationMinutes', () => {
 });
 
 describe('fetchOnboardingAssessment', () => {
-  test('returns the assessment + generatedAt (plan identifier) on a valid 200 response within the timeout', async () => {
+  test('returns {ok:true, assessment, generatedAt} on a valid 200 response within the timeout', async () => {
     const mockFetch = async () => ({
       ok: true,
       json: async () => ({ assessment: VALID_ASSESSMENT, generatedAt: '2026-09-01T12:00:00.000Z' }),
     }) as any;
     const result = await fetchOnboardingAssessment(baseParams, mockFetch, 200);
-    assert.deepEqual(result, { assessment: VALID_ASSESSMENT, generatedAt: '2026-09-01T12:00:00.000Z' });
+    assert.deepEqual(result, { ok: true, assessment: VALID_ASSESSMENT, generatedAt: '2026-09-01T12:00:00.000Z' });
   });
 
-  test('returns null when generatedAt is missing — an assessment without a plan identifier is not usable', async () => {
-    const mockFetch = async () => ({ ok: true, json: async () => ({ assessment: VALID_ASSESSMENT }) }) as any;
+  test('reason invalid_response when generatedAt is missing — an assessment without a plan identifier is not usable', async () => {
+    const mockFetch = async () => ({ ok: true, status: 200, json: async () => ({ assessment: VALID_ASSESSMENT }) }) as any;
     const result = await fetchOnboardingAssessment(baseParams, mockFetch, 200);
-    assert.equal(result, null);
+    assert.deepEqual(result, { ok: false, reason: 'invalid_response' });
   });
 
-  test('returns null (never throws) when the network call rejects', async () => {
+  test('reason network (never throws) when the network call rejects', async () => {
     const mockFetch = async () => { throw new Error('network down'); };
     const result = await fetchOnboardingAssessment(baseParams, mockFetch as any, 200);
-    assert.equal(result, null);
+    assert.deepEqual(result, { ok: false, reason: 'network' });
   });
 
-  test('returns null on a non-2xx response', async () => {
-    const mockFetch = async () => ({ ok: false, json: async () => ({}) }) as any;
+  test('§F/§E — reason unauthorized on 401 (Fitness plan recovery: a stale/mismatched token must be distinguishable from "still generating")', async () => {
+    const mockFetch = async () => ({ ok: false, status: 401, json: async () => ({}) }) as any;
     const result = await fetchOnboardingAssessment(baseParams, mockFetch, 200);
-    assert.equal(result, null);
+    assert.deepEqual(result, { ok: false, reason: 'unauthorized' });
   });
 
-  test('returns null when the response body is malformed', async () => {
-    const mockFetch = async () => ({ ok: true, json: async () => ({ assessment: { headline: 'only this field' } }) }) as any;
+  test('reason unauthorized on 403 too', async () => {
+    const mockFetch = async () => ({ ok: false, status: 403, json: async () => ({}) }) as any;
     const result = await fetchOnboardingAssessment(baseParams, mockFetch, 200);
-    assert.equal(result, null);
+    assert.deepEqual(result, { ok: false, reason: 'unauthorized' });
+  });
+
+  test('reason server_error on any other non-2xx response', async () => {
+    const mockFetch = async () => ({ ok: false, status: 502, json: async () => ({}) }) as any;
+    const result = await fetchOnboardingAssessment(baseParams, mockFetch, 200);
+    assert.deepEqual(result, { ok: false, reason: 'server_error' });
+  });
+
+  test('reason invalid_response when the response body is malformed', async () => {
+    const mockFetch = async () => ({ ok: true, status: 200, json: async () => ({ assessment: { headline: 'only this field' } }) }) as any;
+    const result = await fetchOnboardingAssessment(baseParams, mockFetch, 200);
+    assert.deepEqual(result, { ok: false, reason: 'invalid_response' });
   });
 
   test('AI failure does not throw — onboarding completion is unaffected by this call', async () => {
@@ -324,11 +336,11 @@ describe('fetchOnboardingAssessment', () => {
     }
   });
 
-  test('timeout triggers the fallback signal (null) when the request is slower than the threshold', async () => {
+  test('timeout triggers reason:timeout (distinct from a genuine failure) when the request is slower than the threshold', async () => {
     const neverResolves = () => new Promise(() => {}); // simulates a request slower than the UX timeout
     const start = Date.now();
     const result = await fetchOnboardingAssessment(baseParams, neverResolves as any, 100);
-    assert.equal(result, null);
+    assert.deepEqual(result, { ok: false, reason: 'timeout' });
     assert.ok(Date.now() - start < 1000, 'should resolve promptly at the timeout, not hang');
   });
 
@@ -341,7 +353,7 @@ describe('fetchOnboardingAssessment', () => {
     const slowFetch = () => new Promise(resolve => { resolveFetch = resolve; });
     const racePromise = fetchOnboardingAssessment(baseParams, slowFetch as any, 50);
     const raceResult = await racePromise;
-    assert.equal(raceResult, null); // UX timeout fired first
+    assert.deepEqual(raceResult, { ok: false, reason: 'timeout' }); // UX timeout fired first
 
     // The underlying "request" would still resolve successfully later in
     // real usage (proven by exercising the same fetchImpl directly here) —
@@ -379,5 +391,74 @@ describe('sortSupportOpportunities (Part 20 — relevance order, never commercia
     const copy = [...opportunities];
     sortSupportOpportunities(opportunities);
     assert.deepEqual(opportunities, copy);
+  });
+});
+
+describe('resolveMyPlanViewState — Fitness plan recovery (device QA: "still being prepared" stuck forever)', () => {
+  const base: MyPlanViewStateInput = {
+    loading: false, generating: false, hasAssessment: false, hasPlanSummary: false, generationError: null,
+  };
+
+  test('loading always wins, regardless of any other field', () => {
+    assert.equal(resolveMyPlanViewState({ ...base, loading: true, hasAssessment: true }), 'loading');
+  });
+
+  test('a valid assessment is ready, even mid-generation or with a stale error still recorded', () => {
+    assert.equal(resolveMyPlanViewState({ ...base, hasAssessment: true }), 'ready');
+    assert.equal(resolveMyPlanViewState({ ...base, hasAssessment: true, generating: true }), 'ready');
+    assert.equal(resolveMyPlanViewState({ ...base, hasAssessment: true, generationError: 'network' }), 'ready');
+  });
+
+  test('generating (no assessment yet) is its own state, not an error', () => {
+    assert.equal(resolveMyPlanViewState({ ...base, generating: true }), 'generating');
+  });
+
+  test('§the exact device-QA bug — active plan metadata (planSummary) exists BUT the weekly schedule/assessment is missing, no error recorded yet → truthful "not_ready", never crashes, never a fabricated ready state', () => {
+    const state = resolveMyPlanViewState({ ...base, hasPlanSummary: true });
+    assert.equal(state, 'not_ready');
+    assert.notEqual(state, 'ready');
+  });
+
+  test('a genuine unauthorized failure with plan metadata present → error_retryable, NEVER "not_ready" (this is the exact bug: a 401 must not render as "still preparing")', () => {
+    const state = resolveMyPlanViewState({ ...base, hasPlanSummary: true, generationError: 'unauthorized' });
+    assert.equal(state, 'error_retryable');
+    assert.notEqual(state, 'not_ready');
+  });
+
+  test('network and server_error are also retryable errors, not "not_ready"', () => {
+    assert.equal(resolveMyPlanViewState({ ...base, hasPlanSummary: true, generationError: 'network' }), 'error_retryable');
+    assert.equal(resolveMyPlanViewState({ ...base, hasPlanSummary: true, generationError: 'server_error' }), 'error_retryable');
+    assert.equal(resolveMyPlanViewState({ ...base, hasPlanSummary: true, generationError: 'invalid_response' }), 'error_retryable');
+  });
+
+  test('timeout is explicitly NOT treated as an error — the request may still land server-side, so it stays "not_ready"', () => {
+    const state = resolveMyPlanViewState({ ...base, hasPlanSummary: true, generationError: 'timeout' });
+    assert.equal(state, 'not_ready');
+    assert.notEqual(state, 'error_retryable');
+  });
+
+  test('no plan metadata and no error at all → no_profile (never onboarded / nothing to build from)', () => {
+    assert.equal(resolveMyPlanViewState(base), 'no_profile');
+  });
+
+  test('an error with NO plan metadata still surfaces as error_retryable, never silently falls to no_profile', () => {
+    assert.equal(resolveMyPlanViewState({ ...base, generationError: 'network' }), 'error_retryable');
+  });
+
+  test('healthy active plan never re-enters a "needs regeneration" state — ready is a fixed point regardless of a later error/generating flag flip', () => {
+    // Simulates the exact "healthy active plan → no regeneration" contract:
+    // once hasAssessment is true, nothing else can demote it back to
+    // generating/error/not_ready in this pure function.
+    const permutations: MyPlanViewStateInput[] = [
+      { ...base, hasAssessment: true },
+      { ...base, hasAssessment: true, generating: true, generationError: 'network' },
+      { ...base, hasAssessment: true, hasPlanSummary: true },
+    ];
+    for (const p of permutations) assert.equal(resolveMyPlanViewState(p), 'ready');
+  });
+
+  test('deterministic — same input always produces the same state (no hidden randomness/time dependency)', () => {
+    const input: MyPlanViewStateInput = { ...base, hasPlanSummary: true, generationError: 'unauthorized' };
+    assert.equal(resolveMyPlanViewState(input), resolveMyPlanViewState(input));
   });
 });

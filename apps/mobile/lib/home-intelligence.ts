@@ -68,7 +68,9 @@ export function getHomeIntelligenceInsight(params: HomeIntelligenceParams): Home
   if (todayActivity && !todayCompleted) {
     const categoryWord = CATEGORY_WORD[todayActivity.category];
     return {
-      headline: `Today's focus is ${categoryWord}.`,
+      // Sits directly under a "Today's Focus" section title elsewhere on
+      // Home — repeating "Today's focus is..." here read as an echo.
+      headline: `${categoryWord.charAt(0).toUpperCase()}${categoryWord.slice(1)} today.`,
       body: `Complete your ${todayActivity.duration_minutes}-minute ${todayActivity.activity.toLowerCase()} session and keep the rest of the day simple.`,
       ctaLabel: "View today's plan →",
       ctaTarget: '/my-plan',

@@ -29,7 +29,7 @@ describe('getHomeIntelligenceInsight — Priority 1: today incomplete', () => {
       todayCompleted: false,
       weeklyProgress: { completed: 1, total: 4 },
     });
-    assert.equal(insight.headline, "Today's focus is strength.");
+    assert.equal(insight.headline, 'Strength today.');
     assert.ok(insight.body.includes('60-minute'));
     assert.equal(insight.ctaLabel, "View today's plan →");
   });
@@ -112,7 +112,7 @@ describe('getHomeIntelligenceInsight — Day 6: optional longitudinal insight', 
       weeklyProgress: { completed: 1, total: 4 },
       longitudinalInsight: { headline: 'Should not appear', body: 'Should not appear' },
     });
-    assert.equal(pending.headline, "Today's focus is strength.");
+    assert.equal(pending.headline, 'Strength today.');
 
     const completed = getHomeIntelligenceInsight({
       assessment: BASE_ASSESSMENT,

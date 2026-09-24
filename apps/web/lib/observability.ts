@@ -41,7 +41,10 @@ export type AcpEvent =
   | 'nutrition_camera_started'
   | 'nutrition_camera_analysis_completed'
   | 'nutrition_camera_analysis_failed'
-  | 'nutrition_camera_fallback';
+  | 'nutrition_camera_fallback'
+  | 'lana_chat_message_sent'
+  | 'lana_chat_response_received'
+  | 'lana_chat_failed';
 
 /** Small, non-sensitive fields only. Anything not on this list must be omitted. */
 export interface AcpEventFields {
@@ -83,6 +86,9 @@ export interface AcpEventFields {
    *  (§11). `uncertain` is the model's own hard-to-read flag. */
   candidateCount?: number;
   uncertain?: boolean;
+  /** Lana Chat — the deterministic intent label only (never message text). */
+  intent?: string;
+  messageLength?: number;
 }
 
 const SERVICE = 'acp-intelligence';

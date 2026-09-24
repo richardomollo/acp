@@ -135,3 +135,14 @@ export function isNutritionPlanningEnabled(): boolean {
 export function isProfessionalContinuityEnabled(): boolean {
   return process.env.EXPO_PUBLIC_LANA_PROFESSIONAL_CONTINUITY_ENABLED === 'true';
 }
+
+// Lana Chat V1 — "Ask Lana" conversational entry point + /lana-chat screen.
+// Off by default (same posture as every other new/beta flag above) — on
+// only if explicitly set to exactly "true". When off: no "Ask Lana" entry
+// point renders anywhere and the screen is unreachable; nothing else in the
+// app depends on this. The matching server-side flag is
+// LANA_CHAT_ENABLED on apps/web (see its lib/flags.ts) — the route itself
+// returns 503 when that's off, independent of this client flag.
+export function isLanaChatEnabled(): boolean {
+  return process.env.EXPO_PUBLIC_LANA_CHAT_ENABLED === 'true';
+}

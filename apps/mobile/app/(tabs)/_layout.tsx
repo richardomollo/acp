@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '@/lib/supabase';
 import { palette } from '@/constants/theme';
 import { registerForPushNotifications } from '@/services/notifications';
+import { isLanaChatEnabled } from '@/lib/flags';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 
 const INACTIVE_COLOR = palette.gray300;
@@ -18,7 +19,13 @@ const TAB_DEFS = [
   // links keep working unchanged.
   { name: 'discover', label: 'Nutrition', icon: 'nutrition-outline', iconActive: 'nutrition' },
   { name: 'fitness',  label: 'Fitness',   icon: 'barbell-outline',   iconActive: 'barbell'   },
-  { name: 'health-testing', label: 'Testing', icon: 'flask-outline',  iconActive: 'flask'     },
+  // Testing tab — commented out of the nav per request; the screen itself
+  // stays intact (see Tabs.Screen below, now href: null).
+  // { name: 'health-testing', label: 'Testing', icon: 'flask-outline',  iconActive: 'flask'     },
+  // Lana Chat V1 — moved here from a Home header icon, per request. Flag-
+  // gated the same way as everywhere else this flag is checked; the
+  // matching Tabs.Screen below mirrors this with href: null when off.
+  ...(isLanaChatEnabled() ? [{ name: 'chat', label: 'Chat', icon: 'chatbubble-ellipses-outline', iconActive: 'chatbubble-ellipses' }] : []),
   { name: 'profile',  label: 'Profile',   icon: 'person-outline',    iconActive: 'person'    },
 ];
 
@@ -115,7 +122,8 @@ export default function TabLayout() {
         listeners={{ tabPress: handleNutritionPress }}
       />
       <Tabs.Screen name="fitness" options={{ title: 'Fitness' }} />
-      <Tabs.Screen name="health-testing" options={{ title: 'Testing' }} />
+      <Tabs.Screen name="health-testing" options={{ href: null }} />
+      <Tabs.Screen name="chat" options={{ title: 'Chat', href: isLanaChatEnabled() ? undefined : null }} />
       <Tabs.Screen name="profile" options={{ title: 'Profile', headerShown: false }} />
       {/* Hidden routes — reached via in-app navigation, not tabs.
           check-in moved off the tab bar to a header icon on Today (next to

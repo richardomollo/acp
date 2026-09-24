@@ -248,7 +248,7 @@ export default function OnboardingPlanScreen() {
       if (settled) return;
       settled = true;
       clearTimeout(backstop);
-      if (result) {
+      if (result.ok) {
         setAssessment(result.assessment);
         assessmentPhaseRef.current = 'ready';
         setAssessmentPhase('ready');
